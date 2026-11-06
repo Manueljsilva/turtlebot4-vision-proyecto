@@ -2,8 +2,6 @@
 
 Proyecto de cuatro integrantes. Según el [enunciado oficial](Computer_vision_proyectos.pdf), ambas modalidades deben ir de A a B, identificar a la persona de la fotografía en B, regresar a A e indicar su nombre.
 
-Para compartir avances: [COMPARTIR_GITHUB.md](COMPARTIR_GITHUB.md). El repositorio se prepara sin fotos de alumnos, modelos descargados, `.venv` ni salidas de notebooks; los originales locales se conservan.
-
 - [Task 1 / Task A](<task 1/README.md>): notebook de reconocimiento facial implementado y probado con 26 fotos de cinco alumnos. Navegación autónoma pendiente.
 - [Task 2 / Task B](<task 2/README.md>): gestos con Gazebo y robot real confirmados por el usuario. Se ajustaron velocidad máxima y giros a sus lados; falta comprobar esos ajustes en hardware e integrar reconocimiento y misión completa.
 
