@@ -1,0 +1,95 @@
+# TASK 2 - COMANDOS PARA COPIAR Y PEGAR
+# Copia UN bloque cada vez en una terminal normal de Ubuntu (Ctrl+Alt+T).
+# No ejecutes este archivo completo como un script.
+# La .venv es global. El contenedor proyecto2-sim conserva su instalacion.
+
+
+# 1) PRUEBA LOCAL DE GESTOS, SIN GAZEBO NI ROS
+# Cierra primero otra aplicacion que use la webcam. Salir: q o cerrar ventana.
+# Si necesitas otra camara, anade --camara 1.
+
+cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+.venv/bin/python "task 2/webcam_gestos.py"
+
+
+# 2) ABRIR EL NOTEBOOK DE PRUEBA LOCAL
+# Selecciona el kernel .venv de la raiz de Proyecto2 y reinicialo tras el traslado.
+
+cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+code "task 2/Tarea1.ipynb"
+
+
+# 3) INICIAR O REINICIAR GAZEBO
+# Reinicia el contenedor existente y abre una sola simulacion; conserva paquetes.
+# Ejecuta una vez por sesion y deja esta terminal abierta. Play si esta pausado.
+# La salida nueva se guarda dentro de task 2; los registros anteriores se limpiaron.
+
+xhost +si:localuser:root
+sudo docker restart proyecto2-sim
+sudo docker exec -it -e DISPLAY="$DISPLAY" proyecto2-sim bash -lc 'source /opt/ros/jazzy/setup.bash && ros2 launch turtlebot4_gz_bringup turtlebot4_gz.launch.py model:=lite world:=depot rviz:=false' 2>&1 | tee "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2/task 2/simulador.log"
+
+
+# 4) COMPROBAR EL MENSAJE DE MOVIMIENTO (otra terminal, sin mover)
+# Esperado: geometry_msgs/msg/TwistStamped.
+
+sudo docker exec -it proyecto2-sim bash -lc 'source /opt/ros/jazzy/setup.bash && ros2 topic type /cmd_vel --no-daemon --spin-time 5'
+
+
+# 5) CONECTAR WEBCAM CON ROS SIN PUBLICAR VELOCIDAD
+# Mantener Gazebo abierto. Cerrar teclado y webcam del notebook antes de iniciar.
+# En la terminal del puente deben aparecer las ordenes reconocidas.
+# Cerrar esta ventana o pulsar q antes de comenzar el bloque 6.
+
+cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+bash "task 2/ejecutar_gestos_gazebo.sh"
+
+
+# 6) CONTROLAR EL ROBOT SIMULADO CON GESTOS
+# Mantener indice arriba: avanzar. Palma o retirar la mano: detener.
+# Frente a la webcam: tu derecha = DERECHA del robot; tu izquierda = IZQUIERDA.
+# 0.306 m/s y 1.90 rad/s, maximos con protecciones activas. No ejecutar otro control de velocidad a la vez.
+# q, cerrar ventana o Ctrl+C terminan las pruebas de desarrollo.
+
+cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+bash "task 2/ejecutar_gestos_gazebo.sh" --mover
+
+
+# 7) CERRAR LA SESION
+# Cerrar primero gestos/webcam; guardar el notebook.
+# En la terminal de Gazebo: Ctrl+C. Ctrl+Z suspende los procesos.
+# Luego ejecutar desde una terminal normal de Ubuntu:
+
+sudo docker stop proyecto2-sim
+xhost -si:localuser:root
+sudo docker inspect --format '{{.State.Status}}' proyecto2-sim
+
+# Debe aparecer exited. Para volver al simulador usar el bloque 3 y luego el 6.
+
+
+# 8) EJECUTAR LAS PRUEBAS AUTOMATICAS (sin webcam ni Docker)
+
+cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+.venv/bin/python -m unittest discover -s "task 2/tests" -t "task 2" -v
+
+
+# 9) GESTOS CON ROBOT REAL: COMPROBAR SIN MOVIMIENTO
+# Primero conectar con COMANDOS_LAB.txt de la raiz (no abrir Gazebo).
+# Desde una terminal NORMAL de Ubuntu, fuera de Docker y de SSH.
+# Cerrar teclado, otros controles y webcam del notebook.
+# IP y dominio confirmados el 5 de noviembre: revisar en cada visita.
+# Ver AVANZAR/IZQUIERDA/DERECHA/DETENER en la terminal. No publica velocidad.
+# Cerrar con q o Ctrl+C antes del bloque 10.
+
+cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+bash "task 2/ejecutar_gestos_robot.sh" --ip 10.87.179.100 --dominio 5
+
+
+# 10) GESTOS CON MOVIMIENTO DEL ROBOT REAL
+# Empezar con palma/sin mano; luego avance breve, palma y giros.
+# 0.306 m/s y 1.90 rad/s. Tu derecha = DERECHA del robot, y viceversa.
+# q, cerrar ventana o Ctrl+C terminan estas pruebas de desarrollo.
+# Para otra webcam anadir --camara 1. No ejecutar controles simultaneos.
+# Tras probar gestos faltan reconocer en B, volver a A e indicar el nombre.
+
+cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+bash "task 2/ejecutar_gestos_robot.sh" --ip 10.87.179.100 --dominio 5 --mover

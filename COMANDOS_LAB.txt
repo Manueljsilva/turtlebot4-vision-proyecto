@@ -1,0 +1,149 @@
+# CONECTARSE AL TURTLEBOT 4 LITE DESDE LA LAPTOP
+# Copia UN BLOQUE cada vez. No ejecutes este archivo completo como script.
+# Conexion comun para Task 1 y Task 2. No instala ni recrea nada.
+#
+# Antes: encender Archer C50 y robot; laptop en Lab_Computech_2_5G.
+# No hace falta internet para esta conexion.
+# Cerrar Gazebo, controles y webcam de otras pruebas con Ctrl+C.
+#
+# Datos comprobados el 5/11/2026:
+# Robot: 10.87.179.100, MAC D8-3A-DD-7E-5D-DD, dominio ROS 5.
+# La laptop tenia 10.87.179.102; esa IP no es la del robot.
+# Si DHCP cambia la IP, buscar el robot en Clientes DHCP del router.
+# Si te dan otra unidad, comprobar tambien su dominio antes de usarla.
+# Cambiar TB4_IP/TB4_DOMINIO en el bloque 1 cuando corresponda.
+# No usar la antigua reserva 10.87.179.103 ni depender de turtlebot4.local.
+
+
+# 1) TERMINAL NORMAL DE UBUNTU: DATOS DE ESTA SESION
+# Ctrl+Alt+T. El prompt empieza por manueljsilva@..., no ubuntu@turtlebot4.
+# Repetir este bloque en CADA terminal nueva de Ubuntu que vaya a usar Docker.
+# Las variables de una terminal no se copian automaticamente a otra.
+
+cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+export TB4_IP=10.87.179.100
+export TB4_DOMINIO=5
+export TB4_CONTENEDOR=proyecto2-sim
+ping -c 3 -W 2 "$TB4_IP"
+
+# Si no responde: revisar robot encendido, Wi-Fi y direccion actual.
+# El aviso de Wi-Fi "sin internet" es normal en esta red.
+
+
+# 2) MISMA TERMINAL UBUNTU: PREPARAR EL ROBOT UNA VEZ POR VISITA
+# Robot detenido. Comprobar primero que la fecha de la laptop sea correcta.
+# El SSH puede pedir contrasena del robot y luego sudo del robot.
+# No se guardan contrasenas. El comando vuelve a Ubuntu al terminar.
+# Ajusta la hora de la Pi y reinicia SOLO su servicio ROS.
+
+date -u
+ssh -t "ubuntu@$TB4_IP" "sudo date -u -s '$(date -u +%Y-%m-%dT%H:%M:%S)' && sudo systemctl restart turtlebot4.service && systemctl is-active turtlebot4.service"
+
+# Esperado: fecha actual y active. Esperar unos 30 segundos al arrancar sensores.
+# Si hay un error, resolverlo antes de continuar.
+# Este ajuste de hora es de la Pi, no garantiza el reloj del Create 3.
+# NO repetir este reinicio al abrir otra terminal durante la misma sesion.
+
+
+# 3) MISMA TERMINAL UBUNTU: ABRIR ROS EN DOCKER
+# docker start conserva la instalacion y sirve si ya esta encendido.
+
+sudo docker start "$TB4_CONTENEDOR"
+sudo docker inspect --format 'Red={{.HostConfig.NetworkMode}} Estado={{.State.Status}}' "$TB4_CONTENEDOR"
+
+# Debe decir Red=host Estado=running. Si dice otra red, revisar antes de seguir.
+# El siguiente bloque entra a Docker con dominio y peer de ESTA sesion.
+# --noprofile --norc evita que el bashrc reemplace estos valores por los de Gazebo.
+
+sudo docker exec -it \
+  -e ROS_DOMAIN_ID="$TB4_DOMINIO" \
+  -e RMW_IMPLEMENTATION=rmw_fastrtps_cpp \
+  -e ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET \
+  -e ROS_STATIC_PEERS="$TB4_IP" \
+  "$TB4_CONTENEDOR" bash --noprofile --norc
+
+
+# 4) AHORA DENTRO DE DOCKER: CARGAR ROS Y COMPROBAR CONEXION
+# El prompt puede ser bash-5.2# o root@...; ya no estas en Ubuntu normal.
+# No activar .venv aqui. No copiar el setup.bash de la Pi al contenedor.
+
+source /opt/ros/jazzy/setup.bash
+unset ROS_LOCALHOST_ONLY
+printenv ROS_DOMAIN_ID RMW_IMPLEMENTATION ROS_STATIC_PEERS
+ros2 daemon stop
+ros2 topic list -t --no-daemon --spin-time 10
+ros2 topic echo /scan --once --field header --qos-reliability best_effort
+
+# Esperado: dominio correcto, rmw_fastrtps_cpp, IP del robot,
+# lista con /scan, /odom y /cmd_vel, y cabecera frame_id: rplidar_link.
+# Si echo espera mas de 10 segundos, Ctrl+C y revisar.
+# Al ver esos datos, esta terminal ROS queda lista para continuar trabajando.
+# Para OTRA terminal ROS: abrir Ubuntu y repetir SOLO bloques 1, 3 y 4.
+
+
+# 5) OPCIONAL: TERMINAL SSH PARA INSPECCIONAR EL ROBOT
+# Abrir otra terminal NORMAL de Ubuntu y repetir primero el bloque 1.
+# SSH abre el robot; no es lo mismo que la terminal de Docker.
+
+ssh "ubuntu@$TB4_IP"
+
+# Solo despues de entrar por SSH (prompt ubuntu@turtlebot4):
+
+source /etc/turtlebot4/setup.bash
+hostname
+systemctl is-active turtlebot4.service
+printenv ROS_DOMAIN_ID RMW_IMPLEMENTATION
+
+# Para salir del SSH y volver a Ubuntu:
+
+exit
+
+
+# 6) OPCIONAL: PRUEBA POR TECLADO, DENTRO DE UNA TERMINAL DOCKER YA CONFIGURADA
+# Elegir SOLO UNO de los comandos siguientes.
+# Robot fuera del dock, con espacio libre y sin otro control actuando.
+# i avanzar | j/l girar | k DETENER | Ctrl+C detener y salir.
+# SOLTAR LA TECLA NO ENVIA POR SI SOLO UNA PARADA: usar k.
+# Antes de mover, comprobar speed y turn en la pantalla.
+# Si muestra otros valores, Ctrl+C y revisar version/parametros.
+
+# Prueba inicial: debe indicar speed 0.05 y turn 0.30.
+
+ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args \
+  -p stamped:=true -p frame_id:=base_link \
+  -p speed:=0.05 -p turn:=0.30 -p use_sim_time:=false
+
+# Alternativa solicitada: maximos documentados con protecciones activas.
+# Debe indicar speed 0.31 (0.306 redondeado) y turn 1.90.
+# Cerrar la prueba anterior antes de iniciar esta; avance y giro por separado.
+
+ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args \
+  -p stamped:=true -p frame_id:=base_link \
+  -p speed:=0.306 -p turn:=1.90 -p use_sim_time:=false
+
+
+# 7) TERMINAR LA VISITA
+# Cerrar primero cualquier control con k / Ctrl+C y verificar robot parado.
+# En la terminal de Docker, salir a Ubuntu:
+
+exit
+
+# Ahora en Ubuntu normal:
+
+sudo docker stop proyecto2-sim
+
+# Cerrar otras sesiones SSH con exit. Entregar/apagar robot y router
+# siguiendo el procedimiento del laboratorio.
+# Para volver otro dia: bloques 1, 2, 3 y 4. No reinstalar ni recrear Docker.
+#
+# CONTINUAR LAS TAREAS:
+# Jupyter/vision usan la .venv global en Ubuntu; ROS usa Docker.
+# El lanzador task 2/ejecutar_gestos_gazebo.sh sigue siendo para GAZEBO.
+# Para gestos fisicos: task 2/COMANDOS.txt, bloques 9 y 10, desde Ubuntu normal.
+# Usan ejecutar_gestos_robot.sh; primero comprobar y luego anadir --mover.
+# Ver detalles en task 2/PRIMERA_PRUEBA_ROBOT.md y ESTADO_PROYECTO.md.
+#
+# Referencias:
+# https://github.com/Tilinpro19/turtlebot67
+# https://github.com/ros2/teleop_twist_keyboard
+# https://iroboteducation.github.io/create3_docs/api/safety/#maximum-speed

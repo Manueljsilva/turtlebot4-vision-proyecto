@@ -1,0 +1,23 @@
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+*.task
+*.onnx
+*.part
+datos/
+rostros/
+capturas/
+resultados/
+*.log
+referencias/turtlebot67/
+
+# Configuración local y credenciales: no compartir en GitHub.
+.aws/
+.agents/
+.codex/
+.env
+.env.*
+!.env.example

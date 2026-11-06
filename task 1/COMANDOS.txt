@@ -1,0 +1,25 @@
+# TASK 1 - RECONOCIMIENTO FACIAL LOCAL
+# Copiar un bloque cada vez desde una terminal normal de Ubuntu.
+# No necesita Gazebo, ROS ni robot. Usar siempre la .venv global.
+
+# 1) ABRIR EL NOTEBOOK
+# En VS Code seleccionar el kernel .venv de Proyecto2 y ejecutar en orden.
+
+cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+code "task 1/01_reconocimiento_rostros.ipynb"
+
+# 2) PRUEBAS DEL MODULO (no descargan modelos)
+
+cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+.venv/bin/python -m unittest discover -s "task 1/tests" -t "task 1" -v
+
+# 3) SOLO PARA OTRA COMPUTADORA: DEPENDENCIAS EN SU ENTORNO COMPARTIDO
+# El entorno de esta computadora ya esta preparado; no recrearlo.
+
+cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+.venv/bin/python -m pip install -r "task 1/requirements.txt"
+
+# Los modelos se preparan en la segunda etapa del notebook.
+# En esta computadora ya se descargaron y comprobaron los SHA-256.
+# Si agregas fotos, revisar/regenerar el manifiesto desde el notebook y repetir
+# galeria, calibracion y evaluacion. No ajustar umbrales mirando el test.
