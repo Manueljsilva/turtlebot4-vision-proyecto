@@ -2,7 +2,7 @@
 
 Los puntos se reciben normalizados como (x, y), en el orden de MediaPipe.
 Se convierten a píxeles para no deformar ángulos en imágenes rectangulares.
-Esta primera versión reconoce una mano aproximadamente de frente a la cámara.
+Esta versión reconoce una mano aproximadamente de frente a la cámara.
 """
 
 from dataclasses import dataclass, field
@@ -42,11 +42,10 @@ def interpretar_mano(
 ) -> Gesto:
     """Interpreta una mano; ausencia, orientación dudosa o datos inválidos paran.
 
-    Palma: los cuatro dedos largos extendidos. Señalar: índice extendido y
-    los otros tres flexionados. El pulgar queda libre en esta convención.
-    La imagen se recibe sin espejo. Para el operador frente a la webcam,
-    apuntar a su derecha ordena DERECHA del robot y a su izquierda, IZQUIERDA.
-    Por eso el eje horizontal de imagen se invierte aquí una sola vez.
+    - Palma abierta: los cuatro dedos largos extendidos -> DETENER.
+    - Seña de la paz: índice y medio extendidos -> AVANZAR.
+    - Solo índice: apuntar a los lados determina IZQUIERDA o DERECHA.
+    El pulgar queda libre en esta convención.
     """
     if puntos is None:
         return Gesto(Orden.DETENER, "Sin mano")
@@ -76,31 +75,38 @@ def interpretar_mano(
         else:
             estados.append("ambiguo")
 
+    # 1. Palma completa abierta -> DETENER
     if all(estado == "extendido" for estado in estados):
         return Gesto(Orden.DETENER, "Palma abierta")
-    if estados != ["extendido", "flexionado", "flexionado", "flexionado"]:
-        return Gesto(Orden.DETENER, "Gesto no definido o dedos ambiguos")
 
-    dx = pixeles[8][0] - pixeles[5][0]
-    dy = pixeles[8][1] - pixeles[5][1]
-    # Dejar zonas de rechazo entre direcciones para evitar oscilaciones.
-    if -dy >= 1.5 * abs(dx):
-        return Gesto(Orden.AVANZAR, "Indice hacia arriba")
-    if -dx >= 1.5 * abs(dy):
-        return Gesto(Orden.DERECHA, "Indice hacia tu derecha")
-    if dx >= 1.5 * abs(dy):
-        return Gesto(Orden.IZQUIERDA, "Indice hacia tu izquierda")
-    return Gesto(Orden.DETENER, "Direccion diagonal o hacia abajo")
+    # 2. SEÑA DE LA PAZ (Índice y Medio extendidos) -> AVANZAR
+    if estados == ["extendido", "extendido", "flexionado", "flexionado"]:
+        # Opcional: verificar que ambos dedos apunten razonablemente hacia arriba
+        dy_indice = pixeles[8][1] - pixeles[5][1]
+        dy_medio = pixeles[12][1] - pixeles[9][1]
+        if dy_indice < 0 and dy_medio < 0:
+            return Gesto(Orden.AVANZAR, "Gesto de paz (Avanzar)")
+        return Gesto(Orden.DETENER, "Gesto de paz inclinado")
+
+    # 3. SOLO ÍNDICE EXTENDIDO -> GIROS (IZQUIERDA / DERECHA)
+    if estados == ["extendido", "flexionado", "flexionado", "flexionado"]:
+        dx = pixeles[8][0] - pixeles[5][0]
+        dy = pixeles[8][1] - pixeles[5][1]
+        
+        # Evaluar orientación horizontal con umbral estricto para evitar confusión con arriba
+        if -dx >= 1.5 * abs(dy):
+            return Gesto(Orden.DERECHA, "Indice hacia tu derecha")
+        if dx >= 1.5 * abs(dy):
+            return Gesto(Orden.IZQUIERDA, "Indice hacia tu izquierda")
+        
+        return Gesto(Orden.DETENER, "Indice solo apunta arriba (usa paz para avanzar)")
+
+    return Gesto(Orden.DETENER, "Gesto no definido o dedos ambiguos")
 
 
 @dataclass
 class FiltroOrden:
-    """Movimiento tras un gesto sostenido; detenerse tiene efecto inmediato.
-
-    Un cambio de dirección primero detiene. Un intervalo largo o un reloj
-    que retrocede obliga a confirmar otra vez. Usar un reloj monotónico.
-    En ROS hará falta además un vigilante independiente del proceso de visión.
-    """
+    """Movimiento tras un gesto sostenido; detenerse tiene efecto inmediato."""
 
     estabilidad_s: float = 0.4
     max_intervalo_s: float = 0.5
