@@ -10,7 +10,7 @@ code "task 1/01_reconocimiento_rostros.ipynb"
 
 Selecciona el kernel de `.venv` en la raíz y ejecuta las celdas en orden. El notebook admite directorio de trabajo en la raíz o en `task 1`. Las dependencias ya están instaladas y los dos modelos se descargaron y verificaron por SHA-256; las siguientes ejecuciones no necesitan internet. Para otra computadora, consultar `requirements.txt` y la celda de preparación de modelos.
 
-El notebook tiene 22 celdas, diez de código. Explica entorno y rutas, modelos, inventario, partición, extracción, galería, calibración, evaluación, consulta configurable y una prueba sin rostro.
+El notebook tiene 24 celdas, once de código. Explica entorno y rutas, modelos, inventario, partición, extracción, galería, calibración, evaluación, consulta configurable, una prueba sin rostro y una consulta externa opcional.
 
 **Prueba con tus fotografías.** Los originales están en `rostros/<alumno>/`. La carpeta disponible al implementar contenía 26 imágenes de cinco alumnos; hay fotos nuevas respecto a las 21 de cuatro alumnos de la planificación inicial. El detector encontró una cara útil en cada una. El nombre viene de la etiqueta de carpeta, no se verifica por otro medio.
 
@@ -29,6 +29,12 @@ CONSULTA = TAREA_DIR / 'datos' / 'otra_foto.jpg'
 ```
 
 La salida muestra el nombre aceptado o NO_CONCLUYENTE, el mejor candidato, las puntuaciones y el motivo. Un candidato de una respuesta rechazada no es una identidad aceptada. `MOSTRAR_FOTO=False` evita incrustar imágenes personales en las salidas. Puedes activarlo para revisar la caja de detección; limpia esa salida antes de compartir el notebook.
+
+**Prueba externa de la sección 11.** Se incorporó la consulta propuesta por Landov311 en [paz_y_rostros](https://github.com/Manueljsilva/turtlebot4-vision-proyecto/pull/1). Coloca una fotografía en `task 1/datos/rostro_prueba_1.jpeg` y ejecuta la última celda después de preparar la galería y el criterio. También puedes editar `CONSULTA_EXTERNA` para elegir otro archivo. Si no existe, la prueba se omite con un mensaje y el notebook termina normalmente.
+
+Muestra la decisión y el ranking completo usando los modelos y umbrales ya preparados. La foto no se incorpora a las referencias ni recalibra el criterio. `MOSTRAR_FOTO_EXTERNA=False` conserva la visualización desactivada por defecto; se puede activar localmente para inspeccionar la detección.
+
+**Qué significa limpiar antes de compartir.** Un notebook guarda tanto el código como las salidas de cada ejecución: tablas, mensajes y fotografías mostradas. La copia publicada en GitHub se guarda sin esas salidas para evitar incluir imágenes personales. Se conservan el código, las fotos originales de `rostros/` o `datos/` y las ejecuciones del notebook local.
 
 **Si llegan más alumnos o fotos.** El manifiesto detecta los cambios y evita mezclar silenciosamente nuevas referencias con una evaluación anterior. Revisa el reparto, usa `REGENERAR_PARTICION=True` y repite desde la partición hasta el final; luego vuelve a `False`. Con una foto solo puede haber referencia; hacen falta más tomas para calibrar/evaluar a esa persona. No reutilizar la foto de consulta como su propia referencia ni ajustar los umbrales para arreglar un error del test.
 
