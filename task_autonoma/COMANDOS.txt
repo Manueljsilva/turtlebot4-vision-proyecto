@@ -1,0 +1,51 @@
+# TASK AUTÓNOMA (SLAM + Nav2 + Visión) - COMANDOS PASO A PASO
+# Ejecutar cada bloque desde una terminal NORMAL de Ubuntu.
+
+# 0) PRUEBAS LOCALES AUTOMÁTICAS (sin Gazebo ni robot, desde la raíz del proyecto)
+cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+.venv/bin/python -m unittest discover -s "task_autonoma/tests" -t "task_autonoma" -v
+
+
+# 1) COMPROBAR PAQUETES SLAM/NAV2 INSTALADOS EN DOCKER
+sudo docker start proyecto2-sim
+sudo docker exec -it proyecto2-sim bash -lc 'source /opt/ros/jazzy/setup.bash && ros2 pkg list | grep -E "slam_toolbox|nav2|turtlebot4_navigation"'
+
+
+# 2) PROBAR EN GAZEBO (sin robot real)
+# Terminal 1: abrir Gazebo (bloque 3 de task 2/COMANDOS.txt)
+# Terminal 2: lanzar SLAM + Nav2
+cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+bash "task_autonoma/ejecutar_autonomo_gazebo.sh" --slam-nav2
+
+# Terminal 3: ejecutar misión autónoma (o prueba de evasión LiDAR primero)
+cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+# Prueba rápida LiDAR (sin Nav2):
+# bash "task_autonoma/ejecutar_autonomo_gazebo.sh" --solo-evasion --mover
+# Misión completa (exploración por fronteras + detección visual de B):
+bash "task_autonoma/ejecutar_autonomo_gazebo.sh"
+
+
+# 3) PROBAR EN ROBOT REAL (mañana en laboratorio)
+# Paso previo obligatorio: bloques 1, 2, 3 y 4 de COMANDOS_LAB.txt.
+
+# 3A) Solo leer LiDAR sin mover (comprobar distancias):
+cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+bash "task_autonoma/ejecutar_autonomo_robot.sh" --ip 10.87.179.100 --dominio 5 --solo-evasion
+
+# 3B) Evasión reactiva de cajas (sin SLAM/Nav2, con movimiento lento):
+bash "task_autonoma/ejecutar_autonomo_robot.sh" --ip 10.87.179.100 --dominio 5 --solo-evasion --mover
+
+# 3C) Solo probar cámara del robot + reconocimiento facial (robot detenido):
+bash "task_autonoma/ejecutar_autonomo_robot.sh" --ip 10.87.179.100 --dominio 5 --solo-reconocimiento
+
+# 3D) SLAM + Nav2 completo en robot real (requiere 2 terminales Ubuntu):
+# Terminal A (dejar abierto SLAM + Nav2):
+bash "task_autonoma/ejecutar_autonomo_robot.sh" --ip 10.87.179.100 --dominio 5 --slam-nav2
+
+# Terminal B (esperar ~10-15s a que SLAM y Nav2 arranquen y lanzar misión):
+bash "task_autonoma/ejecutar_autonomo_robot.sh" --ip 10.87.179.100 --dominio 5 --meta rostro
+# Opciones de --meta:
+#   --meta rostro                   (detecta la foto del rostro en B)
+#   --meta aruco                    (detecta marcador ArUco en B)
+#   --meta color                    (detecta cartel de color HSV en mision_config.json)
+#   --meta coordenada --bx 2.0 --by 0.0  (si conoces las coordenadas de B)

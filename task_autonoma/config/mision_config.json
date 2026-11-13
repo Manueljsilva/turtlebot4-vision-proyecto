@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "camara": {
+    "topico_raw": "/oakd/rgb/preview/image_raw",
+    "topico_compressed": "/oakd/rgb/preview/image_raw/compressed",
+    "edad_maxima_s": 1.0
+  },
+  "exploracion": {
+    "radio_seguridad_celdas": 4,
+    "min_tamano_cluster": 4,
+    "radio_exclusion_m": 0.45,
+    "timeout_meta_s": 18.0,
+    "max_intentos_meta": 25,
+    "tiempo_max_exploracion_s": 180.0
+  },
+  "meta_b": {
+    "modo": "rostro",
+    "confirmaciones_consecutivas": 2,
+    "min_ancho_rostro_px": 45,
+    "aruco_dict": "DICT_4X4_50",
+    "aruco_id": 0,
+    "hsv_min": [35, 80, 60],
+    "hsv_max": [85, 255, 255],
+    "min_area_color_px": 1800,
+    "coordenada_x": 2.0,
+    "coordenada_y": 0.0,
+    "coordenada_yaw": 0.0
+  },
+  "reconocimiento": {
+    "rafaga_frames": 8,
+    "espera_entre_frames_s": 0.25,
+    "min_votos": 2,
+    "usar_clahe": true
+  },
+  "evasion_lidar": {
+    "distancia_parada_m": 0.36,
+    "distancia_precaucion_m": 0.65,
+    "velocidad_avance": 0.18,
+    "velocidad_giro": 0.85,
+    "angulo_cono_frontal_deg": 35.0
+  }
+}
+
