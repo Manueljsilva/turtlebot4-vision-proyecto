@@ -15,7 +15,7 @@ Referencia revisada: [README del profesor](https://github.com/Tilinpro19/turtleb
 La red del laboratorio no tiene internet según la guía. Para usar los scripts del profesor, guarda una copia separada del código propio. Si ya existe, omite `git clone`:
 
 ```bash
-cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+cd "/ruta/a/turtlebot4-vision-proyecto"
 mkdir -p referencias
 git clone https://github.com/Tilinpro19/turtlebot67.git referencias/turtlebot67
 ```
@@ -76,7 +76,7 @@ La receta siguiente supone que aparece `host`: permite al contenedor compartir l
 Con red `host`, copia los scripts e ingresa a ROS desde esa misma terminal:
 
 ```bash
-cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+cd "/ruta/a/turtlebot4-vision-proyecto"
 sudo docker cp referencias/turtlebot67 proyecto2-sim:/tmp/
 sudo docker exec -it -e TB4_IP="$TB4_IP" -e TB4_DOMINIO="$TB4_DOMINIO" proyecto2-sim bash
 ```

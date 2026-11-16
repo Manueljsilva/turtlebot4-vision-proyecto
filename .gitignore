@@ -21,3 +21,13 @@ referencias/turtlebot67/
 .env
 .env.*
 !.env.example
+
+# Archivos auxiliares de compilación LaTeX; se conserva el PDF del informe.
+*.aux
+*.toc
+*.out
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+*.bbl
+*.blg

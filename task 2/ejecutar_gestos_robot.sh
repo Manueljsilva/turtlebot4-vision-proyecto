@@ -9,25 +9,31 @@ DOMINIO_ROBOT="${TB4_DOMINIO:-}"
 CONTENEDOR="${TB4_CONTENEDOR:-proyecto2-sim}"
 OPCIONES_PUENTE=(--robot-real)
 OPCIONES_WEBCAM=()
+VER_CAMARA=false
+TOPICO_CAMARA=/oakd/rgb/preview/image_raw
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --ip|--dominio|--contenedor|--camara)
+        --ip|--dominio|--contenedor|--camara|--topico-camara)
             [[ $# -ge 2 ]] || { echo "Falta el valor de $1" >&2; exit 2; }
             case "$1" in
                 --ip) IP_ROBOT="$2" ;;
                 --dominio) DOMINIO_ROBOT="$2" ;;
                 --contenedor) CONTENEDOR="$2" ;;
+                --topico-camara) TOPICO_CAMARA="$2"; VER_CAMARA=true ;;
                 --camara)
                     [[ "$2" =~ ^[0-9]+$ ]] || { echo 'Camara invalida' >&2; exit 2; }
                     OPCIONES_WEBCAM+=(--camara "$2") ;;
             esac
             shift 2 ;;
         --mover) OPCIONES_PUENTE+=(--publicar); shift ;;
+        --ver-camara) VER_CAMARA=true; shift ;;
         --help|-h)
             echo 'Uso: bash "task 2/ejecutar_gestos_robot.sh" --ip IP --dominio ID [--mover] [--camara 0]'
             echo 'Tambien admite TB4_IP, TB4_DOMINIO y TB4_CONTENEDOR del bloque 1 de COMANDOS_LAB.txt.'
             echo 'Sin --mover comprueba gestos sin publicar velocidad. No inicia ni reinicia el robot.'
+            echo '--ver-camara muestra el video del robot al lado de los gestos.'
+            echo '--topico-camara /topico cambia el origen de video y activa el panel.'
             exit 0 ;;
         *) echo "Opcion desconocida: $1" >&2; exit 2 ;;
     esac
@@ -37,6 +43,7 @@ done
 DOMINIO_ROBOT="$((10#$DOMINIO_ROBOT))"
 (( DOMINIO_ROBOT <= 101 )) || { echo 'Dominio fuera de 0-101' >&2; exit 2; }
 [[ "$CONTENEDOR" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] || { echo 'Contenedor invalido' >&2; exit 2; }
+[[ "$TOPICO_CAMARA" =~ ^/[a-zA-Z0-9_/]+$ ]] || { echo 'Topico de camara invalido' >&2; exit 2; }
 PYTHON="$PROYECTO_DIR/.venv/bin/python"
 [[ -x "$PYTHON" ]] || { echo 'Falta .venv/bin/python' >&2; exit 1; }
 if ! "$PYTHON" -c 'import ipaddress, sys; ipaddress.IPv4Address(sys.argv[1])' "$IP_ROBOT" 2>/dev/null; then
@@ -67,7 +74,13 @@ fi
 [[ "$TIPO" == geometry_msgs/msg/TwistStamped ]] || { echo "Tipo de /cmd_vel inesperado: $TIPO" >&2; exit 1; }
 
 sudo docker exec "$CONTENEDOR" mkdir -p /tmp/proyecto2-gestos
-for archivo in gestos.py control_gestos.py puente_gestos_ros.py; do
+ARCHIVOS=(gestos.py control_gestos.py puente_gestos_ros.py)
+if "$VER_CAMARA"; then
+    ARCHIVOS+=(camara_robot.py camara_robot_ros.py)
+    OPCIONES_WEBCAM+=(--ver-camara --ip-robot "$IP_ROBOT" --dominio-robot "$DOMINIO_ROBOT"
+                     --contenedor "$CONTENEDOR" --topico-camara "$TOPICO_CAMARA")
+fi
+for archivo in "${ARCHIVOS[@]}"; do
     sudo docker cp "$TAREA_DIR/$archivo" "$CONTENEDOR:/tmp/proyecto2-gestos/$archivo" >/dev/null
 done
 echo "ROBOT REAL: IP=$IP_ROBOT dominio=$DOMINIO_ROBOT | velocidades en task 2/control_gestos.py" >&2

@@ -1,9 +1,15 @@
 # Proyecto de visión con TurtleBot 4 Lite
 
-Proyecto de cuatro integrantes. Según el [enunciado oficial](Computer_vision_proyectos.pdf), ambas modalidades deben ir de A a B, identificar a la persona de la fotografía en B, regresar a A e indicar su nombre.
+Proyecto de cuatro integrantes, con [enunciado base](Computer_vision_proyectos.pdf) y alcance actualizado por el usuario el 13 de noviembre de 2026.
 
-- [Task 1 / Task A](<task 1/README.md>): notebook de reconocimiento facial implementado y probado con 26 fotos de cinco alumnos. Navegación autónoma pendiente.
-- [Task 2 / Task B](<task 2/README.md>): gestos con Gazebo y robot real confirmados por el usuario. Se ajustaron velocidad máxima y giros a sus lados; falta comprobar esos ajustes en hardware e integrar reconocimiento y misión completa.
+**Task 1 vigente:** escribir antes del inicio el nombre de una persona de la galería → salir de A → navegar autónomamente entre obstáculos, usando las flechas como ayuda para decidir giros → buscar y reconocer a esa persona entre varias fotografías en B → leer únicamente el QR situado junto a su foto y guardar su palabra → volver a A y mostrar la información del QR. Cada fotografía tiene su propio QR. Se propone planificar el regreso con el mapa; las flechas no son una señalización específica de retorno. Está aprobada la adopción y mejora de la base del compañero; ya se adaptó su prueba de evasión LiDAR, con la misión completa aún pendiente. Alcance y detalles pendientes en [PLAN_PROYECTO.md](PLAN_PROYECTO.md). El usuario confirmó que los cambios afectan solo a Task 1: Task 2 mantiene identificación en B, retorno por gestos y anuncio del nombre.
+
+- [Task 1 / Task A](<task 1/README.md>): reconocimiento con 74 fotos locales de 13 personas, entrada de nombre con Buscar, evasión LiDAR y una prueba combinada de movimiento/reconocimiento. La combinación registra A y se detiene al confirmar a la persona; pasó 91 pruebas locales, pero el usuario no alcanzó a probarla en el laboratorio. Comandos en bloques 9/10 de [task 1/COMANDOS.txt](<task 1/COMANDOS.txt>). Retorno automático, SLAM/Nav2, búsqueda entre fotos, flechas, QR y corrección de choques diagonales siguen pendientes.
+- [Task 2 / Task B](<task 2/README.md>): gestos con Gazebo y robot real confirmados por el usuario, con vídeo comprimido en el panel lateral. El vídeo conserva retraso sin medir; faltan las métricas de frenado, reconocimiento integrado y misión completa.
+
+**Informe en elaboración:** [fuente LaTeX](informe/main.tex) y [PDF del borrador](output/pdf/informe_proyecto_borrador.pdf), compilado y revisado en 10 páginas. Incluye metodología, arquitectura y resultados parciales. Faltan los datos de portada, navegación autónoma, cámara integrada, ensayos de la misión completa y apéndice de código. Se conserva el [borrador previo en Markdown](informe/BORRADOR_INFORME.md).
+
+Ese borrador corresponde al avance del 7 de noviembre: debe actualizarse con el nuevo objetivo de flechas/QR y las confirmaciones físicas posteriores antes de entregar.
 
 **Conexión al robot real para ambas tareas:** [COMANDOS_LAB.txt](COMANDOS_LAB.txt), en la raíz. Copiar un bloque cada vez: datos de sesión → hora/reinicio del robot una vez por visita → Docker con dominio/peer → comprobación de LiDAR. Incluye abrir más terminales, SSH, teclado opcional y cierre. La recepción de LiDAR desde Docker fue confirmada por el usuario el 5 de noviembre. Los gestos físicos se ejecutan después con los bloques 9 y 10 de [task 2/COMANDOS.txt](<task 2/COMANDOS.txt>).
 
@@ -17,10 +23,21 @@ Proyecto2/
 ├── Computer_vision_proyectos.pdf
 ├── COMANDOS_LAB.txt           Conexion comun al robot real
 ├── README.md
+├── informe/                  Fuente LaTeX y borrador previo
+├── output/pdf/               PDF compilado del informe
 ├── task 1/
 │   ├── 01_reconocimiento_rostros.ipynb
 │   ├── reconocimiento_facial.py
 │   ├── modelos_rostros.py
+│   ├── ejecutar_autonomo_robot.sh  Modos separados y prueba combinada
+│   ├── prueba_facial_robot.py     Cámara del robot y visión en la laptop
+│   ├── interfaz_facial.py         Nombre, sugerencias y Buscar
+│   ├── busqueda_robot.py          Visión y evasión coordinadas
+│   ├── busqueda_lidar_ros.py      Salida única de velocidad
+│   ├── control_busqueda.py        Estados, A y permisos
+│   ├── evasion_lidar.py
+│   ├── seguridad_lidar.py
+│   ├── config/evasion_lidar.json
 │   ├── requirements.txt
 │   ├── COMANDOS.txt
 │   ├── README.md
@@ -35,6 +52,8 @@ Proyecto2/
     ├── gestos.py              Clasificador y filtro temporal
     ├── control_gestos.py      Mensajes, velocidades y caducidad
     ├── puente_gestos_ros.py   Receptor/publicador en Docker
+    ├── camara_robot.py        Recepción de vídeo y panel lateral en host
+    ├── camara_robot_ros.py    Suscriptor de imagen en Docker
     ├── ejecutar_gestos_gazebo.sh
     ├── ejecutar_gestos_robot.sh
     ├── requirements.txt
@@ -45,7 +64,7 @@ Proyecto2/
     └── tests/
 ```
 
-**Notebook facial de Task 1:** [01_reconocimiento_rostros.ipynb](<task 1/01_reconocimiento_rostros.ipynb>), kernel de la `.venv` global y celdas en orden. Modelos ya preparados; no necesita ROS ni Gazebo. Primera evaluación: cuatro nombres correctos, un rechazo y cero nombres erróneos en cinco consultas reservadas.
+**Notebook facial de Task 1:** [01_reconocimiento_rostros.ipynb](<task 1/01_reconocimiento_rostros.ipynb>), kernel de la `.venv` global y celdas en orden. Modelos ya preparados; no necesita ROS ni Gazebo. La galería ampliada obtuvo 13 nombres correctos de 13 consultas reservadas; es una evaluación exploratoria por foto, sin independencia demostrada entre tomas. Los resultados iniciales conservados del notebook corresponden a cinco personas. Las fotografías, descriptores, galería y pesos se preparan localmente y no están en GitHub.
 
 Los siguientes comandos se ejecutan desde la raíz de Proyecto2. Las comillas son necesarias por el espacio en `task 2`.
 
@@ -73,9 +92,20 @@ bash "task 2/ejecutar_gestos_robot.sh" --ip 10.87.179.100 --dominio 5
 
 Comprueba las órdenes sin movimiento, cierra la prueba y repite añadiendo `--mover`. Revisa IP/dominio en cada visita. El modo físico usa reloj real y velocidades de 0.306 m/s y ±1.90 rad/s por petición del usuario. Frente a la webcam, tu derecha ordena DERECHA del robot y tu izquierda, IZQUIERDA. Los gestos físicos están confirmados antes de estos ajustes; los cambios pasaron 38 pruebas locales y requieren nueva comprobación en hardware.
 
+Añade `--ver-camara` para mostrar la webcam de gestos y la cámara del robot lado a lado. Comandos sin movimiento y con movimiento en los bloques 11/12 de [task 2/COMANDOS.txt](<task 2/COMANDOS.txt>). El usuario confirmó recepción de vídeo comprimido con `--topico-camara /oakd/rgb/preview/image_raw/compressed`; conserva retraso sin medir. El asistente no ejecutó hardware.
+
+**Prueba combinada de Task 1, pendiente de validar en hardware (16 de noviembre):**
+
+```bash
+bash "task 1/ejecutar_autonomo_robot.sh" --ip IP_ACTUAL --dominio DOMINIO_ACTUAL --evasion-reconocimiento
+```
+
+Por defecto no crea publicador de velocidad. Escribir el nombre y pulsar Buscar registra A con odometría válida antes de permitir movimiento. Para el ensayo físico cerrar la prueba y repetir con `--mover`, con los demás controles cerrados. Al confirmar el objetivo con tres imágenes nuevas queda detenido. **Aún no regresa a A**; tampoco lee flechas/QR ni resuelve varias caras. La evasión mantiene los choques diagonales reportados como problema pendiente. Pasos completos en [Task 1](<task 1/README.md>).
+
 **Ejecutar las pruebas:**
 
 ```bash
+.venv/bin/python -m unittest discover -s "task 1/tests" -t "task 1" -v
 .venv/bin/python -m unittest discover -s "task 2/tests" -t "task 2" -v
 ```
 

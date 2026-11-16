@@ -28,11 +28,18 @@ def main():
     parser.add_argument("--video", type=Path, help="Video para pruebas de desarrollo")
     parser.add_argument("--sin-ventana", action="store_true", help="Para pruebas con video")
     parser.add_argument("--duracion", type=float, help="Finalizar tras estos segundos")
+    parser.add_argument("--ver-camara", action="store_true", help="Video del robot al lado de los gestos")
+    parser.add_argument("--ip-robot")
+    parser.add_argument("--dominio-robot", type=int)
+    parser.add_argument("--contenedor", default="proyecto2-sim")
+    parser.add_argument("--topico-camara", default="/oakd/rgb/preview/image_raw")
     args = parser.parse_args()
     if args.duracion is not None and not 0 < args.duracion < float("inf"):
         parser.error("--duracion debe ser positiva y finita")
     if args.sin_ventana and args.video is None:
         parser.error("--sin-ventana requiere --video")
+    if args.ver_camara and (not args.ip_robot or args.dominio_robot is None or args.sin_ventana):
+        parser.error("--ver-camara requiere IP/dominio del robot y una ventana visible")
 
     import cv2
     import mediapipe as mp
@@ -56,6 +63,7 @@ def main():
     ultimo_ms = -1
     ultima_orden = None
     nombre_ventana = "Task B - webcam y ordenes"
+    video_robot = None
 
     def enviar(orden, captura_ns):
         nonlocal secuencia
@@ -68,6 +76,15 @@ def main():
             raise RuntimeError("No se pudo abrir la webcam/video. Cierra la webcam del notebook.")
         captura.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         captura.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        if args.ver_camara:
+            from camara_robot import VideoRobot, panel_lateral
+            try:
+                video_robot = VideoRobot.iniciar(args.ip_robot, args.dominio_robot,
+                                                args.contenedor, args.topico_camara)
+            except OSError as exc:
+                raise RuntimeError(f"No se pudo iniciar el video del robot: {exc}") from exc
+            cv2.namedWindow(nombre_ventana, cv2.WINDOW_NORMAL)
+            cv2.resizeWindow(nombre_ventana, 1280, 480)
         print("[WEBCAM] Sin espejo: tu derecha = DERECHA del robot; tu izquierda = IZQUIERDA.", file=sys.stderr)
         print("[WEBCAM] Palma/sin mano = DETENER. q o cerrar ventana termina la prueba.", file=sys.stderr)
         inicio = time.monotonic()
@@ -127,6 +144,9 @@ def main():
                     for i, texto in enumerate(textos):
                         cv2.putText(cuadro, texto, (10, 23 + 23 * i), cv2.FONT_HERSHEY_SIMPLEX,
                                     0.55, (0, 180, 255) if i == 0 else (255, 255, 255), 1)
+                    if video_robot is not None:
+                        imagen_robot, estado_video = video_robot.fotograma()
+                        cuadro = panel_lateral(cuadro, imagen_robot, estado_video)
                     cv2.imshow(nombre_ventana, cuadro)
                     if cv2.waitKey(1) & 0xFF == ord("q"):
                         break
@@ -141,6 +161,8 @@ def main():
         except BrokenPipeError:
             pass
         captura.release()
+        if video_robot is not None:
+            video_robot.cerrar()
         if not args.sin_ventana:
             cv2.destroyAllWindows()
         print("[WEBCAM] Camara liberada. DETENER.", file=sys.stderr)

@@ -1,25 +1,146 @@
-# TASK 1 - RECONOCIMIENTO FACIAL LOCAL
+# TASK 1 - RECONOCIMIENTO LOCAL Y PRUEBA LIDAR EN ROBOT
 # Copiar un bloque cada vez desde una terminal normal de Ubuntu.
-# No necesita Gazebo, ROS ni robot. Usar siempre la .venv global.
+# Los bloques 1-3 no necesitan ROS ni robot. Usar siempre la .venv global.
 
 # 1) ABRIR EL NOTEBOOK
 # En VS Code seleccionar el kernel .venv de Proyecto2 y ejecutar en orden.
 
-cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+cd "/ruta/a/turtlebot4-vision-proyecto"
 code "task 1/01_reconocimiento_rostros.ipynb"
 
 # 2) PRUEBAS DEL MODULO (no descargan modelos)
 
-cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+cd "/ruta/a/turtlebot4-vision-proyecto"
 .venv/bin/python -m unittest discover -s "task 1/tests" -t "task 1" -v
 
 # 3) SOLO PARA OTRA COMPUTADORA: DEPENDENCIAS EN SU ENTORNO COMPARTIDO
 # El entorno de esta computadora ya esta preparado; no recrearlo.
 
-cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+cd "/ruta/a/turtlebot4-vision-proyecto"
 .venv/bin/python -m pip install -r "task 1/requirements.txt"
 
 # Los modelos se preparan en la segunda etapa del notebook.
 # En esta computadora ya se descargaron y comprobaron los SHA-256.
 # Si agregas fotos, revisar/regenerar el manifiesto desde el notebook y repetir
 # galeria, calibracion y evaluacion. No ajustar umbrales mirando el test.
+
+
+# 4) PRUEBA LIDAR DEL COMPANERO: LEER SIN MOVER
+# Antes: robot conectado a la misma red, controladores del robot arrancados
+# UNA sola vez, Docker proyecto2-sim encendido en red host y enlace ROS listo.
+# Preparacion de red/hora y comprobacion del enlace en COMANDOS_LAB.txt.
+# Si el robot ya esta funcionando, no reiniciar su servicio al abrir terminal.
+# No necesita camara, galeria facial, SLAM ni Nav2.
+# Ejecutar FUERA de SSH y de Docker, desde Ubuntu normal.
+
+cd "/ruta/a/turtlebot4-vision-proyecto"
+# Estas fueron la IP y dominio de la ultima prueba; comprobarlos en cada visita.
+export TB4_IP=10.87.179.100
+export TB4_DOMINIO=5
+bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO" --solo-evasion
+
+# Esperado: distancias frente/izq/der y cmd propuesto. NO publica velocidad.
+# Tambien: utiles/total por sector, porcentaje, OK/INSUFICIENTE, inf/NaN/fuera,
+# minimo configurado (ahora 30%), edad_rx y rx medio de los ultimos 30 mensajes.
+# Copiar 5-10 lineas si se para. +inf no se convierte en distancia libre garantizada.
+# Comprobar frente acercando un obstaculo mientras el robot sigue quieto.
+# Si dice Sin TF valido, Sin LiDAR reciente o sectores desconocidos: resolverlo
+# antes de activar movimiento. No sustituir esas condiciones por frente libre.
+# Ctrl+C termina esta lectura.
+
+
+# 5) MISMA TERMINAL: ESQUIVE REACTIVO CON MOVIMIENTO
+# Cerrar gestos, teclado, otras evasiones y Nav2. Gazebo tambien debe estar cerrado.
+# Probar en una zona despejada del laboratorio, lejos de escaleras/bordes.
+# El robot empieza a decidir movimiento al recibir LiDAR y TF validos; no pide gesto.
+
+bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO" --solo-evasion --mover
+
+# Ctrl+C termina e intenta publicar cero. No usar Ctrl+Z: suspende el control.
+# Confirmar con el responsable del laboratorio el procedimiento de parada de esa unidad.
+# Esto NO ejecuta A -> B -> A, reconocimiento, flechas ni QR.
+# Velocidades de esta primera prueba: 0.10 m/s y 0.40 rad/s, independientes de Task 2.
+# Se ajustan en task 1/config/evasion_lidar.json; limites 0.306 m/s y 1.90 rad/s.
+# Precaucion desde 0.45 m; a 0.32 m deja de avanzar y decide el giro con datos validos.
+# Correccion lateral desde 0.28 m. Distancias medidas por el LiDAR.
+# Cobertura minima 30% y al menos tres retornos por sector; NaN/fuera <=10%.
+# Si no hay suficientes retornos, falta TF o pasan 0.6s sin scan, ordena detener.
+# Reiniciar este lanzador aplica cambios locales a Docker; no reiniciar el robot.
+# La parada por datos caducados depende de que el proceso ROS siga activo y pueda
+# entregar comandos. No garantiza frenado frente a corte de red o muerte del proceso.
+
+
+# 6) SOLO SI SIGUE APARECIENDO "Sin LiDAR reciente": COMPARAR EL ORIGEN
+# Primero terminar la ejecucion con movimiento con Ctrl+C.
+# Otra terminal normal de Ubuntu, con TB4_IP actual definido:
+# El siguiente comando solo mide frecuencia en el robot; no mueve ni reinicia nada.
+ssh "ubuntu@$TB4_IP" 'source /etc/turtlebot4/setup.bash; timeout 15s ros2 topic hz /scan --window 30'
+# Comparar con rx/edad_rx de la lectura SIN --mover en Docker.
+# timeout puede terminar con codigo 124 al completar los 15s; conservar las tasas impresas.
+# Los mensajes actuales no permiten atribuir los cortes a Wi-Fi, CPU o sensor.
+
+
+# 7) RECONOCIMIENTO FACIAL CON CAMARA DEL ROBOT, SIN MOVIMIENTO
+# Primero Ctrl+C en la evasion; cerrar gestos, teclado y otros controles.
+# Dejar el robot quieto, con sus controladores/camara y Docker ya encendidos.
+# Desde una terminal NORMAL de Ubuntu, fuera de SSH/Docker:
+
+cd "/ruta/a/turtlebot4-vision-proyecto"
+export TB4_IP=10.87.179.100
+export TB4_DOMINIO=5
+bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO" --solo-reconocimiento
+
+# Por defecto recibe /oakd/rgb/preview/image_raw/compressed; vision en la laptop.
+# Galeria ampliada el 13/11: debe indicar 'Galería local: 13 personas'.
+# Si la prueba estaba abierta durante la actualizacion, cerrar y volver a ejecutar.
+# Si tarda en arrancar: la ventana queda EN ESPERA, sin limite por falta de imagen.
+# Al llegar imagen reciente empieza a reconocer automaticamente; no repetir el comando.
+# La terminal muestra los topicos de imagen visibles, aunque aun no aparezca el elegido.
+# Escribir el nombre en el campo de la ventana y pulsar Buscar o Enter.
+# Las sugerencias rellenan el campo; despues pulsar Buscar para confirmar.
+# Editar o escribir un nombre invalido no reemplaza el objetivo activo anterior.
+# Buscando = objetivo; Reconocido = identidad observada, aunque sea otra persona.
+# Colocar UNA foto de alguien de la galeria frente a la camara; buena luz y frontal.
+# Sin otras caras en el encuadre. Para evaluar, preferir una foto reservada del test.
+# Resultado: objetivo encontrado, otra persona reconocida o NO_CONCLUYENTE.
+# Esc, boton Salir o Ctrl+C terminan. q termina solo fuera del campo de texto.
+# VARIOS_ROSTROS: dejar una sola foto/cara para esta primera prueba.
+# No usar --mover: el reconocimiento no publica velocidades y lo rechaza.
+# No inicia/reinicia servicios, descarga modelos, guarda imagenes ni recalibra.
+# Si sigue sin video: revisar controlador/topico y red, sin iniciar otro duplicado.
+
+
+# 8) OPCIONAL: PRECARGAR NOMBRE OBJETIVO DESDE LA TERMINAL
+# Solo consultar las etiquetas locales (no abre camara ni conecta con el robot):
+.venv/bin/python "task 1/prueba_facial_robot.py" --listar-nombres
+# Despues sustituir el texto de ejemplo por una etiqueta mostrada:
+# bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO" --solo-reconocimiento --nombre "Etiqueta exacta"
+# Confirma el objetivo solo si la identidad aceptada coincide; no fuerza el nombre.
+# La interfaz ya permite escribirlo sin usar --nombre.
+# Esta prueba aun no busca entre varias fotos, lee QR ni ejecuta una mision.
+
+
+# 9) EVASION + RECONOCIMIENTO, PRIMERO SIN PUBLICAR MOVIMIENTO
+# Desde Ubuntu normal, no SSH/Docker. Cerrar las pruebas anteriores con Ctrl+C.
+# Mantener los controladores del robot y Docker encendidos; sin duplicarlos.
+cd "/ruta/a/turtlebot4-vision-proyecto"
+export TB4_IP=10.87.179.100
+export TB4_DOMINIO=5
+bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO" --evasion-reconocimiento
+# Escribir nombre y pulsar Buscar: lo fija para la ejecucion y solicita registrar A.
+# Espera una lectura de odometria posterior al inicio, sin inventar una posicion.
+# Ver A guardado y la camara; mostrar UNA foto del objetivo para comprobar 3/3.
+# Sin --mover no crea publicador de velocidad. Esc/Salir/Ctrl+C terminan.
+
+
+# 10) EVASION + RECONOCIMIENTO CON MOVIMIENTO REAL
+# Terminar el bloque 9 antes. Cerrar gestos, teclado, Nav2 y otra evasion.
+# Primera prueba en espacio despejado: la evasion aun tiene choques diagonales pendientes.
+bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO" --evasion-reconocimiento --mover
+# No se mueve al abrir: Buscar activa la prueba cuando hay sensores y A validos.
+# A = posicion de inicio de esta busqueda, guardada en datos/sesiones/ (ignorada en Git).
+# Mantener una foto a la vez. Con el primer acierto pausa; 3 imagenes nuevas confirman.
+# Al encontrar al objetivo queda detenido. AUN NO REGRESA A A ni lee flechas/QR.
+# Camara/vision/odometria/LiDAR caducados detienen. La edad de imagen es local, no del sensor.
+# No cambiar de persona durante el recorrido: cerrar y relanzar para otra busqueda.
+# Esc, Salir o Ctrl+C intentan parar y cerrar. No usar Ctrl+Z.

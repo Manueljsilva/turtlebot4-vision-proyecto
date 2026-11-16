@@ -23,12 +23,20 @@ Comprueba las órdenes sin publicar velocidad; cierra la prueba y repite añadie
 
 El modo físico selecciona `--robot-real`: `use_sim_time=False`, estampas con reloj del sistema y sin dependencia de `/clock`. Conserva el vigilante monotónico de 0.5 s, temporizador de 20 Hz, las mismas reglas de gestos, parada al cerrar y velocidades de 0.306 m/s y ±1.90 rad/s. Webcam y puente siguen en la misma laptop. La validación física impide valores fuera de 0.306 m/s y 1.90 rad/s, no finitos o DETENER distinto de cero. Cierra los demás controles antes de activarlo.
 
+**Panel lateral de cámara, robot real.** Añade `--ver-camara` al lanzador físico, con o sin `--mover`. `camara_robot_ros.py` recibe el tópico `/oakd/rgb/preview/image_raw` mediante QoS BEST_EFFORT, VOLATILE y profundidad 1; descubre si su tipo es `Image` o `CompressedImage`. `--topico-camara /otro/topico` permite cambiarlo y activa el panel. Los tipos siguen las definiciones oficiales de [Image](https://github.com/ros2/common_interfaces/blob/jazzy/sensor_msgs/msg/Image.msg) y [CompressedImage](https://github.com/ros2/common_interfaces/blob/jazzy/sensor_msgs/msg/CompressedImage.msg).
+
+El suscriptor corre en otro proceso de Docker con el mismo dominio/Fast DDS/peer. Envía imágenes y hora monotónica de recepción por su propia tubería, separada de `/cmd_vel`. `camara_robot.py` lee en un hilo, conserva solo el último registro y decodifica en el host con el OpenCV ya instalado. `webcam_gestos.py` dibuja webcam a la izquierda y robot a la derecha, sin espejo adicional. No necesita `cv_bridge`, OpenCV ni X11 dentro de Docker, no abre puertos y no guarda fotos. stdin del receptor se cierra al terminar la ventana; el nodo atiende EOF aunque no reciba imágenes.
+
+Se limita la salida de vídeo hacia el host a 5 FPS; esto no modifica el publicador del robot ni limita por sí solo el tráfico DDS de la cámara raw. Se admiten RGB/BGR/mono/RGBA/BGRA de 8 bits, respetando `Image.step`, y compresión decodificable por OpenCV. Registros vacíos, inválidos o mayores de 8 MiB se rechazan. Si la imagen supera 1 s desde recepción local, se sustituye por «Sin imagen reciente», sin presentar un fotograma congelado como actual. No es una medida del retraso completo desde el sensor ni una parada protectora: si se pierde la vista, detener con palma. Este cambio conserva dirección, velocidades y vigilante de gestos.
+
+El 7 de noviembre pasaron **51 pruebas locales**: las 38 anteriores y 13 nuevas de imágenes sintéticas, PNG, relleno de filas, datos inválidos, vídeo antiguo, últimas imágenes por tubería real, EOF y paso de parámetros del lanzador. Se revisó un render sintético lateral y sintaxis Python 3.12/Bash. Sin acceso autenticado al Docker ni al robot durante esta implementación, la recepción ROS y latencia real quedan pendientes. Comandos en bloques 11/12 de `COMANDOS.txt`.
+
 **Preparación para Gazebo.** Los pasos siguientes corresponden al simulador. Deja Gazebo y su terminal abiertos. Si todavía no está abierto, usa una vez el bloque 3 de `COMANDOS.txt`. Cierra el control por teclado con Ctrl+C en su terminal. Interrumpe la webcam del notebook o cierra cualquier otra aplicación que la esté usando. Si ya hay una prueba de gestos abierta, ciérrala antes de iniciar otra.
 
 **Primero comprobar sin movimiento.** Los comandos siguientes parten de la raíz de Proyecto2, no de `task 2`. En otra terminal normal de Ubuntu:
 
 ```bash
-cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+cd "/ruta/a/turtlebot4-vision-proyecto"
 bash "task 2/ejecutar_gestos_gazebo.sh"
 ```
 

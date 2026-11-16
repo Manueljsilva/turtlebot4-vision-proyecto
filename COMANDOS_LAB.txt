@@ -20,7 +20,7 @@
 # Repetir este bloque en CADA terminal nueva de Ubuntu que vaya a usar Docker.
 # Las variables de una terminal no se copian automaticamente a otra.
 
-cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+cd "/ruta/a/turtlebot4-vision-proyecto"
 export TB4_IP=10.87.179.100
 export TB4_DOMINIO=5
 export TB4_CONTENEDOR=proyecto2-sim
@@ -147,3 +147,16 @@ sudo docker stop proyecto2-sim
 # https://github.com/Tilinpro19/turtlebot67
 # https://github.com/ros2/teleop_twist_keyboard
 # https://iroboteducation.github.io/create3_docs/api/safety/#maximum-speed
+
+
+
+
+
+
+
+
+source /opt/ros/jazzy/setup.bash
+export ROS_DOMAIN_ID=5
+export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+export ROS_STATIC_PEERS=10.87.179.100
+ros2 daemon stop

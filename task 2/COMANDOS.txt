@@ -8,14 +8,14 @@
 # Cierra primero otra aplicacion que use la webcam. Salir: q o cerrar ventana.
 # Si necesitas otra camara, anade --camara 1.
 
-cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+cd "/ruta/a/turtlebot4-vision-proyecto"
 .venv/bin/python "task 2/webcam_gestos.py"
 
 
 # 2) ABRIR EL NOTEBOOK DE PRUEBA LOCAL
 # Selecciona el kernel .venv de la raiz de Proyecto2 y reinicialo tras el traslado.
 
-cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+cd "/ruta/a/turtlebot4-vision-proyecto"
 code "task 2/Tarea1.ipynb"
 
 
@@ -26,7 +26,7 @@ code "task 2/Tarea1.ipynb"
 
 xhost +si:localuser:root
 sudo docker restart proyecto2-sim
-sudo docker exec -it -e DISPLAY="$DISPLAY" proyecto2-sim bash -lc 'source /opt/ros/jazzy/setup.bash && ros2 launch turtlebot4_gz_bringup turtlebot4_gz.launch.py model:=lite world:=depot rviz:=false' 2>&1 | tee "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2/task 2/simulador.log"
+sudo docker exec -it -e DISPLAY="$DISPLAY" proyecto2-sim bash -lc 'source /opt/ros/jazzy/setup.bash && ros2 launch turtlebot4_gz_bringup turtlebot4_gz.launch.py model:=lite world:=depot rviz:=false' 2>&1 | tee "/ruta/a/turtlebot4-vision-proyecto/task 2/simulador.log"
 
 
 # 4) COMPROBAR EL MENSAJE DE MOVIMIENTO (otra terminal, sin mover)
@@ -40,7 +40,7 @@ sudo docker exec -it proyecto2-sim bash -lc 'source /opt/ros/jazzy/setup.bash &&
 # En la terminal del puente deben aparecer las ordenes reconocidas.
 # Cerrar esta ventana o pulsar q antes de comenzar el bloque 6.
 
-cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+cd "/ruta/a/turtlebot4-vision-proyecto"
 bash "task 2/ejecutar_gestos_gazebo.sh"
 
 
@@ -50,7 +50,7 @@ bash "task 2/ejecutar_gestos_gazebo.sh"
 # 0.306 m/s y 1.90 rad/s, maximos con protecciones activas. No ejecutar otro control de velocidad a la vez.
 # q, cerrar ventana o Ctrl+C terminan las pruebas de desarrollo.
 
-cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+cd "/ruta/a/turtlebot4-vision-proyecto"
 bash "task 2/ejecutar_gestos_gazebo.sh" --mover
 
 
@@ -68,7 +68,7 @@ sudo docker inspect --format '{{.State.Status}}' proyecto2-sim
 
 # 8) EJECUTAR LAS PRUEBAS AUTOMATICAS (sin webcam ni Docker)
 
-cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+cd "/ruta/a/turtlebot4-vision-proyecto"
 .venv/bin/python -m unittest discover -s "task 2/tests" -t "task 2" -v
 
 
@@ -80,7 +80,7 @@ cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
 # Ver AVANZAR/IZQUIERDA/DERECHA/DETENER en la terminal. No publica velocidad.
 # Cerrar con q o Ctrl+C antes del bloque 10.
 
-cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+cd "/ruta/a/turtlebot4-vision-proyecto"
 bash "task 2/ejecutar_gestos_robot.sh" --ip 10.87.179.100 --dominio 5
 
 
@@ -91,5 +91,26 @@ bash "task 2/ejecutar_gestos_robot.sh" --ip 10.87.179.100 --dominio 5
 # Para otra webcam anadir --camara 1. No ejecutar controles simultaneos.
 # Tras probar gestos faltan reconocer en B, volver a A e indicar el nombre.
 
-cd "/home/manueljsilva/Documentos/Cursos/Vision-comptacion/Proyecto2"
+cd "/ruta/a/turtlebot4-vision-proyecto"
 bash "task 2/ejecutar_gestos_robot.sh" --ip 10.87.179.100 --dominio 5 --mover
+
+
+# 11) WEBCAM Y CAMARA DEL TURTLEBOT JUNTAS, SIN MOVIMIENTO
+# Conectar antes con COMANDOS_LAB.txt; no abrir Gazebo.
+# Terminal normal de Ubuntu, fuera de Docker y SSH. Revisar IP/dominio.
+# Izquierda: gestos. Derecha: vista del robot. No se guardan imagenes.
+# Topico comprimido confirmado por el usuario el 13/11; retardo por medir.
+# Esperar la imagen real; q o Ctrl+C antes del bloque 12.
+
+cd "/ruta/a/turtlebot4-vision-proyecto"
+bash "task 2/ejecutar_gestos_robot.sh" --ip 10.87.179.100 --dominio 5 --topico-camara /oakd/rgb/preview/image_raw/compressed
+
+
+# 12) MOVER CON GESTOS Y VER POR DONDE VA EL ROBOT
+# Mismas velocidades y direcciones. Palma/sin mano: DETENER.
+# Si el video pierde senal, detener con palma; no hay parada automatica por video.
+# q, cerrar ventana o Ctrl+C terminan tambien la recepcion de video.
+# Otro topico: anadir --topico-camara /nombre/del/topico.
+
+cd "/ruta/a/turtlebot4-vision-proyecto"
+bash "task 2/ejecutar_gestos_robot.sh" --ip 10.87.179.100 --dominio 5 --mover --topico-camara /oakd/rgb/preview/image_raw/compressed

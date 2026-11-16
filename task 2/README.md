@@ -39,6 +39,22 @@ bash "task 2/ejecutar_gestos_robot.sh" --ip 10.87.179.100 --dominio 5 --mover
 
 Prueba palma y mano retirada; luego avance breve, palma y cada giro. Usa 0.306 m/s y ±1.90 rad/s, máximos documentados con protecciones activas. El lanzador verifica red host, alcance de IP y tipo `TwistStamped`, configura dominio/Fast DDS/peer y usa reloj real sin exigir `/clock`. Admite `--camara 1`, `--contenedor NOMBRE` y las variables `TB4_IP`, `TB4_DOMINIO`, `TB4_CONTENEDOR`. No reinicia el robot. Estas son pruebas de desarrollo: q/Ctrl+C no son controles del intento oficial.
 
+**Ver la cámara del robot junto a los gestos.** Conecta primero como antes y añade `--ver-camara`. Sin `--mover` puedes comprobar las dos imágenes sin publicar velocidad:
+
+```bash
+bash "task 2/ejecutar_gestos_robot.sh" --ip 10.87.179.100 --dominio 5 --ver-camara
+```
+
+Cierra esa prueba y después activa movimiento:
+
+```bash
+bash "task 2/ejecutar_gestos_robot.sh" --ip 10.87.179.100 --dominio 5 --mover --ver-camara
+```
+
+La ventana muestra los gestos a la izquierda y la vista del TurtleBot a la derecha, sin invertir esta última. Puedes redimensionarla. q, cerrar la ventana o Ctrl+C terminan la prueba y cierran también el receptor de vídeo. No se guardan imágenes. El tópico predeterminado es `/oakd/rgb/preview/image_raw`, observado en esta unidad. Para otra fuente añade `--topico-camara /nombre/del/topico`; admite mensajes `Image` o `CompressedImage`. El vídeo funciona sin OpenCV ni acceso gráfico dentro de Docker.
+
+Si no llegan imágenes durante un segundo, el panel oculta la anterior y muestra «Sin imagen reciente»; al inicio muestra «Esperando camara del robot». La recepción de vídeo es independiente de las órdenes y su pérdida no detiene automáticamente el robot: usa la palma si pierdes la vista. La caducidad se mide desde la recepción local, no demuestra la latencia desde el sensor. La nueva función pasó pruebas con imágenes sintéticas y tuberías; falta comprobarla con la cámara real.
+
 **Integración con Gazebo.** Usa [COMANDOS.txt](COMANDOS.txt) para abrir la simulación y [INTEGRACION_GESTOS.md](INTEGRACION_GESTOS.md) para entender el enlace. Con Gazebo abierto, cierra primero el teclado y cualquier otra captura de webcam. Desde la raíz de Proyecto2:
 
 ```bash

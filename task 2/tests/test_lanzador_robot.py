@@ -21,7 +21,7 @@ class LanzadorRobotTests(unittest.TestCase):
         self.tarea = proyecto / 'task 2'
         self.tarea.mkdir(parents=True)
         for nombre in ['ejecutar_gestos_robot.sh', 'gestos.py', 'control_gestos.py',
-                       'puente_gestos_ros.py']:
+                       'puente_gestos_ros.py', 'camara_robot.py', 'camara_robot_ros.py']:
             shutil.copyfile(RAIZ / nombre, self.tarea / nombre)
         (self.tarea / 'modelos').mkdir()
         (self.tarea / 'modelos/hand_landmarker.task').touch()
@@ -37,7 +37,8 @@ class LanzadorRobotTests(unittest.TestCase):
 
         ejecutable(proyecto / '.venv/bin/python', '''import json, os, sys, time
 if len(sys.argv) > 2 and sys.argv[1] == '-u':
-    open(os.environ['PRUEBA_CAMARA'], 'w').close()
+    with open(os.environ['PRUEBA_CAMARA'], 'w') as archivo:
+        json.dump(sys.argv[1:], archivo)
     print(json.dumps(dict(version=1, orden='DETENER', captura_ns=time.monotonic_ns(), secuencia=0)))
 else:
     os.execv(sys.executable, [sys.executable, *sys.argv[1:]])
@@ -90,6 +91,25 @@ elif args[0] == 'exec' and any('ros2 topic type /cmd_vel' in a for a in args):
         self.assertIn('--publicar', self.entrada_puente())
         self.assertTrue(self.camara.exists())
 
+    def test_video_lateral_pasa_la_misma_red_y_copia_suscriptor(self):
+        resultado = self.ejecutar('--ver-camara', '--mover')
+        self.assertEqual(resultado.returncode, 0, resultado.stderr)
+        args = json.loads(self.camara.read_text())
+        for valor in ['--ver-camara', '--ip-robot', '10.87.179.100', '--dominio-robot',
+                      '5', '--contenedor', 'proyecto2-sim', '/oakd/rgb/preview/image_raw']:
+            self.assertIn(valor, args)
+        llamadas = [json.loads(linea) for linea in self.registro.read_text().splitlines()]
+        self.assertTrue(any(c[0] == 'cp' and c[1].endswith('/camara_robot_ros.py') for c in llamadas))
+        self.assertIn('--publicar', self.entrada_puente())
+
+    def test_topico_de_video_personalizado_activa_el_panel(self):
+        resultado = self.ejecutar('--topico-camara', '/oakd/rgb/preview/image_raw/compressed')
+        self.assertEqual(resultado.returncode, 0, resultado.stderr)
+        args = json.loads(self.camara.read_text())
+        self.assertIn('--ver-camara', args)
+        self.assertIn('/oakd/rgb/preview/image_raw/compressed', args)
+        self.assertNotIn('--publicar', self.entrada_puente())
+
     def test_tipo_incorrecto_no_abre_camara(self):
         self.env['PRUEBA_TIPO'] = 'geometry_msgs/msg/Twist'
         resultado = self.ejecutar('--mover')
@@ -105,7 +125,8 @@ elif args[0] == 'exec' and any('ros2 topic type /cmd_vel' in a for a in args):
         self.assertFalse(self.camara.exists())
 
     def test_argumentos_invalidos_no_invocan_docker(self):
-        for extras in [('--dominio', '102'), ('--dominio', '-1'), ('--ip', '999.1.1.1')]:
+        for extras in [('--dominio', '102'), ('--dominio', '-1'), ('--ip', '999.1.1.1'),
+                       ('--topico-camara', 'no es un topico')]:
             with self.subTest(extras=extras):
                 resultado = self.ejecutar(*extras)
                 self.assertEqual(resultado.returncode, 2, resultado.stderr)
