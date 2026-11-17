@@ -16,7 +16,8 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy
 from rclpy.signals import SignalHandlerOptions
 
 from control_busqueda import MAX_LINEA, PuertaBusqueda, pose_odometria
-from evasion_lidar import cargar_config
+from control_giros import ControlGiro, cargar_config_senales
+from evasion_lidar import cargar_config, decidir_scan
 from seguridad_lidar import EvasionLidarNode
 
 
@@ -47,12 +48,13 @@ class EntradaControl:
 
 
 class BusquedaLidarNode(EvasionLidarNode):
-    def __init__(self, mover, cfg, entrada):
+    def __init__(self, mover, cfg, entrada, giros=None):
         self.entrada = entrada
         self.puerta = PuertaBusqueda()
         self.pose, self.pose_ns = None, None
         self.motivo_control = 'Esperando Buscar'
         self._estado_ns = 0
+        self.giros = giros
         super().__init__(mover, cfg)
         qos_odom = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT)
         self.sub_odom = self.create_subscription(Odometry, '/odom', self.odometria, qos_odom)
@@ -67,10 +69,24 @@ class BusquedaLidarNode(EvasionLidarNode):
         if linea is not None:
             self.puerta.recibir(linea, ahora)
         permitido, self.motivo_control = self.puerta.permiso(ahora, self.pose, self.pose_ns)
-        if self.entrada.fin.is_set() or self._terminar or not permitido:
+        permitido = permitido and not self.entrada.fin.is_set() and not self._terminar
+        if self.giros is not None and not self.puerta.senales_activas:
+            permitido = False
+            self.motivo_control = 'Esperando detector de senales: detenido'
+        if not permitido:
             vx, wz = 0.0, 0.0
         elif vx == 0.0 and wz == 0.0:
             self.motivo_control = 'LiDAR/TF insuficientes: detenido; revisar terminal'
+        if self.giros is not None:
+            scan = self._scan
+            edad = None if self._recibido_ns is None else (ahora-self._recibido_ns)/1e9
+            yaw = self._yaw_lidar(scan.header.frame_id) if scan is not None else None
+            _, _, lidar, _ = decidir_scan(scan, yaw, edad, self.cfg)
+            giro = self.giros.decidir(self.puerta.senal, self.pose, ahora, permitido, lidar, self.cfg)
+            if giro is not None:
+                vx, wz, motivo = giro
+                if permitido:
+                    self.motivo_control = motivo
         super().publicar_velocidad(vx, wz)
         if ahora - self._estado_ns >= 200_000_000:
             print(json.dumps(dict(version=1, recibido_ns=ahora, a=self.puerta.punto_a,
@@ -84,8 +100,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, required=True)
     parser.add_argument('--mover', action='store_true')
+    parser.add_argument('--senales', action='store_true')
+    parser.add_argument('--tramo', choices=('ida', 'vuelta'), default='ida')
+    parser.add_argument('--config-senales', type=Path)
     args = parser.parse_args()
     cfg = cargar_config(args.config)
+    giros = None
+    if args.senales:
+        if args.config_senales is None:
+            parser.error('Falta --config-senales')
+        giros = ControlGiro(args.tramo, cargar_config_senales(args.config_senales))
     bloqueo = None
     if args.mover:
         bloqueo = open('/tmp/proyecto2-evasion-control.lock', 'a')
@@ -102,7 +126,7 @@ def main():
             nodo._terminar = True
     anteriores = {s: signal.signal(s, terminar) for s in (signal.SIGINT, signal.SIGTERM)}
     try:
-        nodo = BusquedaLidarNode(args.mover, cfg, entrada)
+        nodo = BusquedaLidarNode(args.mover, cfg, entrada, giros)
         while rclpy.ok() and not entrada.fin.is_set():
             rclpy.spin_once(nodo, timeout_sec=0.1)
     except (KeyboardInterrupt, ExternalShutdownException, BrokenPipeError):

@@ -129,6 +129,26 @@ elif 'mktemp' in args:
             resultado=self.ejecutar('--evasion-reconocimiento',extra)
             self.assertEqual(resultado.returncode,2,resultado.stderr)
 
+    def test_senales_solas_sin_mover_y_combinadas_solo_con_opcion_explicita(self):
+        for archivo in ('prueba_senales_robot.py', 'busqueda_robot.py'):
+            (self.tarea/archivo).write_text('import json,sys\nprint(json.dumps(sys.argv[1:]))\n')
+        r = self.ejecutar('--solo-senales', '--tramo', 'vuelta')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('vuelta', json.loads(r.stdout))
+        self.assertFalse(self.registro.exists())
+        r = self.ejecutar('--evasion-reconocimiento', '--senales', '--tramo', 'ida', '--mover')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('--senales', json.loads(r.stdout))
+        self.assertIn('--mover', json.loads(r.stdout))
+        for opciones in (('--solo-senales', '--mover'), ('--solo-evasion', '--senales'),
+                         ('--solo-reconocimiento', '--tramo', 'ida'),
+                         ('--solo-senales', '--nombre', 'Persona A'),
+                         ('--evasion-reconocimiento', '--tramo', 'vuelta'),
+                         ('--solo-senales', '--evasion-reconocimiento')):
+            r = self.ejecutar(*opciones)
+            self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertFalse(self.registro.exists())
+
 
 if __name__ == '__main__':
     unittest.main()

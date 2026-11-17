@@ -1,4 +1,4 @@
-"""Evasión LiDAR y reconocimiento coordinados, con A registrado y sin retorno aún."""
+"""Evasión y reconocimiento con giros visuales opcionales; A registrado, sin retorno aún."""
 
 import argparse
 import json
@@ -13,13 +13,15 @@ import uuid
 import cv2
 
 from control_busqueda import EDAD_CAMARA_NS, SesionBusqueda, reciente
+from control_giros import cargar_config_senales
 from evasion_lidar import cargar_config
 from interfaz_facial import BUSCAR, SALIR, EntradaObjetivo, dibujar_interfaz, dentro, escribir
 from prueba_facial_robot import (TAREA, TOPICO, ConsultaEnVivo, cargar_sistema, cargar_transporte,
                                 ejecutar_comando, interpretar_topicos, preparar_camara)
+from senales_giro import ConsultaSenales, dibujar_detecciones
 
 
-def preparar_movimiento(comando_camara, contenedor, config, mover):
+def preparar_movimiento(comando_camara, contenedor, config, mover, config_senales=None, tramo='ida'):
     """Usa la misma sesión Docker/red de cámara; nunca copia datos faciales."""
     remoto = str(Path(comando_camara[-2]).parent)
     base = comando_camara[:comando_camara.index(contenedor) + 1]
@@ -39,25 +41,34 @@ def preparar_movimiento(comando_camara, contenedor, config, mover):
         raise ValueError('No se descubrió /cmd_vel stamped; comprobar conexión/controladores')
     ejecutar_comando([*shell, 'source /opt/ros/jazzy/setup.bash && '
                      'python3 -c "import rclpy, tf2_ros, nav_msgs.msg, sensor_msgs.msg, geometry_msgs.msg"'])
-    for archivo in ('evasion_lidar.py', 'seguridad_lidar.py', 'control_busqueda.py', 'busqueda_lidar_ros.py'):
+    for archivo in ('evasion_lidar.py', 'seguridad_lidar.py', 'control_giros.py',
+                    'control_busqueda.py', 'busqueda_lidar_ros.py'):
         ejecutar_comando(['sudo', '-n', 'docker', 'cp', str(TAREA / archivo), f'{contenedor}:{remoto}/{archivo}'])
     ejecutar_comando(['sudo', '-n', 'docker', 'cp', str(config), f'{contenedor}:{remoto}/config.json'])
+    opciones_senales = []
+    if config_senales is not None:
+        ejecutar_comando(['sudo', '-n', 'docker', 'cp', str(config_senales),
+                         f'{contenedor}:{remoto}/senales.json'])
+        opciones_senales = ['--senales', '--tramo', tramo, '--config-senales', f'{remoto}/senales.json']
     return [*comando_camara[:comando_camara.index(contenedor) + 1],
             'bash', '--noprofile', '--norc', '-c',
             'unset ROS_LOCALHOST_ONLY; source /opt/ros/jazzy/setup.bash && exec python3 -u "$@"',
             'busqueda-lidar', f'{remoto}/busqueda_lidar_ros.py', '--config', f'{remoto}/config.json',
-            *(['--mover'] if mover else [])]
+            *(['--mover'] if mover else []), *opciones_senales]
 
 
 class PuenteBusqueda:
     """Latido separado de GUI; no renueva la edad de una inferencia bloqueada."""
 
-    def __init__(self, comando):
+    def __init__(self, comando, senales=False):
         self.proceso = subprocess.Popen(comando, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                         text=True, bufsize=1)
         self.fin = threading.Event()
         self.cerrojo = threading.Lock()
         self.datos = dict(orden='ESPERAR', actividad_ns=0, camara_ns=None)
+        self.senales = senales
+        if senales:
+            self.datos['senal'] = None
         self.estado = None
         self.fallo = None
         self.emisor = threading.Thread(target=self.enviar, daemon=True)
@@ -65,9 +76,11 @@ class PuenteBusqueda:
         self.emisor.start()
         self.lector.start()
 
-    def actualizar(self, orden, actividad_ns, camara_ns):
+    def actualizar(self, orden, actividad_ns, camara_ns, senal=None):
         with self.cerrojo:
             self.datos = dict(orden=orden, actividad_ns=actividad_ns, camara_ns=camara_ns)
+            if self.senales:
+                self.datos['senal'] = senal
 
     def enviar(self):
         secuencia = 0
@@ -160,7 +173,8 @@ class EntradaBusqueda(EntradaObjetivo):
         return self.cerrar
 
 
-def dibujar_busqueda(imagen, resultado, estado_camara, entrada, estado_ros, mover):
+def dibujar_busqueda(imagen, resultado, estado_camara, entrada, estado_ros, mover,
+                     senales=None, tramo='ida'):
     panel = dibujar_interfaz(imagen, resultado, estado_camara, entrada)
     if entrada.sesion.inicio_ns is not None:
         cv2.rectangle(panel, (18, 101), (943, 178), (27, 27, 27), -1)
@@ -176,8 +190,10 @@ def dibujar_busqueda(imagen, resultado, estado_camara, entrada, estado_ros, move
         cv2.rectangle(panel, BUSCAR[:2], BUSCAR[2:], (65, 65, 65), -1)
         escribir(panel, 'En curso', 775, 76)
     cv2.rectangle(panel, (0, 669), (840, 707), (27, 27, 27), -1)
-    escribir(panel, ('MOVIMIENTO ACTIVADO' if mover else 'SIN MOVIMIENTO') +
-             ' | Evasion + reconocimiento | Esc: detener y salir', 18, 693, limite=100)
+    pie = 'MOVIMIENTO ACTIVADO' if mover else 'SIN MOVIMIENTO'
+    pie += (f" | {tramo.upper()} | {senales['estado']}" if senales is not None
+            else ' | Evasion + reconocimiento | Esc: detener y salir')
+    escribir(panel, pie, 18, 693, limite=96)
     return panel
 
 
@@ -190,6 +206,9 @@ def main(argv=None):
     parser.add_argument('--topico-camara', default=TOPICO)
     parser.add_argument('--nombre')
     parser.add_argument('--mover', action='store_true')
+    parser.add_argument('--senales', action='store_true', help='Confirmar señales y ejecutar giros con odometría')
+    parser.add_argument('--tramo', choices=('ida', 'vuelta'), default='ida')
+    parser.add_argument('--config-senales', type=Path, default=TAREA/'config/senales_giro.json')
     args = parser.parse_args(argv)
     video, puente = None, None
     ventana = 'Task 1 - evasion y busqueda de persona'
@@ -198,14 +217,19 @@ def main(argv=None):
         if not (os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY')):
             raise ValueError('Esta prueba requiere una terminal de Ubuntu con interfaz gráfica')
         cargar_config(args.config)
+        cfg_senales = cargar_config_senales(args.config_senales) if args.senales else None
+        consulta_senales = ConsultaSenales(args.tramo, cfg_senales) if args.senales else None
+        inicio_senales = None
+        cv2.setNumThreads(1)
         consulta = ConsultaEnVivo(cargar_sistema(), args.nombre)
         sesion = SesionBusqueda()
         entrada = EntradaBusqueda(consulta, sesion)
         comando_camara = preparar_camara(args.ip, args.dominio, args.contenedor, args.topico_camara)
-        comando_control = preparar_movimiento(comando_camara, args.contenedor, args.config, args.mover)
+        comando_control = preparar_movimiento(comando_camara, args.contenedor, args.config, args.mover,
+            args.config_senales if args.senales else None, args.tramo)
         VideoRobot = cargar_transporte()
         video = VideoRobot(subprocess.Popen(comando_camara, stdin=subprocess.PIPE, stdout=subprocess.PIPE))
-        puente = PuenteBusqueda(comando_control)
+        puente = PuenteBusqueda(comando_control, senales=args.senales)
         carpeta = TAREA/'datos/sesiones'
         carpeta.mkdir(exist_ok=True)
         archivo_a = carpeta/f'punto_a_{uuid.uuid4().hex}.json'
@@ -224,10 +248,20 @@ def main(argv=None):
             imagen, estado_camara = video.fotograma()
             marca = video._decodificado['recibido_ns'] if imagen is not None else None
             resultado = consulta.actualizar(imagen, marca)
+            resultado_senales = None
+            if consulta_senales is not None:
+                if sesion.inicio_ns is not None and inicio_senales != sesion.inicio_ns:
+                    consulta_senales = ConsultaSenales(args.tramo, cfg_senales)
+                    inicio_senales = sesion.inicio_ns
+                posterior = sesion.inicio_ns is None or (marca is not None and marca > sesion.inicio_ns)
+                resultado_senales = consulta_senales.actualizar(
+                    imagen if posterior else None, marca if posterior else None, time.monotonic_ns())
             ahora = time.monotonic_ns()
             if not reciente(marca, ahora, EDAD_CAMARA_NS):
                 imagen, marca = None, None
                 resultado = consulta.actualizar(None, None)
+                if consulta_senales is not None:
+                    resultado_senales = consulta_senales.actualizar(None, None, ahora)
             estado_ros = puente.ultimo_estado(ahora)
             a = estado_ros.get('a') if estado_ros else None
             if a and not guardado:
@@ -237,12 +271,16 @@ def main(argv=None):
                 print(f'Punto A registrado en {archivo_a}', flush=True)
             sesion.actualizar(resultado, marca, ahora, bool(a))
             # La GUI/inferencia debe renovar su actividad; el hilo de latido no la inventa.
-            puente.actualizar(sesion.orden, ahora, marca)
+            puente.actualizar(sesion.orden, ahora, marca,
+                              resultado_senales['evento'] if resultado_senales else None)
             if ahora - ultimo_log >= 1_000_000_000:
                 print(f"[BUSQUEDA] {sesion.orden} | {resultado['nombre']} | "
                       f"{estado_ros['estado'] if estado_ros else 'Esperando nodo ROS'}", flush=True)
                 ultimo_log = ahora
-            cv2.imshow(ventana, dibujar_busqueda(imagen, resultado, estado_camara, entrada, estado_ros, args.mover))
+            anotada = dibujar_detecciones(imagen, resultado_senales, args.tramo) if (
+                imagen is not None and resultado_senales is not None) else imagen
+            cv2.imshow(ventana, dibujar_busqueda(anotada, resultado, estado_camara, entrada,
+                estado_ros, args.mover, resultado_senales, args.tramo))
             if entrada.tecla(cv2.waitKeyEx(20)) or cv2.getWindowProperty(ventana, cv2.WND_PROP_VISIBLE) < 1:
                 break
     except KeyboardInterrupt:

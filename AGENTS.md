@@ -22,3 +22,9 @@ Validación local desde la raíz:
 ```
 
 Actualizar la documentación después de avances relevantes. Conservar explícitos los resultados físicos pendientes y las limitaciones de parada ante fallos de red/proceso.
+
+## Misión vigente de Task 1 (17 de noviembre)
+
+Nombre fijado en A → ida con flechas azules → meta B confirmada → solo entonces barrido para buscar a la persona objetivo → leer únicamente el QR asociado y conservar la palabra → vuelta con flechas rojas → meta A confirmada durante la vuelta → detenerse y mostrar la palabra. Una meta recién vista no constituye otra llegada; interpretar su función por etapa. El prototipo todavía reconoce en ruta y se para al confirmar el rostro: meta, barrido, asociación QR, transición de vuelta y retorno completo siguen pendientes.
+
+La flecha confirmada fija el sentido ante un muro, por encima de la elección de lado de la evasión; la parada por falta de espacio/sensores conserva prioridad. Completar 90° por odometría antes de reanudar el avance; el margen de 5° limita el exceso y no permite finalizar a 85°. Mantener la salida única y los modos sin movimiento. Señales: `--solo-senales` o `--evasion-reconocimiento --senales --tramo ida|vuelta [--mover]`; el tramo actual se selecciona antes y no cambia automáticamente. No afirmar validación física de estas señales por las pruebas locales. No modificar la cámara/gestos de Task 2 ni la galería facial por esta integración.

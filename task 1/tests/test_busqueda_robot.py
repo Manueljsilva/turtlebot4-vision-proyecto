@@ -14,7 +14,8 @@ from unittest.mock import patch
 
 import busqueda_robot as app
 from control_busqueda import SesionBusqueda
-from evasion_lidar import ConfigEvasion
+from control_giros import ControlGiro
+from evasion_lidar import ConfigEvasion, decidir_scan
 from prueba_facial_robot import ConsultaEnVivo, SistemaFacial
 from reconocimiento_facial import Criterio, Galeria
 
@@ -32,10 +33,10 @@ class PreparacionBusquedaTests(unittest.TestCase):
             self.assertEqual('--mover' in orden,mover)
             self.assertIn('-i',orden)
             copias=[c.args[0] for c in cmd.call_args_list if 'cp' in c.args[0]]
-            self.assertEqual(len(copias),5)
+            self.assertEqual(len(copias),6)
             self.assertEqual({Path(c[-2]).name for c in copias},
                              {'evasion_lidar.py','seguridad_lidar.py','control_busqueda.py',
-                              'busqueda_lidar_ros.py','evasion_lidar.json'})
+                              'busqueda_lidar_ros.py','evasion_lidar.json','control_giros.py'})
 
     def test_no_arranca_control_con_cmd_vel_ausente_o_tipo_incorrecto(self):
         for respuesta in ('','/cmd_vel [geometry_msgs/msg/Twist]',
@@ -44,6 +45,18 @@ class PreparacionBusquedaTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     app.preparar_movimiento(self.cmd,'proyecto2-sim',Path('config.json'),True)
                 self.assertFalse(any('cp' in c.args[0] for c in cmd.call_args_list))
+
+    def test_senales_copia_solo_config_y_control_puro_al_docker(self):
+        with patch.object(app, 'ejecutar_comando', return_value='/cmd_vel [geometry_msgs/msg/TwistStamped]') as cmd:
+            orden = app.preparar_movimiento(self.cmd, 'proyecto2-sim', app.TAREA/'config/evasion_lidar.json',
+                False, app.TAREA/'config/senales_giro.json', 'vuelta')
+        self.assertIn('--senales', orden)
+        self.assertIn('vuelta', orden)
+        self.assertNotIn('--mover', orden)
+        copias = [c.args[0][-2] for c in cmd.call_args_list if 'cp' in c.args[0]]
+        self.assertIn(str(app.TAREA/'control_giros.py'), copias)
+        self.assertNotIn(str(app.TAREA/'geometria_senales.py'), copias)
+        self.assertNotIn(str(app.TAREA/'senales_giro.py'), copias)
 
     def test_objetivo_se_fija_solo_con_buscar_y_se_bloquea_durante_busqueda(self):
         sistema=SistemaFacial(None,Galeria([[1,0],[0,1]],['Persona A','Persona B']),Criterio(.5,.1))
@@ -141,6 +154,87 @@ def cargar_ros_simulado():
 
 
 class NodoIntegradoTests(unittest.TestCase):
+    def test_flecha_prevalece_sobre_evasion_de_muro_y_no_avanza_antes_de_90(self):
+        mod = cargar_ros_simulado()
+        entrada = NS(fin=threading.Event(), linea=None)
+        def tomar():
+            linea, entrada.linea = entrada.linea, None
+            return linea
+        entrada.tomar = tomar
+        cfg = ConfigEvasion()
+        nodo = mod.BusquedaLidarNode(True, cfg, entrada, ControlGiro('ida'))
+        ahora = 5_000_000_000
+        scan = NS(header=NS(frame_id='base_link'),
+                  ranges=[.4 if abs(-pi+i*2*pi/360)<.15 else 1. for i in range(360)],
+                  angle_min=-pi, angle_increment=2*pi/360, range_min=.05, range_max=12.)
+        self.assertGreater(decidir_scan(scan, 0., 0., cfg)[1], 0.)  # La evasión elegiría izquierda.
+        nodo.pose = dict(frame_id='odom', child_frame_id='base_link', x=1., y=2., yaw=0.)
+        nodo.pose_ns = ahora
+        def ciclo(secuencia):
+            entrada.linea = json.dumps(dict(version=1, secuencia=secuencia, orden='BUSCAR',
+                actividad_ns=ahora, camara_ns=ahora,
+                senal=dict(id=1, direccion='DERECHA', color='azul', marca_ns=ahora)))
+            with patch.object(mod.time, 'monotonic_ns', return_value=ahora), patch('sys.stdout', new_callable=io.StringIO):
+                nodo._scan_cb(scan)
+                nodo._ciclo()
+            t = nodo.pub_cmd.mensajes[-1].twist
+            return t.linear.x, t.angular.z
+        self.assertEqual(ciclo(0), (0., -.4))
+        scan.ranges[180] = .25
+        self.assertEqual(ciclo(1), (0., 0.))  # La seguridad detiene; no impone izquierda.
+        scan.ranges[180] = .4
+        nodo.pose['yaw'] = -85*pi/180
+        vx, wz = ciclo(2)
+        self.assertEqual(vx, 0.)
+        self.assertLess(wz, 0.)
+        nodo.pose['yaw'] = -pi/2
+        self.assertEqual(ciclo(3), (0., 0.))
+        self.assertGreater(ciclo(4)[0], 0.)
+        self.assertEqual(len(nodo.publicadores), 1)
+
+    def test_giro_en_salida_unica_lidar_caducado_para_y_el_rostro_sigue_teniendo_prioridad(self):
+        mod = cargar_ros_simulado()
+        entrada = NS(fin=threading.Event(), linea=None)
+        def tomar():
+            linea, entrada.linea = entrada.linea, None
+            return linea
+        entrada.tomar = tomar
+        nodo = mod.BusquedaLidarNode(True, ConfigEvasion(), entrada, ControlGiro('ida'))
+        self.assertEqual(len(nodo.publicadores), 1)
+        ahora = 5_000_000_000
+        scan = NS(header=NS(frame_id='base_link'), ranges=[1.]*360, angle_min=-pi,
+                  angle_increment=2*pi/360, range_min=.05, range_max=12.)
+        nodo.pose = dict(frame_id='odom', child_frame_id='base_link', x=1., y=2., yaw=0.)
+        def ciclo(secuencia, orden='BUSCAR', refrescar=True):
+            nodo.pose_ns = ahora
+            entrada.linea = json.dumps(dict(version=1, secuencia=secuencia, orden=orden,
+                actividad_ns=ahora, camara_ns=ahora,
+                senal=dict(id=1, direccion='DERECHA', color='azul', marca_ns=ahora)))
+            with patch.object(mod.time, 'monotonic_ns', return_value=ahora), patch('sys.stdout', new_callable=io.StringIO):
+                if refrescar:
+                    nodo._scan_cb(scan)
+                nodo._ciclo()
+            t = nodo.pub_cmd.mensajes[-1].twist
+            return t.linear.x, t.angular.z
+        self.assertEqual(ciclo(0), (0., -.4))
+        ahora += 700_000_000
+        self.assertEqual(ciclo(1, refrescar=False), (0., 0.))
+        self.assertEqual(ciclo(2, orden='VERIFICAR'), (0., 0.))
+        nodo.pose['yaw'] = -pi/2
+        self.assertEqual(ciclo(3), (0., 0.))
+        self.assertEqual(ciclo(4), (.1, 0.))  # No vuelve a girar con la misma señal.
+        self.assertEqual(ciclo(5, orden='ENCONTRADO'), (0., 0.))
+        self.assertEqual(ciclo(6), (0., 0.))
+
+    def test_senales_activadas_exigen_su_protocolo_y_sin_mover_no_publican(self):
+        mod = cargar_ros_simulado()
+        entrada = NS(fin=threading.Event(), tomar=lambda: None)
+        nodo = mod.BusquedaLidarNode(False, ConfigEvasion(), entrada, ControlGiro('ida'))
+        self.assertEqual(nodo.publicadores, [])
+        with patch('sys.stdout', new_callable=io.StringIO):
+            self.assertEqual(nodo.publicar_velocidad(.1, .4), (0., 0.))
+        self.assertIn('detector de senales', nodo.motivo_control)
+
     def test_una_salida_gobernada_por_lidar_camara_y_parada_final(self):
         mod=cargar_ros_simulado()
         ahora=5_000_000_000

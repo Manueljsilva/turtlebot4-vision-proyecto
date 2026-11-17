@@ -1,10 +1,10 @@
 # Proyecto de visión con TurtleBot 4 Lite
 
-Proyecto de cuatro integrantes, con [enunciado base](Computer_vision_proyectos.pdf) y alcance actualizado por el usuario el 13 de noviembre de 2026.
+Proyecto de cuatro integrantes, con [enunciado base](Computer_vision_proyectos.pdf) y alcance actualizado por el usuario el 13 y 17 de noviembre de 2026.
 
-**Task 1 vigente:** escribir antes del inicio el nombre de una persona de la galería → salir de A → navegar autónomamente entre obstáculos, usando las flechas como ayuda para decidir giros → buscar y reconocer a esa persona entre varias fotografías en B → leer únicamente el QR situado junto a su foto y guardar su palabra → volver a A y mostrar la información del QR. Cada fotografía tiene su propio QR. Se propone planificar el regreso con el mapa; las flechas no son una señalización específica de retorno. Está aprobada la adopción y mejora de la base del compañero; ya se adaptó su prueba de evasión LiDAR, con la misión completa aún pendiente. Alcance y detalles pendientes en [PLAN_PROYECTO.md](PLAN_PROYECTO.md). El usuario confirmó que los cambios afectan solo a Task 1: Task 2 mantiene identificación en B, retorno por gestos y anuncio del nombre.
+**Task 1 vigente:** escribir antes del inicio el nombre de una persona de la galería → salir de A → navegar autónomamente entre obstáculos, usando las flechas como ayuda para decidir giros → confirmar la meta de B y solo entonces buscar alrededor y reconocer a esa persona entre varias fotografías → leer únicamente el QR situado junto a su foto y guardar su palabra → volver con rojo, confirmar la meta de A y mostrar la información del QR. Cada fotografía tiene su propio QR. Las flechas azules son para la ida y las rojas para el regreso, según la aclaración del 17 de noviembre; todavía debe verificarse la llegada a A. La flecha confirmada fija el sentido ante un muro y debe completar 90° antes de avanzar; el LiDAR conserva la parada si falta espacio. Está aprobada la adopción y mejora de la base del compañero; ya se adaptó su prueba de evasión LiDAR, con la misión completa aún pendiente. Alcance y detalles pendientes en [PLAN_PROYECTO.md](PLAN_PROYECTO.md). El usuario confirmó que los cambios afectan solo a Task 1: Task 2 mantiene identificación en B, retorno por gestos y anuncio del nombre.
 
-- [Task 1 / Task A](<task 1/README.md>): reconocimiento con 74 fotos locales de 13 personas, entrada de nombre con Buscar, evasión LiDAR y una prueba combinada de movimiento/reconocimiento. La combinación registra A y se detiene al confirmar a la persona; pasó 91 pruebas locales, pero el usuario no alcanzó a probarla en el laboratorio. Comandos en bloques 9/10 de [task 1/COMANDOS.txt](<task 1/COMANDOS.txt>). Retorno automático, SLAM/Nav2, búsqueda entre fotos, flechas, QR y corrección de choques diagonales siguen pendientes.
+- [Task 1 / Task A](<task 1/README.md>): reconocimiento con 74 fotos locales de 13 personas, entrada de nombre con Buscar, evasión LiDAR y una prueba combinada de movimiento/reconocimiento. La combinación registra A y se detiene al confirmar a la persona; pasó 91 pruebas locales y el 17 de noviembre el usuario confirmó movimiento y reconocimiento juntos en el robot, sin métricas completas. Comandos en bloques 9/10 de [task 1/COMANDOS.txt](<task 1/COMANDOS.txt>). Se añaden giros por señales con `--senales`, todavía sin prueba física. El prototipo sigue reconociendo durante la marcha: esperar a meta B para barrer/buscar el rostro es el contrato final, aún pendiente de integrar. Retorno automático, SLAM/Nav2, búsqueda entre fotos, meta, QR y corrección de choques diagonales siguen pendientes.
 - [Task 2 / Task B](<task 2/README.md>): gestos con Gazebo y robot real confirmados por el usuario, con vídeo comprimido en el panel lateral. El vídeo conserva retraso sin medir; faltan las métricas de frenado, reconocimiento integrado y misión completa.
 
 **Informe en elaboración:** [fuente LaTeX](informe/main.tex) y [PDF del borrador](output/pdf/informe_proyecto_borrador.pdf), compilado y revisado en 10 páginas. Incluye metodología, arquitectura y resultados parciales. Faltan los datos de portada, navegación autónoma, cámara integrada, ensayos de la misión completa y apéndice de código. Se conserva el [borrador previo en Markdown](informe/BORRADOR_INFORME.md).
@@ -35,6 +35,11 @@ Proyecto2/
 │   ├── busqueda_robot.py          Visión y evasión coordinadas
 │   ├── busqueda_lidar_ros.py      Salida única de velocidad
 │   ├── control_busqueda.py        Estados, A y permisos
+│   ├── prueba_senales_robot.py    Señales con el robot quieto
+│   ├── geometria_senales.py       Geometría aportada por la compañera
+│   ├── senales_giro.py            Color y confirmación de giros
+│   ├── control_giros.py           Giro por odometría en la salida única
+│   ├── config/senales_giro.json
 │   ├── evasion_lidar.py
 │   ├── seguridad_lidar.py
 │   ├── config/evasion_lidar.json
@@ -94,13 +99,13 @@ Comprueba las órdenes sin movimiento, cierra la prueba y repite añadiendo `--m
 
 Añade `--ver-camara` para mostrar la webcam de gestos y la cámara del robot lado a lado. Comandos sin movimiento y con movimiento en los bloques 11/12 de [task 2/COMANDOS.txt](<task 2/COMANDOS.txt>). El usuario confirmó recepción de vídeo comprimido con `--topico-camara /oakd/rgb/preview/image_raw/compressed`; conserva retraso sin medir. El asistente no ejecutó hardware.
 
-**Prueba combinada de Task 1, pendiente de validar en hardware (16 de noviembre):**
+**Prueba combinada de Task 1, movimiento/reconocimiento confirmados por el usuario el 17 de noviembre:**
 
 ```bash
 bash "task 1/ejecutar_autonomo_robot.sh" --ip IP_ACTUAL --dominio DOMINIO_ACTUAL --evasion-reconocimiento
 ```
 
-Por defecto no crea publicador de velocidad. Escribir el nombre y pulsar Buscar registra A con odometría válida antes de permitir movimiento. Para el ensayo físico cerrar la prueba y repetir con `--mover`, con los demás controles cerrados. Al confirmar el objetivo con tres imágenes nuevas queda detenido. **Aún no regresa a A**; tampoco lee flechas/QR ni resuelve varias caras. La evasión mantiene los choques diagonales reportados como problema pendiente. Pasos completos en [Task 1](<task 1/README.md>).
+Por defecto no crea publicador de velocidad. Escribir el nombre y pulsar Buscar registra A con odometría válida antes de permitir movimiento. Para el ensayo físico cerrar la prueba y repetir con `--mover`, con los demás controles cerrados. Al confirmar el objetivo con tres imágenes nuevas queda detenido. **Aún no regresa a A**; no lee meta/QR ni resuelve varias caras. Los giros visuales son opcionales con `--senales --tramo ida` (azul) o `--tramo vuelta` (rojo); no cambian de tramo automáticamente. Para reconocer señales con el robot quieto usar `--solo-senales --tramo ida`; comandos completos en bloques 11/12 de Task 1. La evasión mantiene los choques diagonales reportados como problema pendiente. Pasos completos en [Task 1](<task 1/README.md>).
 
 **Ejecutar las pruebas:**
 

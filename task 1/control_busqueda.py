@@ -8,6 +8,8 @@ import json
 from math import atan2, isfinite, sqrt
 import re
 
+from control_giros import evento_valido
+
 
 EDAD_ACTIVIDAD_NS = 500_000_000
 EDAD_CAMARA_NS = 1_000_000_000
@@ -50,27 +52,33 @@ class PuertaBusqueda:
         self.finalizado = False
         self.frame_cambiado = False
         self.inicio_ns = None
+        self.senal = None
+        self.senales_activas = False
 
     def recibir(self, linea, ahora_ns):
         try:
             if len(linea) > MAX_LINEA:
                 raise ValueError('Línea larga')
             d = json.loads(linea)
-            if (not isinstance(d, dict) or set(d) != {'version', 'secuencia', 'orden', 'actividad_ns', 'camara_ns'}
+            claves = {'version', 'secuencia', 'orden', 'actividad_ns', 'camara_ns'}
+            if (not isinstance(d, dict) or set(d) not in (claves, claves | {'senal'})
                     or type(d['version']) is not int or d['version'] != 1
                     or type(d['secuencia']) is not int or d['secuencia'] <= self.secuencia
                     or not isinstance(d['orden'], str) or d['orden'] not in ORDENES
                     or not reciente(d['actividad_ns'], ahora_ns, EDAD_ACTIVIDAD_NS)
-                    or (d['camara_ns'] is not None and type(d['camara_ns']) is not int)):
+                    or (d['camara_ns'] is not None and type(d['camara_ns']) is not int)
+                    or not evento_valido(d.get('senal'), ahora_ns)):
                 raise ValueError('Control inválido/caducado')
             self.secuencia = d['secuencia']
             self.actividad_ns, self.camara_ns, self.orden = d['actividad_ns'], d['camara_ns'], d['orden']
+            self.senal, self.senales_activas = d.get('senal'), 'senal' in d
             if self.orden in ('BUSCAR', 'VERIFICAR') and self.inicio_ns is None:
                 self.inicio_ns = self.actividad_ns
             if self.orden == 'ENCONTRADO' and reciente(self.camara_ns, ahora_ns, EDAD_CAMARA_NS):
                 self.finalizado = True
         except (ValueError, TypeError, KeyError, OverflowError):
             self.orden, self.actividad_ns, self.camara_ns = 'PARAR', None, None
+            self.senal, self.senales_activas = None, False
 
     def permiso(self, ahora_ns, pose, pose_ns):
         if self.finalizado:

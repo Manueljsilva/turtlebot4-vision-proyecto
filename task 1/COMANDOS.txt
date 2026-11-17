@@ -140,7 +140,38 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
 # No se mueve al abrir: Buscar activa la prueba cuando hay sensores y A validos.
 # A = posicion de inicio de esta busqueda, guardada en datos/sesiones/ (ignorada en Git).
 # Mantener una foto a la vez. Con el primer acierto pausa; 3 imagenes nuevas confirman.
-# Al encontrar al objetivo queda detenido. AUN NO REGRESA A A ni lee flechas/QR.
+# Al encontrar al objetivo queda detenido. AUN NO REGRESA A A ni lee QR.
+# Este bloque no habilita señales; para añadir giros visuales usar los bloques 11/12.
 # Camara/vision/odometria/LiDAR caducados detienen. La edad de imagen es local, no del sensor.
 # No cambiar de persona durante el recorrido: cerrar y relanzar para otra busqueda.
 # Esc, Salir o Ctrl+C intentan parar y cerrar. No usar Ctrl+Z.
+
+
+# 11) SOLO RECONOCER SEÑALES EN LA CAMARA (SIN MOVIMIENTO, SIN GALERIA)
+# Desde Ubuntu normal; Docker y el controlador de camara deben estar ya activos.
+# Usar los datos actuales del bloque 9 o de COMANDOS_LAB.txt.
+bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO" --solo-senales --tramo ida
+# Ida = azul. Para probar las rojas, cerrar y repetir con --tramo vuelta.
+# Debe dibujar IZQUIERDA/DERECHA y confirmar 3 imagenes nuevas; otro color se ignora.
+# Circulos sin flecha, meta, prohibicion y QR no ordenan giros.
+# Espera la camara el tiempo que necesite; q/Esc/Ctrl+C cierran. --mover no se admite aqui.
+
+
+# 12) AÑADIR GIROS POR SEÑALES A EVASION + RECONOCIMIENTO
+# Terminar el bloque 11. Primero comprobar sin publicador y pulsar Buscar.
+bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO" --evasion-reconocimiento --senales --tramo ida
+# Despues cerrar y repetir en espacio despejado con --mover:
+bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO" --evasion-reconocimiento --senales --tramo ida --mover
+# Buscar fija el nombre, registra A e inicia cuando sensores/vision estan recientes.
+# Una flecha azul confirmada pide un giro sobre el sitio (90 grados por defecto),
+# medido por odometria. Sin ver la flecha durante el giro puede completarlo con pose,
+# pero sigue exigiendo camara, actividad, odometria, LiDAR y TF recientes.
+# Obstaculo a <=0.32 m en frente/laterales: espera detenido; nunca gira al lado contrario.
+# Si no termina en 12 s queda detenido hasta cerrar/revisar, sin reintento automatico.
+# Una misma señal no se repite: necesita desaparecer >=1.5 s en imagenes nuevas,
+# un ID nuevo y >=0.4 m de desplazamiento desde el giro anterior.
+# Ajustes en "task 1/config/senales_giro.json"; no son distancias medidas por la camara.
+# --tramo vuelta permite probar señales rojas, pero NO inicia un regreso autonomo.
+# Al confirmar el rostro sigue detenido; no cambia de tramo ni lee meta/QR todavia.
+# Pendientes: validar señales impresas, sentido/angulo/frenado y reaccion a video retrasado.
+# La edad de imagen mide recepcion local; no detecta por si sola retraso previo del sensor/red.
