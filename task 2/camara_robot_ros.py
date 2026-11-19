@@ -19,8 +19,12 @@ def vigilar_cierre(flujo, fin):
     fin.set()
 
 
-def ejecutar(topico):
+def ejecutar(topico, fps=None):
     os.environ["RCUTILS_LOGGING_USE_STDOUT"] = "0"
+    if fps is None:
+        fps = float(os.environ.get("TB4_VIDEO_FPS", "5.0"))
+    fps = max(1.0, min(30.0, float(fps)))
+    intervalo_ns = int(1_000_000_000 / fps)
     import rclpy
     from rclpy.executors import ExternalShutdownException
     from rclpy.node import Node
@@ -58,8 +62,8 @@ def ejecutar(topico):
 
         def recibir(self, mensaje):
             ahora = time.monotonic_ns()
-            if self.ultimo_envio is not None and ahora - self.ultimo_envio < 200_000_000:
-                return  # Máximo 5 FPS hacia la GUI; no cambia la cámara del robot.
+            if self.ultimo_envio is not None and ahora - self.ultimo_envio < intervalo_ns:
+                return  # Tope configurable (5 FPS por defecto); no cambia la cámara del robot.
             self.ultimo_envio = ahora
             try:
                 registro = codificar_imagen(mensaje, self.comprimida, ahora)
@@ -88,4 +92,6 @@ def ejecutar(topico):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--topico", default=TOPICO_CAMARA)
-    ejecutar(parser.parse_args().topico)
+    parser.add_argument("--fps", type=float, default=None)
+    args = parser.parse_args()
+    ejecutar(args.topico, args.fps)

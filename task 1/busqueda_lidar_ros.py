@@ -78,19 +78,34 @@ class BusquedaLidarNode(EvasionLidarNode):
         elif vx == 0.0 and wz == 0.0:
             self.motivo_control = 'LiDAR/TF insuficientes: detenido; revisar terminal'
         if self.giros is not None:
+            if self.puerta.tramo in ('ida', 'vuelta'):
+                self.giros.cambiar_tramo(self.puerta.tramo)
             scan = self._scan
             edad = None if self._recibido_ns is None else (ahora-self._recibido_ns)/1e9
             yaw = self._yaw_lidar(scan.header.frame_id) if scan is not None else None
             _, _, lidar, _ = decidir_scan(scan, yaw, edad, self.cfg)
-            giro = self.giros.decidir(self.puerta.senal, self.pose, ahora, permitido, lidar, self.cfg)
-            if giro is not None:
-                vx, wz, motivo = giro
-                if permitido:
-                    self.motivo_control = motivo
+            if permitido and self.puerta.orden in ('GIRAR_BARRIDO', 'GIRAR_BARRIDO_LENTO', 'GIRAR_RETORNO'):
+                if lidar is None or not lidar.observacion_valida or lidar.proximidad_no_cuantificable:
+                    vx, wz = 0.0, 0.0
+                    self.motivo_control = 'LiDAR/TF insuficientes durante barrido'
+                else:
+                    vx = 0.0
+                    if self.puerta.orden == 'GIRAR_BARRIDO_LENTO':
+                        wz = min(self.cfg.velocidad_giro, 0.25)
+                    elif self.puerta.orden == 'GIRAR_RETORNO':
+                        wz = min(self.cfg.velocidad_giro, 0.85)
+                    else:
+                        wz = min(self.cfg.velocidad_giro, 0.75)
+            else:
+                giro = self.giros.decidir(self.puerta.senal, self.pose, ahora, permitido, lidar, self.cfg)
+                if giro is not None:
+                    vx, wz, motivo = giro
+                    if permitido:
+                        self.motivo_control = motivo
         super().publicar_velocidad(vx, wz)
         if ahora - self._estado_ns >= 200_000_000:
             print(json.dumps(dict(version=1, recibido_ns=ahora, a=self.puerta.punto_a,
-                                  estado=self.motivo_control, vx=vx, wz=wz,
+                                  pose=self.pose, estado=self.motivo_control, vx=vx, wz=wz,
                                   mover=self.pub_cmd is not None)), flush=True)
             self._estado_ns = ahora
         return vx, wz

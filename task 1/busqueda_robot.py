@@ -16,6 +16,8 @@ from control_busqueda import EDAD_CAMARA_NS, SesionBusqueda, reciente
 from control_giros import cargar_config_senales
 from evasion_lidar import cargar_config
 from interfaz_facial import BUSCAR, SALIR, EntradaObjetivo, dibujar_interfaz, dentro, escribir
+from meta_bandera import ConsultaMetaBandera, decodificar_qr_asociado
+from mision_meta import MisionMeta
 from prueba_facial_robot import (TAREA, TOPICO, ConsultaEnVivo, cargar_sistema, cargar_transporte,
                                 ejecutar_comando, interpretar_topicos, preparar_camara)
 from senales_giro import ConsultaSenales, dibujar_detecciones
@@ -76,11 +78,13 @@ class PuenteBusqueda:
         self.emisor.start()
         self.lector.start()
 
-    def actualizar(self, orden, actividad_ns, camara_ns, senal=None):
+    def actualizar(self, orden, actividad_ns, camara_ns, senal=None, tramo=None):
         with self.cerrojo:
             self.datos = dict(orden=orden, actividad_ns=actividad_ns, camara_ns=camara_ns)
             if self.senales:
                 self.datos['senal'] = senal
+            if tramo is not None:
+                self.datos['tramo'] = tramo
 
     def enviar(self):
         secuencia = 0
@@ -174,19 +178,37 @@ class EntradaBusqueda(EntradaObjetivo):
 
 
 def dibujar_busqueda(imagen, resultado, estado_camara, entrada, estado_ros, mover,
-                     senales=None, tramo='ida'):
+                     senales=None, tramo='ida', mision=None, meta_res=None):
     panel = dibujar_interfaz(imagen, resultado, estado_camara, entrada)
     if entrada.sesion.inicio_ns is not None:
         cv2.rectangle(panel, (18, 101), (943, 178), (27, 27, 27), -1)
         estado = estado_ros['estado'] if estado_ros else 'Esperando respuesta del control: detenido'
-        if entrada.sesion.encontrado:
+        if mision is not None:
+            if mision.etapa == 'FINALIZADO':
+                ganador = (mision.mejor_resultado.get('candidato') or mision.mejor_resultado.get('nombre')
+                           if mision.mejor_resultado else 'SIN_ROSTRO')
+                qr_txt = mision.palabra_qr or 'sin QR'
+                af_txt = f'{mision.mejor_afinidad:.2f}' if mision.mejor_afinidad is not None else '-'
+                estado = f'MISION COMPLETADA en A | Ganador: {ganador} (sim={af_txt}) | QR: {qr_txt}'
+            else:
+                estado = f'Etapa {mision.etapa} ({mision.tramo.upper()}) | {estado}'
+        elif entrada.sesion.encontrado:
             estado = 'Persona encontrada. Robot detenido. Regreso a A pendiente.'
-        escribir(panel, estado, 18, 123, (100, 225, 100) if entrada.sesion.encontrado else (70, 190, 240))
+        color_estado = (100, 225, 100) if (
+            entrada.sesion.encontrado or (mision is not None and mision.etapa == 'FINALIZADO')
+        ) else (70, 190, 240)
+        escribir(panel, estado, 18, 123, color_estado)
         a = estado_ros.get('a') if estado_ros else None
         texto_a = (f"A guardado: x={a['x']:.2f} m, y={a['y']:.2f} m ({a['frame_id']})"
                    if a else 'A pendiente: esperando odometria valida; robot detenido')
         escribir(panel, texto_a, 18, 148)
-        escribir(panel, f'Confirmacion del rostro: {entrada.sesion.confirmaciones}/3 imagenes nuevas', 18, 172)
+        if mision is not None:
+            af = f'{mision.mejor_afinidad:.3f}' if mision.mejor_afinidad is not None else '-'
+            qr_info = mision.palabra_qr or '-'
+            meta_txt = f"Meta:{meta_res['cuenta']}/3" if meta_res else 'Meta:0/3'
+            escribir(panel, f'Vistas B:{mision.vistas_distintas}/4 | Mejor afinidad:{af} | QR:{qr_info} | {meta_txt}', 18, 172)
+        else:
+            escribir(panel, f'Confirmacion del rostro: {entrada.sesion.confirmaciones}/3 imagenes nuevas', 18, 172)
         cv2.rectangle(panel, BUSCAR[:2], BUSCAR[2:], (65, 65, 65), -1)
         escribir(panel, 'En curso', 775, 76)
     cv2.rectangle(panel, (0, 669), (840, 707), (27, 27, 27), -1)
@@ -209,7 +231,13 @@ def main(argv=None):
     parser.add_argument('--senales', action='store_true', help='Confirmar señales y ejecutar giros con odometría')
     parser.add_argument('--tramo', choices=('ida', 'vuelta'), default='ida')
     parser.add_argument('--config-senales', type=Path, default=TAREA/'config/senales_giro.json')
+    parser.add_argument('--mision', action='store_true', help='Misión completa: ida azul -> meta B -> barrido 4 fotos -> vuelta roja -> meta A')
+    parser.add_argument('--fps', type=float, default=None, help='FPS de cámara hacia el host (por defecto 5; 12 en --mision)')
     args = parser.parse_args(argv)
+    if args.mision:
+        args.senales = True
+        if args.fps is None:
+            args.fps = 12.0
     video, puente = None, None
     ventana = 'Task 1 - evasion y busqueda de persona'
     abierta = False
@@ -219,12 +247,15 @@ def main(argv=None):
         cargar_config(args.config)
         cfg_senales = cargar_config_senales(args.config_senales) if args.senales else None
         consulta_senales = ConsultaSenales(args.tramo, cfg_senales) if args.senales else None
+        mision = MisionMeta() if args.mision else None
+        consulta_meta = ConsultaMetaBandera() if args.mision else None
+        tramo_activo = args.tramo
         inicio_senales = None
         cv2.setNumThreads(1)
         consulta = ConsultaEnVivo(cargar_sistema(), args.nombre)
         sesion = SesionBusqueda()
         entrada = EntradaBusqueda(consulta, sesion)
-        comando_camara = preparar_camara(args.ip, args.dominio, args.contenedor, args.topico_camara)
+        comando_camara = preparar_camara(args.ip, args.dominio, args.contenedor, args.topico_camara, fps=args.fps)
         comando_control = preparar_movimiento(comando_camara, args.contenedor, args.config, args.mover,
             args.config_senales if args.senales else None, args.tramo)
         VideoRobot = cargar_transporte()
@@ -238,49 +269,109 @@ def main(argv=None):
         abierta = True
         cv2.resizeWindow(ventana, 960, 708)
         cv2.setMouseCallback(ventana, entrada.raton)
-        print('Evasión + reconocimiento. Buscar fija el nombre y registra A antes de moverse. '
-              'Cerrar otros controles. El retorno a A aún no está implementado.', flush=True)
+        print('Misión autónoma lista. Buscar fija el nombre objetivo y registra A antes de moverse.',
+              flush=True)
         ultimo_log = 0
+        etapa_previa = None
         while True:
             puente.comprobar()
             if video.proceso.poll() is not None:
                 raise RuntimeError('Terminó el receptor de cámara')
             imagen, estado_camara = video.fotograma()
             marca = video._decodificado['recibido_ns'] if imagen is not None else None
-            resultado = consulta.actualizar(imagen, marca)
-            resultado_senales = None
-            if consulta_senales is not None:
-                if sesion.inicio_ns is not None and inicio_senales != sesion.inicio_ns:
-                    consulta_senales = ConsultaSenales(args.tramo, cfg_senales)
-                    inicio_senales = sesion.inicio_ns
-                posterior = sesion.inicio_ns is None or (marca is not None and marca > sesion.inicio_ns)
-                resultado_senales = consulta_senales.actualizar(
-                    imagen if posterior else None, marca if posterior else None, time.monotonic_ns())
             ahora = time.monotonic_ns()
             if not reciente(marca, ahora, EDAD_CAMARA_NS):
-                imagen, marca = None, None
-                resultado = consulta.actualizar(None, None)
-                if consulta_senales is not None:
-                    resultado_senales = consulta_senales.actualizar(None, None, ahora)
+                imagen_valida, marca_valida = None, None
+            else:
+                imagen_valida, marca_valida = imagen, marca
+
             estado_ros = puente.ultimo_estado(ahora)
             a = estado_ros.get('a') if estado_ros else None
+            pose_actual = estado_ros.get('pose') if estado_ros else None
             if a and not guardado:
                 archivo_a.write_text(json.dumps(dict(version=1, punto_a=a,
-                    alcance='odometria de esta sesion; retorno no implementado'), indent=2)+'\n')
+                    alcance='odometria de esta sesion'), indent=2)+'\n')
                 guardado = True
                 print(f'Punto A registrado en {archivo_a}', flush=True)
-            sesion.actualizar(resultado, marca, ahora, bool(a))
-            # La GUI/inferencia debe renovar su actividad; el hilo de latido no la inventa.
-            puente.actualizar(sesion.orden, ahora, marca,
-                              resultado_senales['evento'] if resultado_senales else None)
+
+            resultado_senales = None
+            meta_res = None
+
+            if mision is not None:
+                if sesion.inicio_ns is not None and mision.etapa == 'ESPERANDO':
+                    mision.iniciar(pose_actual or a)
+                    consulta_senales = ConsultaSenales('ida', cfg_senales)
+                    consulta_meta.reiniciar()
+                    tramo_activo = 'ida'
+
+                if mision.etapa in ('IDA', 'VUELTA'):
+                    if mision.tramo != tramo_activo:
+                        tramo_activo = mision.tramo
+                        consulta_senales = ConsultaSenales(tramo_activo, cfg_senales)
+                        consulta_meta.reiniciar()
+                    posterior = sesion.inicio_ns is not None and marca_valida is not None and marca_valida > sesion.inicio_ns
+                    resultado_senales = consulta_senales.actualizar(
+                        imagen_valida if posterior else None, marca_valida if posterior else None, ahora)
+                    meta_res = consulta_meta.actualizar(
+                        imagen_valida if posterior else None, marca_valida if posterior else None, ahora)
+                    resultado = consulta.actualizar(None, None, ahora)
+                    qr_texto = None
+                elif mision.etapa == 'BARRIDO_B':
+                    resultado = consulta.actualizar(imagen_valida, marca_valida, ahora)
+                    qr_texto = None
+                    if (imagen_valida is not None and resultado.get('caja') is not None
+                            and resultado.get('afinidad_objetivo') is not None):
+                        qr_texto = decodificar_qr_asociado(imagen_valida, resultado['caja'])
+                else:
+                    resultado = consulta.actualizar(None, None, ahora)
+                    qr_texto = None
+
+                orden_mision = mision.actualizar(pose_actual, meta_res, resultado, qr_texto=qr_texto)
+                if mision.etapa != etapa_previa:
+                    print(f'[MISION] Cambio a etapa: {mision.etapa} (tramo={mision.tramo})', flush=True)
+                    if mision.etapa == 'GIRO_RETORNO_B':
+                        af_txt = f'{mision.mejor_afinidad:.3f}' if mision.mejor_afinidad is not None else 'N/A'
+                        cand = (mision.mejor_resultado.get('candidato') or mision.mejor_resultado.get('nombre')
+                                if mision.mejor_resultado else 'NINGUNO')
+                        print(f'[META B] Ganador más afín a {consulta.nombre}: {cand} (afinidad={af_txt}) | QR={mision.palabra_qr}', flush=True)
+                    elif mision.etapa == 'FINALIZADO':
+                        print(f'[EXITO EN A] Objetivo: {consulta.nombre} | QR: {mision.palabra_qr} | Mejor afinidad: {mision.mejor_afinidad}', flush=True)
+                    etapa_previa = mision.etapa
+
+                puente.actualizar(
+                    orden_mision, ahora, marca_valida,
+                    resultado_senales['evento'] if resultado_senales else None,
+                    tramo=mision.tramo,
+                )
+            else:
+                resultado = consulta.actualizar(imagen_valida, marca_valida, ahora)
+                if consulta_senales is not None:
+                    if sesion.inicio_ns is not None and inicio_senales != sesion.inicio_ns:
+                        consulta_senales = ConsultaSenales(args.tramo, cfg_senales)
+                        inicio_senales = sesion.inicio_ns
+                    posterior = sesion.inicio_ns is None or (marca_valida is not None and marca_valida > sesion.inicio_ns)
+                    resultado_senales = consulta_senales.actualizar(
+                        imagen_valida if posterior else None, marca_valida if posterior else None, ahora)
+                sesion.actualizar(resultado, marca_valida, ahora, bool(a))
+                # La GUI/inferencia debe renovar su actividad; el hilo de latido no la inventa.
+                puente.actualizar(sesion.orden, ahora, marca_valida,
+                                  resultado_senales['evento'] if resultado_senales else None)
+
             if ahora - ultimo_log >= 1_000_000_000:
-                print(f"[BUSQUEDA] {sesion.orden} | {resultado['nombre']} | "
+                etiqueta = mision.etapa if mision is not None else sesion.orden
+                print(f"[BUSQUEDA] {etiqueta} | {resultado['nombre']} | "
                       f"{estado_ros['estado'] if estado_ros else 'Esperando nodo ROS'}", flush=True)
                 ultimo_log = ahora
-            anotada = dibujar_detecciones(imagen, resultado_senales, args.tramo) if (
+            anotada = dibujar_detecciones(imagen, resultado_senales, tramo_activo) if (
                 imagen is not None and resultado_senales is not None) else imagen
+            if anotada is not None and meta_res and meta_res.get('caja') is not None:
+                anotada = anotada.copy()
+                mx, my, mw, mh = meta_res['caja']
+                cv2.rectangle(anotada, (mx, my), (mx + mw, my + mh), (0, 255, 0), 2)
+                cv2.putText(anotada, f"META {meta_res['cuenta']}/3", (mx, max(20, my - 8)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 2)
             cv2.imshow(ventana, dibujar_busqueda(anotada, resultado, estado_camara, entrada,
-                estado_ros, args.mover, resultado_senales, args.tramo))
+                estado_ros, args.mover, resultado_senales, tramo_activo, mision=mision, meta_res=meta_res))
             if entrada.tecla(cv2.waitKeyEx(20)) or cv2.getWindowProperty(ventana, cv2.WND_PROP_VISIBLE) < 1:
                 break
     except KeyboardInterrupt:

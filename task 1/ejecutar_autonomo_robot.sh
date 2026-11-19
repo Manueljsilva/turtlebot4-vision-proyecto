@@ -11,6 +11,7 @@ CONFIG="$TAREA_DIR/config/evasion_lidar.json"
 EVASION=false
 RECONOCIMIENTO=false
 INTEGRADA=false
+MISION=false
 SENALES_SOLO=false
 CON_SENALES=false
 OPCIONES=()
@@ -33,6 +34,7 @@ while [[ $# -gt 0 ]]; do
         --solo-evasion) EVASION=true; shift ;;
         --solo-reconocimiento) RECONOCIMIENTO=true; shift ;;
         --evasion-reconocimiento) INTEGRADA=true; shift ;;
+        --mision) MISION=true; shift ;;
         --solo-senales) SENALES_SOLO=true; shift ;;
         --senales) CON_SENALES=true; shift ;;
         --sin-ventana) OPCIONES_FACIALES+=(--sin-ventana); shift ;;
@@ -41,6 +43,7 @@ while [[ $# -gt 0 ]]; do
             echo 'Uso: bash "task 1/ejecutar_autonomo_robot.sh" --ip IP --dominio ID --solo-evasion [--mover]'
             echo 'O bien: ... --solo-reconocimiento [--nombre NOMBRE] [--topico-camara TOPICO]'
             echo 'O bien: ... --evasion-reconocimiento [--mover] [--nombre NOMBRE]'
+            echo 'O bien: ... --mision [--mover] [--nombre NOMBRE] (ida azul -> meta B -> barrido 4 fotos -> vuelta roja -> meta A)'
             echo 'O bien: ... --solo-senales [--tramo ida|vuelta] (cámara, siempre sin movimiento)'
             echo 'Añadir --senales [--tramo ida|vuelta] a la prueba combinada para giros por señales.'
             echo 'Ida usa azul; vuelta usa rojo. Giro de 90 grados por odometría, ajustable con --config-senales.'
@@ -55,13 +58,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 MODOS=0
-for MODO in "$EVASION" "$RECONOCIMIENTO" "$INTEGRADA" "$SENALES_SOLO"; do
+for MODO in "$EVASION" "$RECONOCIMIENTO" "$INTEGRADA" "$MISION" "$SENALES_SOLO"; do
     if "$MODO"; then MODOS=$((MODOS+1)); fi
 done
 [[ "$MODOS" -eq 1 ]] || { echo 'Elegir un solo modo; consultar --help.' >&2; exit 2; }
-if ! "$INTEGRADA" && ! "$SENALES_SOLO"; then
+if ! "$INTEGRADA" && ! "$SENALES_SOLO" && ! "$MISION"; then
     if "$CON_SENALES" || [[ ${#OPCIONES_SENALES[@]} -gt 0 ]]; then
-        echo 'Señales requieren --solo-senales o --evasion-reconocimiento --senales.' >&2; exit 2
+        echo 'Señales requieren --solo-senales, --evasion-reconocimiento --senales o --mision.' >&2; exit 2
     fi
 fi
 if "$INTEGRADA" && ! "$CON_SENALES" && [[ ${#OPCIONES_SENALES[@]} -gt 0 ]]; then
@@ -73,13 +76,13 @@ if "$SENALES_SOLO"; then
         [[ "$OPCION" != --nombre && "$OPCION" != --sin-ventana ]] || {
             echo 'La prueba de señales no usa nombres ni --sin-ventana.' >&2; exit 2; }
     done
-elif "$INTEGRADA"; then
+elif "$INTEGRADA" || "$MISION"; then
     if "$EVASION" || "$RECONOCIMIENTO"; then
-        echo 'Elegir un solo modo: --evasion-reconocimiento, --solo-evasion o --solo-reconocimiento.' >&2
+        echo 'Elegir un solo modo: --mision, --evasion-reconocimiento, --solo-evasion o --solo-reconocimiento.' >&2
         exit 2
     fi
     for OPCION in "${OPCIONES_FACIALES[@]}"; do
-        [[ "$OPCION" != --sin-ventana ]] || { echo 'La prueba combinada usa Buscar en la ventana para iniciar.' >&2; exit 2; }
+        [[ "$OPCION" != --sin-ventana ]] || { echo 'Este modo usa Buscar en la ventana para iniciar.' >&2; exit 2; }
     done
 elif "$RECONOCIMIENTO"; then
     if "$EVASION" || [[ ${#OPCIONES[@]} -gt 0 ]]; then
@@ -99,6 +102,11 @@ PYTHON="$PROYECTO_DIR/.venv/bin/python"
 if ! "$PYTHON" -c 'import ipaddress, sys; ipaddress.IPv4Address(sys.argv[1])' "$IP_ROBOT" 2>/dev/null; then
     echo 'Falta --ip o no es una dirección IPv4 válida' >&2
     exit 2
+fi
+if "$MISION"; then
+    exec "$PYTHON" -u "$TAREA_DIR/busqueda_robot.py" --ip "$IP_ROBOT" \
+        --dominio "$DOMINIO_ROBOT" --contenedor "$CONTENEDOR" --config "$CONFIG" \
+        --mision "${OPCIONES_FACIALES[@]}" "${OPCIONES[@]}" "${OPCIONES_SENALES[@]}"
 fi
 if "$INTEGRADA"; then
     if "$CON_SENALES"; then OPCIONES_SENALES=(--senales "${OPCIONES_SENALES[@]}"); fi

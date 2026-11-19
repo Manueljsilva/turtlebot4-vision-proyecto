@@ -69,7 +69,8 @@ def resolver_nombre(nombre, galeria):
 
 def mensaje_rechazo(motivo):
     return dict(nombre='NO_CONCLUYENTE', aceptado=False, objetivo_confirmado=False,
-                candidato=None, similitud=None, margen=None, motivo=motivo, caja=None)
+                candidato=None, similitud=None, margen=None, motivo=motivo, caja=None,
+                afinidad_objetivo=None)
 
 
 class ConsultaEnVivo:
@@ -112,6 +113,9 @@ class ConsultaEnVivo:
                 resultado['aceptado'] and self.nombre is not None
                 and resultado['nombre'] == self.nombre)
             resultado['caja'] = analisis.caja
+            resultado['afinidad_objetivo'] = (
+                dict(ranking).get(self.nombre) if self.nombre is not None else None
+            )
         self.ultimo_resultado = resultado
         return resultado
 
@@ -147,7 +151,7 @@ def interpretar_topicos(texto):
     return salida
 
 
-def preparar_camara(ip, dominio, contenedor, topico):
+def preparar_camara(ip, dominio, contenedor, topico, fps=None):
     ipaddress.IPv4Address(ip)
     if not 0 <= dominio <= 101:
         raise ValueError('Dominio fuera de 0-101')
@@ -171,6 +175,8 @@ def preparar_camara(ip, dominio, contenedor, topico):
     entorno = ['-e', f'ROS_DOMAIN_ID={dominio}', '-e', 'RMW_IMPLEMENTATION=rmw_fastrtps_cpp',
                '-e', 'ROS_AUTOMATIC_DISCOVERY_RANGE=SUBNET', '-e', f'ROS_STATIC_PEERS={ip}',
                '-e', 'RCUTILS_LOGGING_USE_STDOUT=0']
+    if fps is not None:
+        entorno.extend(['-e', f'TB4_VIDEO_FPS={float(fps):.1f}'])
     base = ['sudo', '-n', 'docker', 'exec', *entorno, contenedor, 'bash', '--noprofile', '--norc', '-c']
     texto = ejecutar_comando([*base,
                              'unset ROS_LOCALHOST_ONLY; source /opt/ros/jazzy/setup.bash && '

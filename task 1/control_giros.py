@@ -1,4 +1,4 @@
-"""Giro por señal y odometría, sin ROS ni OpenCV. No implementa un retorno."""
+"""Giro por señal y odometría, sin ROS ni OpenCV. Soporta espera de pared frontal y cambio de tramo."""
 
 from dataclasses import asdict, dataclass
 import json
@@ -19,6 +19,8 @@ class ConfigSenales:
     tolerancia_deg: float = 5.0
     tiempo_maximo_giro_s: float = 12.0
     desplazamiento_rearme_m: float = 0.4
+    esperar_pared_m: float = 0.0
+    tiempo_espera_pared_s: float = 6.0
 
     def __post_init__(self):
         for k, v in asdict(self).items():
@@ -33,6 +35,8 @@ class ConfigSenales:
                 and 1 <= self.tolerancia_deg <= 10 and 6 <= self.tiempo_maximo_giro_s <= 20
                 and .3 <= self.desplazamiento_rearme_m <= 1):
             raise ValueError('Parámetros de giro/rearme fuera de rango')
+        if not (0.0 <= self.esperar_pared_m <= 1.5 and 1.0 <= self.tiempo_espera_pared_s <= 20.0):
+            raise ValueError('Parámetros de espera de pared fuera de rango')
 
 
 def cargar_config_senales(ruta):
@@ -56,16 +60,28 @@ class ControlGiro:
     """Una maniobra por evento. La salida continúa pasando por el permiso global.
 
     Al bloquearse no elige el sentido opuesto. Un fallo de giro se enclava hasta
-    cerrar la prueba. La holgura usa los sectores existentes, no certifica huella.
+    cerrar la prueba. Si esperar_pared_m > 0, memoriza la señal hasta acercarse
+    a la pared frontal antes de ejecutar el giro de 90°.
     """
 
     def __init__(self, tramo, cfg=None):
+        self.tramo = tramo
         self.color = COLORES_TRAMO[tramo]
         self.cfg = cfg or ConfigSenales()
         self.activo = None
+        self.pendiente = None
         self.ultimo_id = 0
         self.ultima_posicion = None
         self.fallo = None
+
+    def cambiar_tramo(self, tramo):
+        if tramo not in COLORES_TRAMO:
+            raise ValueError(f'Tramo inválido: {tramo}')
+        if tramo != self.tramo:
+            self.tramo = tramo
+            self.color = COLORES_TRAMO[tramo]
+            self.pendiente = None
+            self.activo = None
 
     def decidir(self, evento, pose, ahora_ns, permitido, lidar, cfg_evasion):
         if self.fallo:
@@ -75,20 +91,46 @@ class ControlGiro:
             return (0., 0., self.fallo)
         if not permitido:
             return (0., 0., 'Giro en espera de permiso/sensores') if self.activo else None
+
+        # Expirar señal memorizada si nunca apareció pared frontal en el tiempo límite.
+        if (self.pendiente is not None
+                and ahora_ns - self.pendiente['recibido_ns'] > self.cfg.tiempo_espera_pared_s * 1e9):
+            self.pendiente = None
+
         if self.activo is None and evento is not None and evento['id'] > self.ultimo_id:
             self.ultimo_id = evento['id']
-            if evento['color'] != self.color:
-                return None
-            if self.ultima_posicion is not None and hypot(
-                    pose['x'] - self.ultima_posicion[0], pose['y'] - self.ultima_posicion[1]
-                    ) < self.cfg.desplazamiento_rearme_m:
-                return None  # Evita repetir un cartel al reaparecer después del giro.
-            self.activo = dict(inicio_ns=ahora_ns, yaw=pose['yaw'],
-                               sentido=1. if evento['direccion'] == 'IZQUIERDA' else -1.,
-                               direccion=evento['direccion'])
-            self.ultima_posicion = pose['x'], pose['y']
+            if evento['color'] == self.color:
+                muy_cerca = (
+                    self.ultima_posicion is not None and hypot(
+                        pose['x'] - self.ultima_posicion[0], pose['y'] - self.ultima_posicion[1]
+                    ) < self.cfg.desplazamiento_rearme_m
+                )
+                if not muy_cerca:
+                    self.pendiente = dict(
+                        direccion=evento['direccion'],
+                        sentido=1. if evento['direccion'] == 'IZQUIERDA' else -1.,
+                        recibido_ns=ahora_ns,
+                    )
+
+        if self.activo is None and self.pendiente is not None:
+            esperar = self.cfg.esperar_pared_m
+            pared_cerca = (
+                esperar <= 0.0
+                or (lidar is not None and lidar.observacion_valida and lidar.dist_frente <= esperar)
+            )
+            if pared_cerca:
+                self.activo = dict(
+                    inicio_ns=ahora_ns,
+                    yaw=pose['yaw'],
+                    sentido=self.pendiente['sentido'],
+                    direccion=self.pendiente['direccion'],
+                )
+                self.ultima_posicion = pose['x'], pose['y']
+                self.pendiente = None
+
         if self.activo is None:
-            return None  # La evasión conserva su propuesta.
+            return None  # La evasión conserva su propuesta mientras espera pared o no hay señal.
+
         a = self.activo
         delta = atan2(sin(pose['yaw'] - a['yaw']), cos(pose['yaw'] - a['yaw']))
         avance = a['sentido'] * delta
@@ -108,5 +150,7 @@ class ControlGiro:
         if min(lidar.dist_frente, lidar.dist_izquierda, lidar.dist_derecha) <= cfg_evasion.distancia_parada_m:
             return (0., 0., 'Giro bloqueado por obstaculo: esperando; no invierte sentido')
         restante = objetivo - avance
-        velocidad = min(cfg_evasion.velocidad_giro, max(.12, restante * .8))
+        piso = 0.25 if cfg_evasion.velocidad_giro >= 0.6 else 0.12
+        ganancia = 1.1 if cfg_evasion.velocidad_giro >= 0.6 else 0.8
+        velocidad = min(cfg_evasion.velocidad_giro, max(piso, restante * ganancia))
         return (0., a['sentido'] * velocidad, f"Giro {a['direccion']} por senal {self.color}")

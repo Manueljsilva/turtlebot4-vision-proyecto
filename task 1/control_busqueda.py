@@ -15,7 +15,10 @@ EDAD_ACTIVIDAD_NS = 500_000_000
 EDAD_CAMARA_NS = 1_000_000_000
 EDAD_POSE_NS = 600_000_000
 MAX_LINEA = 2048
-ORDENES = {'ESPERAR', 'BUSCAR', 'VERIFICAR', 'ENCONTRADO', 'PARAR'}
+ORDENES = {
+    'ESPERAR', 'BUSCAR', 'VERIFICAR', 'ENCONTRADO', 'PARAR',
+    'GIRAR_BARRIDO', 'GIRAR_BARRIDO_LENTO', 'GIRAR_RETORNO',
+}
 
 
 def reciente(marca, ahora, limite):
@@ -54,6 +57,7 @@ class PuertaBusqueda:
         self.inicio_ns = None
         self.senal = None
         self.senales_activas = False
+        self.tramo = None
 
     def recibir(self, linea, ahora_ns):
         try:
@@ -61,24 +65,28 @@ class PuertaBusqueda:
                 raise ValueError('Línea larga')
             d = json.loads(linea)
             claves = {'version', 'secuencia', 'orden', 'actividad_ns', 'camara_ns'}
-            if (not isinstance(d, dict) or set(d) not in (claves, claves | {'senal'})
+            opcionales = {'senal', 'tramo'}
+            if (not isinstance(d, dict) or not claves <= set(d) <= (claves | opcionales)
                     or type(d['version']) is not int or d['version'] != 1
                     or type(d['secuencia']) is not int or d['secuencia'] <= self.secuencia
                     or not isinstance(d['orden'], str) or d['orden'] not in ORDENES
                     or not reciente(d['actividad_ns'], ahora_ns, EDAD_ACTIVIDAD_NS)
                     or (d['camara_ns'] is not None and type(d['camara_ns']) is not int)
-                    or not evento_valido(d.get('senal'), ahora_ns)):
+                    or not evento_valido(d.get('senal'), ahora_ns)
+                    or ('tramo' in d and d['tramo'] not in ('ida', 'vuelta'))):
                 raise ValueError('Control inválido/caducado')
             self.secuencia = d['secuencia']
             self.actividad_ns, self.camara_ns, self.orden = d['actividad_ns'], d['camara_ns'], d['orden']
             self.senal, self.senales_activas = d.get('senal'), 'senal' in d
-            if self.orden in ('BUSCAR', 'VERIFICAR') and self.inicio_ns is None:
+            self.tramo = d.get('tramo')
+            if self.orden in ('BUSCAR', 'VERIFICAR', 'GIRAR_BARRIDO', 'GIRAR_BARRIDO_LENTO', 'GIRAR_RETORNO') and self.inicio_ns is None:
                 self.inicio_ns = self.actividad_ns
             if self.orden == 'ENCONTRADO' and reciente(self.camara_ns, ahora_ns, EDAD_CAMARA_NS):
                 self.finalizado = True
         except (ValueError, TypeError, KeyError, OverflowError):
             self.orden, self.actividad_ns, self.camara_ns = 'PARAR', None, None
             self.senal, self.senales_activas = None, False
+            self.tramo = None
 
     def permiso(self, ahora_ns, pose, pose_ns):
         if self.finalizado:
@@ -98,6 +106,14 @@ class PuertaBusqueda:
             return False, 'Cambio de marco de odometria: reiniciar prueba'
         if not reciente(self.camara_ns, ahora_ns, EDAD_CAMARA_NS):
             return False, 'Esperando camara reciente: detenido'
+        if self.orden == 'VERIFICAR':
+            return False, 'Verificando persona: detenido'
+        if self.orden == 'GIRAR_BARRIDO':
+            return True, 'Barrido 360° en Meta B'
+        if self.orden == 'GIRAR_BARRIDO_LENTO':
+            return True, 'Barrido lento capturando rostro en B'
+        if self.orden == 'GIRAR_RETORNO':
+            return True, 'Girando 180° para iniciar vuelta'
         if self.orden != 'BUSCAR':
             return False, 'Verificando persona: detenido'
         return True, 'Buscando con evasion LiDAR'
