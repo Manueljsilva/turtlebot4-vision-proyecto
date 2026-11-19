@@ -1,0 +1,389 @@
+% Presentación Beamer autocontenida (16:9). Compilar con pdfLaTeX dos veces.
+\documentclass[aspectratio=169,10pt]{beamer}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-tabla,es-nodecimaldot]{babel}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb}
+\usepackage{array,tabularx}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+
+\usetheme{Madrid}
+\usecolortheme{default}
+
+\definecolor{utecazul}{RGB}{11,79,108}
+\definecolor{uteccian}{RGB}{0,145,189}
+\definecolor{utecgris}{RGB}{242,246,250}
+\definecolor{utecoscuro}{RGB}{32,42,54}
+
+\setbeamercolor{structure}{fg=utecazul}
+\setbeamercolor{palette primary}{bg=utecazul,fg=white}
+\setbeamercolor{palette secondary}{bg=uteccian,fg=white}
+\setbeamercolor{palette tertiary}{bg=utecoscuro,fg=white}
+\setbeamercolor{title}{bg=utecazul,fg=white}
+\setbeamercolor{frametitle}{bg=utecazul,fg=white}
+\setbeamercolor{block title}{bg=utecazul,fg=white}
+\setbeamercolor{block body}{bg=utecgris,fg=black}
+\setbeamercolor{alertblock title}{bg=uteccian,fg=white}
+\setbeamercolor{alertblock body}{bg=utecgris,fg=black}
+
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}{%
+  \leavevmode%
+  \hbox{%
+    \begin{beamercolorbox}[wd=.38\paperwidth,ht=2.3ex,dp=1ex,leftskip=2ex]{author in head/foot}%
+      \usebeamerfont{author in head/foot}UTEC \textbullet\ Visión por Computadora
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.44\paperwidth,ht=2.3ex,dp=1ex,center]{title in head/foot}%
+      \usebeamerfont{title in head/foot}TurtleBot 4 Lite (ROS~2 Jazzy)
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.18\paperwidth,ht=2.3ex,dp=1ex,rightskip=2ex,right]{date in head/foot}%
+      \usebeamerfont{date in head/foot}\insertframenumber{} / \inserttotalframenumber
+    \end{beamercolorbox}%
+  }%
+  \vskip0pt%
+}
+
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
+\renewcommand{\arraystretch}{1.15}
+
+\title[TurtleBot 4 Lite: Visión y Navegación]{Navegación autónoma, control gestual y reconocimiento facial en TurtleBot 4 Lite}
+\subtitle{Sustentación técnica del proyecto final (8--10 minutos)}
+\author[Equipo UTEC]{[Integrante 1] \and [Integrante 2] \and [Integrante 3] \and [Integrante 4]\\[0.3em]\footnotesize Docente: Rensso Victor Hugo Mora Colque}
+\institute[UTEC]{Universidad de Ingeniería y Tecnología (UTEC)}
+\date{17 de noviembre de 2026}
+
+\begin{document}
+
+% -------------------------------------------------------------------------
+\begin{frame}[plain]
+  \titlepage
+\end{frame}
+
+% -------------------------------------------------------------------------
+\begin{frame}{Reto de competición y enfoque técnico}
+  \small
+  \begin{columns}[T,onlytextwidth]
+    \column{0.47\textwidth}
+    \begin{block}{Task A: Navegación autónoma}
+      \begin{itemize}
+        \item Ingresar el \textbf{nombre objetivo} antes de salir de A.
+        \item Recorrer circuito desconocido evitando obstáculos y siguiendo \textbf{flechas azules}.
+        \item Confirmar meta B, ubicar la foto del objetivo y leer únicamente su \textbf{código QR}.
+        \item Retornar guiado por \textbf{flechas rojas} a A y mostrar la palabra QR.
+      \end{itemize}
+    \end{block}
+
+    \column{0.47\textwidth}
+    \begin{block}{Task B: Teleoperación por gestos}
+      \begin{itemize}
+        \item Conducción exclusiva mediante \textbf{gestos visuales humanos} en video (sin teclado ni giros autónomos).
+        \item Ir de A a B, identificar la fotografía de B con la cámara del robot, regresar a A y anunciar el nombre.
+      \end{itemize}
+    \end{block}
+    \vspace{0.45em}
+    \begin{alertblock}{Principio rector}
+      Circuito y fotografía se revelan en pista: \textbf{cero rutas memorizadas} y \textbf{parada segura} ante datos ausentes o caducados.
+    \end{alertblock}
+  \end{columns}
+\end{frame}
+
+% -------------------------------------------------------------------------
+\begin{frame}{1. Arquitectura general del sistema}
+  \centering
+  \begin{tikzpicture}[
+    node distance=0.55cm and 1.25cm,
+    caja/.style={draw=utecazul, thick, rounded corners=3pt, fill=utecgris, text width=2.95cm, inner sep=4pt, align=center, minimum height=0.95cm, font=\scriptsize},
+    etq/.style={font=\tiny\color{utecoscuro}, align=center}
+  ]
+    \node[caja] (cam) {\textbf{Host CPU: Visión}\\Cámara OAK-D (5 FPS)\\YuNet + SFace\\Detector Canny/HSV};
+    \node[caja, right=1.25cm of cam] (sup) {\textbf{Host: Supervisor}\\Objetivo e histéresis\\Máquina de estados\\Panel de verificación};
+    \node[caja, right=1.25cm of sup] (ros) {\textbf{Docker ROS~2 Jazzy}\\Puerta única de salida\\Evasión LiDAR + TF\\Giros por odometría};
+
+    \node[caja, below=0.55cm of cam] (web) {\textbf{Host CPU: Webcam}\\MediaPipe Hand (21 pts)\\Reglas en píxeles\\Confirmación $0.4\ \mathrm{s}$};
+    \node[caja, right=1.25cm of web] (pte) {\textbf{Docker: Puente Gestos}\\Vigilante $20\ \mathrm{Hz}$\\Caducidad $0.5\ \mathrm{s}$\\Reloj monotónico};
+    \node[caja, right=1.25cm of pte, fill=utecazul!12] (bot) {\textbf{TurtleBot 4 Lite}\\Create~3 (\texttt{/cmd\_vel})\\RPLIDAR (\texttt{/scan})\\Odometría y OAK-D};
+
+    \draw[-{Latex}, thick, utecazul] (cam) -- node[above, etq]{eventos} (sup);
+    \draw[-{Latex}, thick, utecazul] (sup) -- node[above, etq]{JSON + latido} (ros);
+    \draw[-{Latex}, thick, utecazul] (ros) -- node[right, etq]{velocidad} (bot);
+    \draw[-{Latex}, thick, uteccian] (web) -- node[above, etq]{JSON stdin} (pte);
+    \draw[-{Latex}, thick, uteccian] (pte) -- node[above, etq]{TwistStamped} (bot);
+  \end{tikzpicture}
+
+  \vspace{0.35em}
+  \footnotesize
+  \begin{columns}[T,onlytextwidth]
+    \column{0.47\textwidth}
+    \begin{block}{Separación percepción vs. control}
+      Permite probar algoritmos en CPU sin acceso físico al robot y aisla la
+      versión de Python del host respecto a ROS~2 Jazzy (Ubuntu~24.04).
+    \end{block}
+    \column{0.47\textwidth}
+    \begin{block}{Canal de video aislado}
+      La cámara del robot viaja por tubería separada (máx. $5\ \mathrm{FPS}$)
+      para que fotogramas pesados nunca bloqueen órdenes de parada.
+    \end{block}
+  \end{columns}
+\end{frame}
+
+% -------------------------------------------------------------------------
+\begin{frame}{2. Implementación del reconocimiento facial}
+  \footnotesize
+  \begin{columns}[T,onlytextwidth]
+    \column{0.495\textwidth}
+    \begin{block}{Flujo de inferencia en CPU}
+      \begin{enumerate}
+        \item \textbf{Reescalado:} lado máximo $960\ \mathrm{px}$.
+        \item \textbf{YuNet (2023mar):} detecta rostro y 5 puntos clave; exige \textbf{exactamente 1 cara útil} (rechaza 0 o múltiples).
+        \item \textbf{Alineación + SFace (2021dec):} extrae descriptor $f(x)\in\mathbb{R}^{128}$ normalizado:
+        \[
+          z(x)=\frac{f(x)}{\lVert f(x)\rVert_2}, \qquad c(x,r)=z(x)^\top z(r).
+        \]
+        \item \textbf{Puntuación por identidad:} media de las $k_i=\min(2,n_i)$ mejores referencias.
+      \end{enumerate}
+    \end{block}
+
+    \column{0.445\textwidth}
+    \begin{block}{Criterio dual con rechazo explícito}
+      \[
+        \widehat y =
+        \begin{cases}
+          i^\star, & S_{i^\star}(x)\ge\tau\ \text{y}\ \Delta\ge\mu,\\
+          \text{NO\_CONCL.}, & \text{en otro caso}.
+        \end{cases}
+      \]
+      \begin{itemize}
+        \item Calibración separada de galería y evaluación reservada (manifiesto SHA-256).
+        \item En vivo: selección previa del objetivo y confirmación tras \textbf{3 fotogramas nuevos}.
+      \end{itemize}
+    \end{block}
+  \end{columns}
+\end{frame}
+
+% -------------------------------------------------------------------------
+\begin{frame}{3. Reconocimiento de gestos y teleoperación (Task B)}
+  \small
+  \begin{columns}[T,onlytextwidth]
+    \column{0.47\textwidth}
+    \begin{block}{Clasificador geométrico sobre MediaPipe}
+      \begin{itemize}
+        \item \textbf{21 puntos clave} de la mano proyectados a coordenadas en píxeles (preserva relación de aspecto).
+        \item Comparación de extensión/flexión de los 4 dedos largos (bandas ambiguas detienen).
+        \item Imagen sin espejo visual; inversión única del eje horizontal para alinear derecha/izquierda del operador con el robot.
+      \end{itemize}
+    \end{block}
+
+    \column{0.47\textwidth}
+    \begin{block}{Tabla de órdenes y seguridades}
+      \footnotesize
+      \begin{tabularx}{\textwidth}{@{}Ycc@{}}
+        \hline
+        \textbf{Gesto / estado} & \textbf{Lin. (m/s)} & \textbf{Ang. (rad/s)}\\
+        \hline
+        Índice arriba & $0.306$ & $0.00$\\
+        Índice izquierda & $0.00$ & $+1.90$\\
+        Índice derecha & $0.00$ & $-1.90$\\
+        Palma / ausencia / $>1$ mano & $0.00$ & $0.00$\\
+        \hline
+      \end{tabularx}
+      \vspace{0.3em}
+      \begin{itemize}
+        \item Histéresis de \textbf{0.4 s} para avanzar/girar; cambio de sentido pasa por parada.
+        \item Vigilante a $20\ \mathrm{Hz}$: caducidad $>0.5\ \mathrm{s}$ detiene.
+      \end{itemize}
+    \end{block}
+  \end{columns}
+\end{frame}
+
+% -------------------------------------------------------------------------
+\begin{frame}{4. Estrategia de navegación autónoma (Task A)}
+  \small
+  \begin{columns}[T,onlytextwidth]
+    \column{0.47\textwidth}
+    \begin{block}{Evasión LiDAR conservadora}
+      \begin{itemize}
+        \item Sectores: frontal ($\pm 35^\circ$) e izquierdo/derecho.
+        \item \textbf{Cobertura mínima $30\%$} ($\ge 3$ rayos finitos) y $\le 10\%$ errores; sector sin retorno suficiente = \textbf{parada}.
+        \item Velocidad: $0.10\ \mathrm{m/s}$, giro $0.40\ \mathrm{rad/s}$; precaución $0.45\ \mathrm{m}$, parada frontal $0.32\ \mathrm{m}$, lateral $0.28\ \mathrm{m}$.
+      \end{itemize}
+    \end{block}
+
+    \column{0.47\textwidth}
+    \begin{block}{Señales de giro y maniobra de $90^\circ$}
+      \begin{itemize}
+        \item Canny + elipses ($\ge 55\ \mathrm{px}$) + filtro HSV por tramo (\textbf{azul} ida / \textbf{rojo} vuelta) + geometría de flecha.
+        \item Confirmación en \textbf{3 frames nuevos}; la flecha prevalece sobre el lado de evasión ante un muro.
+        \item Giro $90^\circ \pm 5^\circ$ por odometría (cruce $\pm\pi$, timeout $12\ \mathrm{s}$, rearme $1.5\ \mathrm{s}$ y $0.4\ \mathrm{m}$).
+      \end{itemize}
+    \end{block}
+  \end{columns}
+  \vspace{0.35em}
+  \begin{alertblock}{Pendiente de integración final}
+    \footnotesize Acoplar detección de meta A/B por etapa, barrido en B, lectura exclusiva del QR del rostro objetivo y retorno completo.
+  \end{alertblock}
+\end{frame}
+
+% -------------------------------------------------------------------------
+\begin{frame}{5. Integración de sensores y puerta única de seguridad}
+  \begin{table}
+    \centering
+    \footnotesize
+    \begin{tabularx}{\textwidth}{@{}P{2.6cm}P{4.1cm}Y@{}}
+      \hline
+      \textbf{Sensor / canal} & \textbf{Validación previa al movimiento} & \textbf{Condición de parada segura}\\
+      \hline
+      \textbf{RPLIDAR (\texttt{/scan})} &
+      Transformación TF \texttt{base\_link} $\rightarrow$ \texttt{rplidar\_link} y cobertura por sector &
+      Antigüedad $>0.6\ \mathrm{s}$, falta de TF o cobertura $<30\%$\\
+      \textbf{Odometría (\texttt{/odom})} &
+      Finitud, norma unitaria del cuaternión y consistencia de \texttt{frame\_id} &
+      Antigüedad $>0.6\ \mathrm{s}$, cambio de marco o pose inválida\\
+      \textbf{Cámara OAK-D} &
+      QoS de sensores, validación de dimensiones y \texttt{step} de fila &
+      Antigüedad $>1.0\ \mathrm{s}$ o fotograma repetido en confirmación\\
+      \textbf{Latido del host} &
+      Secuencia estrictamente creciente y marca monotónica compartida &
+      Expiración $>0.5\ \mathrm{s}$, mensaje malformado o cierre de enlace\\
+      \hline
+    \end{tabularx}
+  \end{table}
+
+  \small
+  \begin{block}{Autoridad única sobre \texttt{/cmd\_vel}}
+    Solo un nodo ROS~2 publica \texttt{geometry\_msgs/msg/TwistStamped} en
+    \texttt{/cmd\_vel} (verificado previamente en el arranque). Cualquier fallo
+    revoca el permiso de movimiento a $(0,0)$.
+  \end{block}
+\end{frame}
+
+% -------------------------------------------------------------------------
+\begin{frame}{6. Modelos y algoritmos empleados}
+  \footnotesize
+  \begin{tabularx}{\textwidth}{@{}P{3.1cm}P{4.5cm}Y@{}}
+    \hline
+    \textbf{Componente} & \textbf{Modelo / algoritmo} & \textbf{Función en el sistema}\\
+    \hline
+    Detección facial &
+    \textbf{YuNet} (OpenCV DNN, ONNX) &
+    Localización de rostro y 5 puntos clave para alineación afín\\
+    Reconocimiento facial &
+    \textbf{SFace} ($128$-D) + similitud coseno &
+    Descriptores L2 normalizados y decisión dual $(\tau,\mu)$\\
+    Detección de mano &
+    \textbf{MediaPipe Hand Landmarker} + reglas geométricas &
+    21 puntos clave y clasificación angular/distancias en píxeles\\
+    Detección de flechas &
+    \textbf{Canny} + ajuste de elipses + \textbf{HSV} + geometría de puntas &
+    Identificación de discos completos azules/rojos (\texttt{IZQ}/\texttt{DER})\\
+    Navegación y control &
+    \textbf{Sectores LiDAR por cobertura} + lazo \textbf{yaw} odométrico &
+    Evasión conservadora y giros acotados de $90^\circ \pm 5^\circ$\\
+    \hline
+  \end{tabularx}
+  \vspace{0.25em}
+  \small
+  \begin{block}{Referencia arquitectónica evaluada}
+    Se evaluó además una rama alternativa con \texttt{slam\_toolbox} + Nav2 +
+    exploración por fronteras antes de priorizar el enfoque reactivo con señales.
+  \end{block}
+\end{frame}
+
+% -------------------------------------------------------------------------
+\begin{frame}{7. Decisiones de diseño y compromisos de ingeniería}
+  \footnotesize
+  \begin{tabularx}{\textwidth}{@{}P{3.2cm}P{3.6cm}Y@{}}
+    \hline
+    \textbf{Decisión} & \textbf{Alternativa} & \textbf{Justificación (\textit{trade-off})}\\
+    \hline
+    YuNet + SFace en CPU &
+    GPU / nube / entrenamiento propio &
+    Funciona sin internet ni GPU en el lab; depende de iluminación y calidad de galería.\\
+    Rechazo $(\tau,\mu)$ (\texttt{NO\_CONCLUYENTE}) &
+    1-NN que siempre predice un nombre &
+    Evita penalizaciones por identidad falsa en pista, a costa de rechazar tomas borrosas.\\
+    Visión geométrica para flechas &
+    YOLO reentrenado &
+    Cero etiquetado previo y control por tramo; sensible a reflejos o oclusión parcial.\\
+    Reactivo + señales vs. SLAM/Nav2 &
+    Dependencia exclusiva de \texttt{slam\_toolbox} + Nav2 &
+    Menor fragilidad ante desfases de reloj Create~3/Pi y pasillos estrechos; exige integrar meta y vuelta explícitas.\\
+    Cobertura LiDAR $\ge 30\%$ &
+    Asumir rayos $+\infty$ como libres &
+    Evita choques por pérdida de retorno; se ajustó de $50\%$ a $30\%$ tras medir $37$--$47\%$ en hardware.\\
+    \hline
+  \end{tabularx}
+\end{frame}
+
+% -------------------------------------------------------------------------
+\begin{frame}{8. Resultados experimentales: facial y pruebas}
+  \small
+  \begin{columns}[T,onlytextwidth]
+    \column{0.535\textwidth}
+    \begin{block}{Evaluación facial en particiones reservadas}
+      \scriptsize
+      \setlength{\tabcolsep}{3pt}
+      \begin{tabularx}{\textwidth}{@{}P{2.4cm}cccY@{}}
+        \hline
+        \textbf{Corte} & \textbf{Cons.} & \textbf{OK} & \textbf{Err.} & \textbf{Neg. sim.}\\
+        \hline
+        Inicial (26 fotos, 5 id.) & 5 & 4 & 0 & 5/5 rech. (1 rech.)\\
+        Intermedio (6 id.) & 6 & 4 & 0 & 6/6 rech. (2 rech.)\\
+        Ampliada (74 fotos, 13 id.) & 13 & \textbf{13} & \textbf{0} & \textbf{13/13 rech.}\\
+        \hline
+      \end{tabularx}
+    \end{block}
+    \vspace{0.35em}
+    \begin{block}{Pruebas unitarias automatizadas}
+      \footnotesize
+      \begin{itemize}
+        \item \textbf{164 pruebas} documentadas (113 Task~1 + 51 Task~2).
+        \item \textbf{17 pruebas de señales}: 10 páginas del PDF dan los 4 giros derechos esperados; reflejos validados.
+      \end{itemize}
+    \end{block}
+
+    \column{0.405\textwidth}
+    \begin{block}{Validación en simulación y robot}
+      \footnotesize
+      \begin{itemize}
+        \item \textbf{Task B:} gestos confirmados en Gazebo y hardware + video a 5~FPS.
+        \item \textbf{Task A:} evasión + reconocimiento probados juntos en robot real (retornos finitos $37$--$47\%$, pausas hasta $1.66\ \mathrm{s}$).
+      \end{itemize}
+    \end{block}
+    \vspace{0.35em}
+    \begin{alertblock}{Resultados de competición}
+      \scriptsize [Completar el día del concurso: llegadas A/B, identidad, palabra QR, tiempos, colisiones y puntaje].
+    \end{alertblock}
+  \end{columns}
+\end{frame}
+
+% -------------------------------------------------------------------------
+\begin{frame}{9. Lecciones aprendidas y mejoras futuras}
+  \small
+  \begin{columns}[T,onlytextwidth]
+    \column{0.48\textwidth}
+    \begin{block}{Lecciones clave del desarrollo}
+      \begin{itemize}
+        \item \textbf{Dato ausente $\neq$ vía libre:} retornos $+\infty$ del RPLIDAR real obligaron a exigir cobertura $\ge 30\%$ y parada ante TF ausente.
+        \item \textbf{Red sin internet en lab:} sincronizar reloj de Pi, fijar \texttt{ROS\_STATIC\_PEERS} y verificar \texttt{TwistStamped} evita fallos silenciosos.
+        \item \textbf{Aislar canales:} video a $5\ \mathrm{FPS}$ separado del canal de órdenes protege el frenado.
+        \item \textbf{Pruebas por capas:} validar sensores y visión por separado acelera el diagnóstico en hardware.
+      \end{itemize}
+    \end{block}
+
+    \column{0.46\textwidth}
+    \begin{block}{Mejoras futuras}
+      \begin{itemize}
+        \item Fusionar nube de profundidad OAK-D para detectar \textbf{obstáculos bajos} fuera del plano LiDAR.
+        \item Certificar la \textbf{huella circular completa} del chasis frente a choques diagonales.
+        \item Completar secuencia de meta A/B, barrido en B, lectura QR exclusiva y retorno automático.
+        \item Evaluar impresiones físicas con cámara del robot y migrar parada crítica a bordo de la Pi.
+      \end{itemize}
+    \end{block}
+  \end{columns}
+\end{frame}
+
+\end{document}

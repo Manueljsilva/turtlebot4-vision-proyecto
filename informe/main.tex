@@ -6,7 +6,7 @@
 \usepackage[T1]{fontenc}
 \usepackage[spanish,es-tabla,es-nodecimaldot,es-lcroman]{babel}
 \usepackage{lmodern}
-\usepackage[margin=2.4cm,headheight=15pt]{geometry}
+\usepackage[margin=2.3cm,headheight=15pt]{geometry}
 \usepackage{amsmath,amssymb}
 \usepackage{array,tabularx}
 \usepackage{color}
@@ -21,15 +21,15 @@
   linkcolor=azul,
   citecolor=azul,
   urlcolor=azul,
-  pdftitle={Navegación y reconocimiento facial con TurtleBot 4 Lite},
-  pdfsubject={Borrador metodológico del proyecto de Visión por Computadora}
+  pdftitle={Metodología de visión por computadora y navegación con TurtleBot 4 Lite},
+  pdfsubject={Informe metodológico del proyecto de Visión por Computadora}
 }
 \urlstyle{same}
 \linespread{1.06}
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{5pt}
 \setlength{\emergencystretch}{2em}
-\setcounter{tocdepth}{1}
+\setcounter{tocdepth}{2}
 \setcounter{totalnumber}{4}
 \renewcommand{\topfraction}{0.95}
 \renewcommand{\bottomfraction}{0.85}
@@ -49,7 +49,6 @@
 \fancyhf{}
 \fancyhead[L]{\small Visión por Computadora}
 \fancyhead[R]{\small TurtleBot 4 Lite}
-\fancyfoot[L]{\footnotesize\color{gristexto}Borrador metodológico}
 \fancyfoot[R]{\footnotesize\thepage}
 \renewcommand{\headrulewidth}{0.4pt}
 \renewcommand{\footrulewidth}{0pt}
@@ -60,11 +59,11 @@
   \setlength{\fboxsep}{8pt}%
   \noindent\colorbox{grisclaro}{%
     \parbox{\dimexpr\linewidth-2\fboxsep\relax}{%
-      \textbf{Por completar.} #1}}%
+      \textbf{Por completar con resultados de competición.} #1}}%
   \par\endgroup\smallskip
 }
 \newcommand{\modulo}[2]{%
-  \fbox{\parbox[c][2.05cm][c]{\dimexpr0.27\textwidth-2\fboxsep-2\fboxrule\relax}{%
+  \fbox{\parbox[c][2.15cm][c]{\dimexpr0.27\textwidth-2\fboxsep-2\fboxrule\relax}{%
     \centering\small\textbf{#1}\par\smallskip #2}}%
 }
 
@@ -75,27 +74,25 @@
   \thispagestyle{empty}
   \centering
   \vspace*{1.0cm}
-  {\large [Universidad o institución]\par}
+  {\large Universidad de Ingeniería y Tecnología (UTEC)\par}
   \vspace{0.3cm}
-  {\normalsize [Escuela profesional]\par}
-  \vspace{1.6cm}
+  {\normalsize [Carrera / Escuela profesional]\par}
+  \vspace{1.5cm}
   {\color{azul}\large VISIÓN POR COMPUTADORA\par}
   \vspace{0.5cm}
   {\color{azul}\rule{\textwidth}{1pt}\par}
   \vspace{0.65cm}
-  {\fontsize{23}{29}\selectfont\bfseries
-    Navegación autónoma y\\
-    control gestual con\\
-    reconocimiento facial\par}
-  \vspace{0.6cm}
-  {\Large TurtleBot 4 Lite\par}
-  \vspace{0.7cm}
+  {\fontsize{22}{28}\selectfont\bfseries
+    Navegación autónoma, control gestual\\
+    y reconocimiento facial con\\
+    TurtleBot 4 Lite\par}
+  \vspace{0.65cm}
   {\color{azul}\rule{\textwidth}{1pt}\par}
-  \vspace{1.2cm}
-  {\large Informe del proyecto final\par}
-  \vspace{0.35cm}
-  {\normalsize Borrador de avances al 7 de noviembre de 2026\par}
   \vspace{1.1cm}
+  {\large Informe metodológico del proyecto final\par}
+  \vspace{0.35cm}
+  {\normalsize Actualizado al 17 de noviembre de 2026\par}
+  \vspace{1.0cm}
   \begin{tabular}{ll}
     \textbf{Integrantes:} & [Nombre y código del integrante 1]\\
                          & [Nombre y código del integrante 2]\\
@@ -105,11 +102,13 @@
     \textbf{Entrega:} & [Fecha anunciada en clase]
   \end{tabular}
   \vfill
-  \begin{minipage}{0.88\textwidth}
+  \begin{minipage}{0.90\textwidth}
     \small\color{gristexto}
-    Documento en elaboración. Los resultados corresponden a comprobaciones
-    parciales; la navegación autónoma y la misión completa continúan pendientes
-    de implementación y validación.
+    Este informe presenta la metodología, arquitectura, algoritmos de visión
+    por computadora, estrategias de navegación y decisión, justificación de
+    diseño y análisis de limitaciones del sistema desarrollado sobre TurtleBot~4
+    Lite. Los detalles de implementación y trazabilidad del código fuente se
+    ubican en el apéndice.
   \end{minipage}
   \vspace*{0.4cm}
 \end{titlepage}
@@ -119,475 +118,473 @@
 \section*{Resumen}
 \addcontentsline{toc}{section}{Resumen}
 
-Este trabajo describe el desarrollo de un sistema de visión y control para un
-TurtleBot 4 Lite. El reto consiste en desplazarse desde una zona A hasta una zona
-B, identificar a una persona a partir de la fotografía situada en B y regresar
-a A para indicar su nombre. Se requieren dos modalidades: navegación autónoma
-y navegación mediante gestos visuales humanos. La implementación actual separa
-el reconocimiento facial del control gestual. Para rostros se utilizan YuNet y
-SFace, una galería etiquetada y un criterio calibrado que permite rechazar
-consultas no concluyentes. Para gestos se emplean puntos de la mano obtenidos
-con MediaPipe, reglas geométricas y confirmación temporal; las órdenes se
-transmiten mediante ROS 2. Se presentan resultados exploratorios con
-fotografías locales y comprobaciones parciales en simulación y hardware.
-La navegación autónoma, la entrada estable de video del robot y la coordinación
-de la misión completa siguen pendientes.
+Este documento describe la metodología de visión por computadora y control
+robótico desarrollada sobre un TurtleBot~4 Lite con ROS~2 Jazzy para resolver
+dos modalidades en circuitos con obstáculos revelados el día de la
+competición~\cite{enunciado}: navegación autónoma (\textbf{Task~A}) y
+teleoperación visual mediante gestos humanos (\textbf{Task~B}).
 
-\textbf{Palabras clave:} visión por computadora, reconocimiento facial,
-gestos de mano, ROS 2, TurtleBot 4 Lite.
+La solución se organiza en una arquitectura híbrida desacoplada que separa el
+procesamiento visual en CPU (laptop externa) de la capa de actuación, fusión
+sensorial y seguridad en tiempo real sobre ROS~2. Para el reconocimiento facial
+se emplean \textbf{YuNet} y \textbf{SFace} con normalización $\ell_2$,
+similitud coseno y criterio calibrado de umbral y margen con rechazo explícito.
+Para el control por gestos se aplica \textbf{MediaPipe Hand Landmarker} con
+clasificación geométrica en coordenadas de píxeles, histéresis de
+$0.4\ \mathrm{s}$ y caducidad monotónica de $0.5\ \mathrm{s}$. Para la
+navegación autónoma se integra evasión reactiva conservadora por sectores
+LiDAR (exigiendo cobertura mínima del $30\%$), detección visual de señales
+direccionales (bordes Canny, segmentación HSV por tramo y análisis geométrico
+de flechas) y maniobras de giro de $90^\circ$ controladas por odometría. Se
+justifican las decisiones de ingeniería frente a alternativas evaluadas, se
+resumen los resultados experimentales obtenidos hasta la fecha y se discuten
+las limitaciones actuales junto con las líneas de mejora futura.
+
+\textbf{Palabras clave:} visión por computadora, metodología, TurtleBot 4 Lite,
+ROS~2, reconocimiento facial, reconocimiento de gestos, navegación autónoma.
 
 \tableofcontents
 \clearpage
 \pagenumbering{arabic}
 
-\section{Introducción y objetivos}
+\section{Introducción y planteamiento del problema}
 
-La integración de visión por computadora con robótica móvil requiere convertir
-observaciones visuales en decisiones de identidad y movimiento. En este proyecto,
-el entorno incluye obstáculos y una fotografía de una persona ubicada en una
-zona objetivo. La configuración final del circuito y la fotografía se revelan
-el día de la competición, por lo que la solución debe funcionar con condiciones
-distintas de las utilizadas durante el desarrollo~\cite{enunciado}.
+La operación de un robot móvil en circuitos desconocidos mediante visión por
+computadora requiere transformar flujo visual y lecturas métricas en decisiones
+consistentes de percepción y movimiento bajo restricciones de latencia,
+iluminación variable y seguridad física. De acuerdo con los lineamientos del
+proyecto~\cite{enunciado}, la configuración del circuito y las fotografías de
+evaluación se dan a conocer recién en la competición, por lo que la metodología
+no puede basarse en trayectorias memorizadas ni en coordenadas fijas.
 
-El objetivo general es completar la secuencia
-\[
-  A \longrightarrow B \longrightarrow
-  \text{identificación en }B \longrightarrow A
-  \longrightarrow \text{anuncio del nombre}.
-\]
-
-Los objetivos específicos son construir una galería facial etiquetada, reconocer
-órdenes visuales humanas, comunicar esas órdenes al robot y coordinar las etapas
-del recorrido. Se busca comprobar cada componente por separado antes de evaluar
-la misión completa.
-
-\subsection{Modalidades y requisitos}
-
-El enunciado define dos tareas obligatorias~\cite{enunciado}:
-
+El sistema debe resolver dos modalidades operativas que comparten el subsistema
+de identificación facial:
 \begin{itemize}
-  \item \textbf{Task A, navegación autónoma:} llegar a B evitando obstáculos,
-  identificar la fotografía, regresar a A e indicar el nombre correcto, sin
-  intervención humana después del inicio.
-  \item \textbf{Task B, navegación por gestos:} completar el mismo objetivo
-  mediante señales visuales humanas. Durante el intento no se permiten teclado,
-  ratón, joystick ni otros controles manuales.
+  \item \textbf{Task~A (navegación autónoma):} recibir el nombre de una persona
+  objetivo perteneciente a la galería antes de iniciar; registrar el punto de
+  partida~A; recorrer de forma autónoma un circuito con obstáculos utilizando
+  flechas azules como guía direccional hasta confirmar la meta~B; localizar y
+  confirmar la fotografía de la persona solicitada entre varias candidatas;
+  leer únicamente el código QR asociado a dicha fotografía; y retornar guiado
+  por flechas rojas hasta confirmar~A para mostrar la palabra obtenida.
+  \item \textbf{Task~B (teleoperación por gestos):} completar el recorrido
+  $A \rightarrow B \rightarrow \text{identificación facial en } B \rightarrow A
+  \rightarrow \text{indicación del nombre}$ conduciendo al robot únicamente con
+  señales visuales humanas capturadas en video, sin controles manuales ni
+  maniobras autónomas durante el intento.
 \end{itemize}
 
-Se permiten modelos preentrenados y procesamiento a bordo, externo o híbrido.
-El éxito exige tanto el retorno a A como la identificación correcta. La
-señalización de A/B, las condiciones de inspección previa, la ubicación del
-operador y el formato del anuncio deben confirmarse antes de la evaluación.
+\section{Arquitectura general de la solución}
+\label{sec:arquitectura}
 
-\subsection{Alcance del borrador}
-
-Se documenta la metodología ya implementada para reconocimiento facial y control
-gestual, junto con resultados parciales. La estrategia autónoma y la coordinación
-de misión se presentan como trabajo pendiente. Las pruebas por teclado se
-consideran herramientas de desarrollo y no el mecanismo de operación de Task B.
-
-\section{Arquitectura del sistema}
-
-La percepción se separó del control para permitir pruebas locales y reducir la
-dependencia del acceso físico al robot. La laptop ejecuta visión en CPU con
-Python, OpenCV y MediaPipe. ROS 2 Jazzy y Gazebo se ejecutan en un contenedor
-Ubuntu 24.04. Los notebooks permiten estudiar las etapas del reconocimiento;
-los programas de ejecución mantienen el intercambio de órdenes con ROS.
-
-La Figura~\ref{fig:arquitectura} resume los dos flujos implementados.
+El sistema sigue una \textbf{arquitectura híbrida modular} que separa la
+percepción y toma de decisiones de alto nivel (ejecutadas en CPU en la laptop
+del operador) de la ejecución de bajo nivel sobre ROS~2 Jazzy (ejecutada en un
+contenedor aislado conectado por red al TurtleBot~4 Lite). Esta separación
+responde a dos necesidades metodológicas: poder validar los algoritmos de
+visión de manera reproducible sin acceso continuo al robot físico y aislar la
+seguridad de actuación mediante una única autoridad de velocidad.
 
 \begin{figure}[htbp]
   \centering
   \setlength{\tabcolsep}{4pt}
   \begin{tabular}{@{}ccccc@{}}
-    \modulo{Laptop}{Webcam del operador\\MediaPipe, reglas\\y filtro temporal}
+    \multicolumn{5}{c}{\small\textbf{Modalidad Task A: Navegación Autónoma y Reconocimiento}}\\
+    \noalign{\vskip 4pt}
+    \modulo{Percepción visual}{Cámara del robot\\YuNet + SFace\\Detector de flechas}
     & $\longrightarrow$ &
-    \modulo{Docker / ROS 2}{JSON por tubería\\Puente de órdenes}
+    \modulo{Supervisor de misión}{Objetivo nominal\\Estados e histéresis\\Validación de trama}
     & $\longrightarrow$ &
-    \modulo{TurtleBot 4 Lite}{Mensaje de velocidad\\Movimiento gestual}\\
-    \noalign{\vskip 10pt}
-    \modulo{Entrada facial}{Fotografía de archivo\\Consulta local}
+    \modulo{Control y sensores}{Puerta única de salida\\Evasión LiDAR + TF\\Giros por odometría}\\[10pt]
+    \noalign{\vskip 4pt}
+    \multicolumn{5}{c}{\small\textbf{Modalidad Task B: Teleoperación Gestual y Actuación Física}}\\
+    \noalign{\vskip 4pt}
+    \modulo{Entrada gestual}{Webcam del operador\\MediaPipe (21 puntos)\\Reglas y filtro 0.4 s}
     & $\longrightarrow$ &
-    \modulo{Extracción}{YuNet, alineación\\y descriptor SFace}
+    \modulo{Puente de seguridad}{Vigilante 20 Hz\\Caducidad 0.5 s\\Reloj monotónico}
     & $\longrightarrow$ &
-    \modulo{Decisión}{Comparación con galería\\Nombre o rechazo}
+    \modulo{TurtleBot 4 Lite}{Comandos de velocidad\\Base Create~3 + LiDAR\\Cámara OAK-D}
   \end{tabular}
-  \caption{Flujos implementados. El reconocimiento facial funciona por separado;
-  su conexión con la cámara del robot y el supervisor de misión sigue pendiente.
-  Elaboración propia.}
+  \caption{Arquitectura general del sistema desacoplada por planos de percepción,
+  decisión y actuación. Elaboración propia.}
   \label{fig:arquitectura}
 \end{figure}
 
-\begin{table}[htbp]
-  \centering
-  \small
-  \begin{tabularx}{\textwidth}{@{}P{3.5cm}YY@{}}
-    \hline
-    \textbf{Componente} & \textbf{Función} & \textbf{Estado actual}\\
-    \hline
-    Webcam de la laptop & Capturar los gestos & Implementado\\
-    MediaPipe y reglas & Estimar puntos y clasificar órdenes &
-    Probado localmente\\
-    Puente ROS y filtro & Publicar velocidades y vigilar caducidad &
-    Simulación y movimiento físico preliminar\\
-    YuNet y SFace & Detectar y comparar rostros &
-    Evaluación local con fotografías\\
-    Cámara del robot & Capturar la fotografía en B &
-    Recepción aislada en Pi; panel pendiente\\
-    Navegación autónoma & Encontrar B y regresar a A & Pendiente\\
-    Supervisor de misión & Coordinar etapas y conservar el nombre & Pendiente\\
-    \hline
-  \end{tabularx}
-  \caption{Estado de los módulos al elaborar el borrador.}
-  \label{tab:modulos}
-\end{table}
-
-ROS 2 utiliza publicadores y suscriptores asociados a tópicos y tipos de
-mensaje~\cite{ros2}. El puente gestual publica
-\texttt{geometry\_msgs/msg/TwistStamped} en \texttt{/cmd\_vel}. La visión y
-ROS se ejecutan en procesos separados. La comunicación por tubería permite
-mantener el entorno de visión de la laptop y el entorno ROS del contenedor.
-
-El reconocimiento facial produce una decisión de identidad, pero todavía no
-activa el regreso ni el anuncio final. La secuencia de misión deberá integrar
-esas salidas sin introducir navegación autónoma en Task B.
-
-\section{Reconocimiento facial}
-
-\subsection{Selección de modelos}
-
-Se eligieron modelos preentrenados para disponer de una primera solución en CPU
-sin entrenar una red con la pequeña colección disponible. YuNet localiza el
-rostro y SFace extrae una representación para comparar identidades.
-La API de OpenCV permite alinear y recortar la cara antes de obtener sus
-características~\cite{opencv}. Se utilizan las versiones YuNet 2023mar y
-SFace 2021dec; los archivos descargados se verifican mediante tamaño y SHA-256.
-
-Esta elección permite reutilizar modelos e interfaces disponibles y concentrar
-el desarrollo en los datos, el criterio de decisión y la integración.
-Todavía no se realizó una comparación experimental sistemática con otros
-detectores o descriptores faciales.
-
-\subsection{Datos y partición}
-
-La colección local contiene \textbf{26 fotografías de cinco alumnos}.
-Las etiquetas proceden de las carpetas de identidad. Se comprobó la ausencia
-de duplicados exactos y se conservó un manifiesto con rutas, hashes y roles.
-
-\begin{table}[htbp]
-  \centering
-  \begin{tabular}{lr}
-    \hline
-    \textbf{Conjunto} & \textbf{Fotografías}\\
-    \hline
-    Galería de referencia & 16\\
-    Calibración & 5\\
-    Evaluación reservada & 5\\
-    \hline
-    Total & 26\\
-    \hline
-  \end{tabular}
-  \caption{Partición facial local utilizada en la evaluación preliminar.}
-  \label{tab:particion}
-\end{table}
-
-La división inicial es determinista por archivo. Las últimas dos fotografías de
-cada identidad se reservan para calibración y evaluación; las restantes forman
-la galería. Esta separación es exploratoria: fotografías de una misma toma no
-son observaciones independientes y pueden producir resultados optimistas.
-Se requieren posteriormente tomas de otros días y fotografías impresas.
-
-Las consultas reservadas no se utilizan como referencias. Los umbrales se
-ajustan solo con calibración y permanecen fijos durante la evaluación.
-La incorporación de imágenes nuevas requiere revisar y regenerar explícitamente
-el manifiesto, construir la galería y repetir la calibración y evaluación.
-
-\subsection{Detección, alineación y descripción}
-
-Las imágenes se reducen en memoria a un máximo de 960 píxeles por lado.
-La implementación requiere exactamente una cara útil, con confianza de
-detección de al menos 0.85 y tamaño mínimo de 32 píxeles.
-La confianza de detección no representa la probabilidad de que la persona
-pertenezca a una identidad de la galería.
-
-Tras alinear la cara, SFace produce un vector de 128 componentes. Si
-$f(x)$ es el descriptor de la imagen $x$, su normalización y comparación se
-expresan como
-\begin{equation}
-  z(x)=\frac{f(x)}{\lVert f(x)\rVert_2},
-  \qquad c(x,r)=z(x)^\top z(r).
-  \label{eq:coseno}
-\end{equation}
-Las puntuaciones de similitud no se interpretan como porcentajes ni
-probabilidades. Las entradas sin rostro, con varias caras o con extracción
-inválida se rechazan.
-
-\subsection{Puntuación por identidad y criterio de aceptación}
-
-Para cada identidad $i$, se seleccionan sus dos referencias más parecidas a la
-consulta, o una si solo existe una referencia válida. Si $n_i$ es el número de
-referencias de esa identidad y $T_i(x)$ contiene las $k_i=\min(2,n_i)$ mejores,
-la puntuación utilizada es
-\begin{equation}
-  S_i(x)=\frac{1}{k_i}\sum_{r\in T_i(x)}c(x,r).
-  \label{eq:puntuacion}
-\end{equation}
-
-Sean $i^\star$ la identidad con mayor puntuación y $\Delta$ la diferencia
-respecto de la segunda identidad:
-\begin{equation}
-  i^\star=\arg\max_i S_i(x),
-  \qquad
-  \Delta=S_{i^\star}(x)-\max_{j\ne i^\star}S_j(x).
-\end{equation}
-Para una consulta válida y al menos dos identidades disponibles, la decisión es
-\begin{equation}
-  \widehat y =
-  \begin{cases}
-    i^\star, & S_{i^\star}(x)\geq\tau\ \text{y}\ \Delta\geq\mu,\\
-    \text{NO\_CONCLUYENTE}, & \text{en otro caso}.
-  \end{cases}
-  \label{eq:decision}
-\end{equation}
-Los empates se rechazan. En la colección local, la calibración fijó
-$\tau=0.5726$ y $\mu=0.2691$, valores redondeados para este informe.
-Estos parámetros no se relajaron al observar los resultados reservados.
-
-También se ensayó el rechazo retirando temporalmente la identidad correcta de
-la galería. Ese negativo simulado no reemplaza evaluar personas desconocidas
-independientes.
-
-La consulta externa incorporada en el notebook utiliza el mismo extractor,
-galería y criterio. Muestra la decisión y el ranking completo; la imagen
-consultada no se añade a las referencias ni modifica los umbrales.
-La visualización está desactivada por defecto para evitar conservar fotografías
-personales en las salidas compartidas.
-
-\section{Reconocimiento de gestos y control}
-
-\subsection{Puntos de la mano y reglas geométricas}
-
-MediaPipe Hand Landmarker estima 21 puntos de la mano~\cite{mediapipe}.
-Sobre esas posiciones se construyó un clasificador propio; la salida del modelo
-se transforma en órdenes mediante reglas de extensión, flexión y orientación
-de los dedos.
-
-Las coordenadas normalizadas se convierten a píxeles antes de calcular ángulos
-y distancias, para respetar la geometría de imágenes rectangulares.
-Se comparan las articulaciones de los cuatro dedos largos; el pulgar no define
-las órdenes de esta convención. Las zonas ambiguas producen una parada.
-La Tabla~\ref{tab:gestos} resume la versión utilizada.
-
-\begin{table}[htbp]
-  \centering
-  \begin{tabularx}{\textwidth}{@{}YP{4.3cm}@{}}
-    \hline
-    \textbf{Gesto o condición} & \textbf{Orden}\\
-    \hline
-    Índice hacia arriba; los otros tres dedos largos flexionados & Avanzar\\
-    Índice hacia la derecha del operador, frente a la webcam &
-    Girar a la derecha del robot\\
-    Índice hacia la izquierda del operador, frente a la webcam &
-    Girar a la izquierda del robot\\
-    Palma abierta, ausencia de mano, ambigüedad o más de una mano & Detener\\
-    \hline
-  \end{tabularx}
-  \caption{Convención gestual de la versión principal.}
-  \label{tab:gestos}
-\end{table}
-
-La imagen de entrada no se refleja. El eje horizontal se interpreta una sola
-vez para que la derecha del operador corresponda al giro derecho del robot.
-Se mantienen los signos ROS: velocidad angular positiva para izquierda y
-negativa para derecha. Los giros son continuos sobre el sitio.
-
-\subsection{Confirmación temporal y caducidad}
-
-Una orden de movimiento debe mantenerse durante 0.4 s antes de activarse.
-Los cambios de dirección pasan primero por detenerse y requieren una nueva
-confirmación. La palma y las condiciones inválidas se traducen directamente
-en detener, sin esperar la confirmación de una orden de movimiento.
-
-Además, el puente comprueba la antigüedad de la captura con un reloj monotónico.
-La condición de caducidad es
-\begin{equation}
-  t_{\mathrm{actual}}-t_{\mathrm{captura}}>0.5\ \mathrm{s}
-  \quad\Longrightarrow\quad \text{DETENER}.
-  \label{eq:caducidad}
-\end{equation}
-La vigilancia no depende de recibir otra imagen. El protocolo asume el reloj
-monotónico compartido por la laptop y su contenedor; no debe trasladarse sin
-adaptación a procesos en computadoras diferentes.
-
-\subsection{Integración y velocidades configuradas}
-
-La percepción genera una orden estructurada en JSON que se entrega por la
-entrada estándar del proceso ROS. El puente transforma la orden en
-velocidad lineal y angular. En simulación se utiliza el reloj de Gazebo; para
-el robot físico se configura tiempo real, sin exigir el tópico de reloj
-simulado.
-
-\begin{table}[htbp]
-  \centering
-  \begin{tabular}{lrr}
-    \hline
-    \textbf{Orden} & \textbf{Lineal (m/s)} & \textbf{Angular (rad/s)}\\
-    \hline
-    Avanzar & 0.306 & 0\\
-    Izquierda & 0 & $+1.90$\\
-    Derecha & 0 & $-1.90$\\
-    Detener & 0 & 0\\
-    \hline
-  \end{tabular}
-  \caption{Valores configurados actualmente; falta revalidar los últimos ajustes
-  y medir la parada en hardware.}
-  \label{tab:velocidades}
-\end{table}
-
-La existencia de una parada por caducidad no garantiza detener el robot ante
-la muerte del propio proceso ROS o la pérdida de comunicación inalámbrica.
-La implementación actual tampoco incluye una barrera protectora basada en
-LiDAR. Estas limitaciones deben considerarse al interpretar las pruebas físicas.
-
-\section{Navegación autónoma y coordinación de misión}
-
-\pendiente{Seleccionar, implementar y validar la estrategia de Task A y el
-supervisor que coordine reconocimiento, retorno y anuncio.}
-
-La navegación debe encontrar B en una configuración no conocida y permitir
-el regreso a A. Antes de elegir la estrategia, es necesario confirmar cómo se
-señalizan las zonas, qué geometrías puede presentar el circuito y qué
-observación previa está permitida.
-
-La implementación final deberá especificar la representación del entorno,
-los sensores utilizados, la decisión de avance y giro, la detección de llegada
-a B y la referencia empleada para recuperar A. También deberá definir la
-respuesta ante falta de un paso seguro.
-
-SLAM, exploración y planificación resuelven funciones distintas. La selección
-de herramientas debe justificarse con las condiciones del circuito y sus
-pruebas; todavía no existe una estrategia autónoma validada.
-
-Para ambas modalidades falta integrar la captura de la fotografía en B,
-conservar la identidad aceptada y producir el anuncio al regresar a A.
-En Task B, el supervisor no debe introducir movimientos autónomos de navegación.
-El anuncio se implementará en el formato que confirme el profesor; no se
-presupone que deba ser mediante voz.
-
-\section{Evaluación preliminar}
-
-\subsection{Reconocimiento facial local}
-
-Los archivos locales de partición, criterio y evaluación permiten reproducir
-los resultados de la Tabla~\ref{tab:resultados}. Se utilizaron cinco consultas
-reservadas y se mantuvieron fijos los parámetros calibrados.
-
-\begin{table}[htbp]
-  \centering
-  \begin{tabular}{lr}
-    \hline
-    \textbf{Resultado} & \textbf{Cantidad}\\
-    \hline
-    Consultas reservadas & 5\\
-    Identificaciones correctas & 4\\
-    Rechazos & 1\\
-    Identificaciones incorrectas & 0\\
-    \hline
-    Negativos simulados rechazados & 5 de 5\\
-    \hline
-  \end{tabular}
-  \caption{Evaluación exploratoria de la colección local: 26 fotos y cinco
-  identidades.}
-  \label{tab:resultados}
-\end{table}
-
-El rechazo de una consulta válida forma parte del resultado y no se oculta
-como si esa imagen no hubiera sido evaluada. La muestra pequeña, la separación
-por archivo y las tomas próximas impiden extrapolar estos resultados a
-impresiones vistas desde el robot o a personas nuevas.
-
-Pasaron 14 pruebas del módulo facial. La consulta adicional se comprobó con
-archivo ausente, una fotografía reservada y una imagen negra. Esta última
-produjo \texttt{NO\_CONCLUYENTE/SIN\_ROSTRO}. Las pruebas de software no equivalen
-a intentos de misión ni miden por sí solas la precisión en el circuito.
-
-\subsection{Simulación, control y cámara del robot}
+La comunicación entre el host y el entorno ROS~2 se realiza mediante flujos
+estructurados con marcas de tiempo monotónicas compartidas, manteniendo la
+recepción de video de la cámara del robot en un canal independiente limitado a
+$5\ \mathrm{FPS}$ para visualización y análisis sin interferir con el envío de
+comandos de parada. La Tabla~\ref{tab:componentes} resume la responsabilidad y
+el estado de verificación de cada subsistema.
 
 \begin{table}[htbp]
   \centering
   \small
-  \begin{tabularx}{\textwidth}{@{}P{5.0cm}Y@{}}
+  \begin{tabularx}{\textwidth}{@{}P{4.2cm}P{5.4cm}Y@{}}
     \hline
-    \textbf{Evidencia disponible} & \textbf{Alcance y límite}\\
+    \textbf{Subsistema} & \textbf{Función metodológica} & \textbf{Estado de validación}\\
     \hline
-    Control por gestos en Gazebo &
-    Integración confirmada en simulación; requiere validación física.\\
-    Movimiento físico por teclado y gestos &
-    Pruebas preliminares de conexión y control; sin misión completa registrada.\\
-    51 pruebas locales de Task B superadas durante el desarrollo &
-    Casos de lógica, protocolos, paradas y transporte de video; no son intentos
-    con el robot.\\
-    Aproximadamente 10 mensajes de imagen/s en la Raspberry Pi &
-    Recepción local durante un ensayo aislado; no demuestra video visible ni
-    latencia de extremo a extremo en la laptop.\\
-    Ensayo final de cámara fallido &
-    Falta localizar el punto de fallo y repetir la prueba en el laboratorio.\\
+    Reconocimiento facial &
+    Detección, alineación, descripción y decisión con rechazo explícito &
+    Validado localmente con galería ampliada y pruebas unitarias\\
+    Entrada nominal y panel &
+    Selección previa del objetivo y confirmación en vivo en 3 fotogramas &
+    Probado en ventana visual y ensayos combinados en robot\\
+    Percepción gestual (Task~B) &
+    Estimación de mano, reglas geométricas y confirmación temporal &
+    Confirmado en simulación Gazebo y en hardware real\\
+    Puente ROS y caducidad &
+    Traducción a comandos con estampa de tiempo y parada por expiración &
+    Confirmado en simulación y pruebas físicas preliminares\\
+    Evasión LiDAR y odometría &
+    Análisis de cobertura por sectores, TF y control angular de giros &
+    Probado en pruebas unitarias y movimiento físico preliminar\\
+    Detección de señales de giro &
+    Identificación de flechas azules y rojas con prioridad ante muro &
+    Validado en 17 pruebas unitarias y láminas de referencia\\
+    Supervisor integral Task~A &
+    Detección de meta A/B por etapa, barrido en B, lector QR y vuelta &
+    En integración final sobre la base modular actual\\
     \hline
   \end{tabularx}
-  \caption{Comprobaciones parciales disponibles al redactar el informe.}
-  \label{tab:evidencia}
+  \caption{Subsistemas de la arquitectura propuesta y estado de madurez.}
+  \label{tab:componentes}
 \end{table}
 
-El movimiento gestual físico se comprobó antes de los últimos ajustes de
-velocidad y sentido. La versión vigente debe revalidarse en otra visita.
-Todavía no se midieron tiempos de frenado ni latencia completa de control.
+\section{Algoritmos de visión por computadora}
 
-En la cámara se observaron fallos de disponibilidad y arranque del controlador
-OAK-D, además de un antecedente de baja tensión. No se ha aislado una causa
-definitiva. Las próximas pruebas deben distinguir el flujo dentro de la
-Raspberry Pi, la recepción en Docker y la decodificación del panel de la laptop.
+\subsection{Reconocimiento facial: YuNet, SFace y criterio dual con rechazo}
+\label{sec:algoritmo_facial}
 
-\section{Limitaciones y plan de validación}
-
-Las principales limitaciones son el tamaño de la colección facial, la
-dependencia entre fotografías de una misma toma, la falta de pruebas con
-impresiones y el acceso limitado al robot. A ello se suman la entrada de video
-inestable, la ausencia de una navegación autónoma validada y la coordinación
-de misión todavía incompleta.
-
-Las siguientes comprobaciones permitirán completar el informe:
+El subsistema facial sigue un flujo de cuatro etapas diseñado para operar en
+CPU con colecciones de tamaño reducido sin reentrenar redes profundas~\cite{opencv}:
 
 \begin{enumerate}
-  \item Estabilizar la cámara y medir frecuencia, antigüedad de imagen y
-  pérdidas por etapa.
-  \item Evaluar impresiones reservadas con variaciones de distancia,
-  inclinación e iluminación, junto con identidades desconocidas independientes.
-  \item Medir aciertos, confusiones y activaciones involuntarias de los gestos
-  con diferentes operadores.
-  \item Verificar los sentidos de giro, las velocidades configuradas y el
-  tiempo real de parada.
-  \item Implementar y comprobar Task A en configuraciones distintas del circuito.
-  \item Integrar reconocimiento, retorno y anuncio en las dos modalidades y
-  registrar todos los intentos, incluidos los fallidos.
+  \item \textbf{Preprocesamiento y detección:} cada imagen se reescala en
+  memoria manteniendo su relación de aspecto hasta un lado máximo de
+  $960\ \mathrm{px}$. El detector \textbf{YuNet} (arquitectura convolucional
+  ligera para detección de rostros y cinco puntos clave: ojos, nariz y
+  comisuras) localiza rostros candidatos exigiendo una confianza mínima de
+  detección y un tamaño facial mínimo en píxeles. Para evitar ambigüedades, una
+  consulta solo es válida si contiene \emph{exactamente un rostro útil}; cero o
+  múltiples rostros producen rechazo inmediato.
+
+  \item \textbf{Alineación afín y extracción de características:} usando los
+  cinco puntos faciales de YuNet se aplica alineación geométrica y recorte
+  normalizado, sobre el cual \textbf{SFace} extrae un vector descriptor de
+  $128$ dimensiones $f(x)\in\mathbb{R}^{128}$. Cada descriptor se proyecta a la
+  hiperesfera unitaria mediante normalización $\ell_2$:
+  \begin{equation}
+    z(x)=\frac{f(x)}{\lVert f(x)\rVert_2},
+    \qquad c(x,r)=z(x)^\top z(r),
+    \label{eq:coseno}
+  \end{equation}
+  donde $c(x,r)\in[-1,1]$ mide la similitud coseno entre la consulta $x$ y una
+  referencia $r$ de la galería.
+
+  \item \textbf{Agregación por identidad:} para aumentar la robustez frente a
+  variaciones de pose o expresión sin diluir la puntuación por muestras menos
+  favorables, cada identidad $i$ se puntúa con la media de sus $k_i=\min(2,n_i)$
+  referencias más similares en el conjunto $T_i(x)$:
+  \begin{equation}
+    S_i(x)=\frac{1}{k_i}\sum_{r\in T_i(x)}c(x,r).
+  \end{equation}
+
+  \item \textbf{Regla de decisión con margen y rechazo:} sea $i^\star=\arg\max_i
+  S_i(x)$ el mejor candidato y $\Delta=S_{i^\star}(x)-\max_{j\ne i^\star}S_j(x)$
+  su margen frente al segundo mejor. Se acepta $i^\star$ únicamente si supera
+  simultáneamente un umbral absoluto de similitud $\tau$ y un margen mínimo de
+  separación $\mu$:
+  \begin{equation}
+    \widehat y =
+    \begin{cases}
+      i^\star, & S_{i^\star}(x)\geq\tau\ \text{y}\ \Delta\geq\mu,\\
+      \text{NO\_CONCLUYENTE}, & \text{en otro caso}.
+    \end{cases}
+    \label{eq:decision}
+  \end{equation}
+  Los parámetros $(\tau,\mu)$ se calibran exclusivamente sobre un subconjunto de
+  calibración independiente de la galería y de la evaluación reservada,
+  priorizando cero falsas aceptaciones (incluidos negativos simulados al
+  retirar temporalmente la identidad correcta). En operación en vivo sobre el
+  robot, la confirmación de una identidad exige coincidencia sostenida en tres
+  fotogramas nuevos consecutivos.
 \end{enumerate}
 
-\pendiente{Añadir los resultados de los recorridos completos: llegada a B,
-identificación, regreso a A, tiempo total, colisiones, intervenciones y
-penalizaciones. Los valores pendientes no deben presentarse como ceros medidos.}
+\subsection{Reconocimiento de gestos: MediaPipe y clasificación geométrica}
+\label{sec:algoritmo_gestos}
 
-\section{Conclusiones provisionales}
+Para Task~B se emplea \textbf{MediaPipe Hand Landmarker}~\cite{mediapipe}, que
+estima en dos etapas la región de la palma y las coordenadas tridimensionales
+de $21$ puntos clave de la mano. Sobre dichos puntos se diseñó un clasificador
+geométrico interpretable en lugar de entrenar una red clasificadora adicional:
 
-El trabajo permitió desarrollar por separado un reconocimiento facial con
-criterio de rechazo y un control gestual conectado con ROS 2. La evaluación
-facial local produjo cuatro identificaciones correctas y un rechazo en cinco
-consultas, mientras que la integración gestual se comprobó en simulación y de
-forma preliminar en hardware.
+\begin{itemize}
+  \item \textbf{Normalización geométrica a píxeles:} las coordenadas
+  normalizadas $[0,1]^2$ entregadas por MediaPipe se escalan al ancho y alto
+  reales de la captura antes de evaluar distancias y ángulos, evitando sesgos
+  por relación de aspecto rectangular.
+  \item \textbf{Reglas de extensión y dirección:} se evalúa el estado de
+  extensión de los cuatro dedos largos comparando las articulaciones
+  metacarpofalángicas y las puntas. El índice extendido hacia arriba con los
+  otros tres dedos flexionados ordena \textbf{Avanzar}; el índice extendido
+  lateralmente ordena \textbf{Girar} en el sentido correspondiente al operador
+  frente a la cámara (invirtiendo una única vez la lectura horizontal en la
+  interpretación sin aplicar espejo visual a la imagen); la palma abierta, la
+  ausencia de mano, más de una mano o configuraciones en banda angular ambigua
+  producen \textbf{Detener}.
+  \item \textbf{Estabilidad temporal:} toda orden de movimiento requiere
+  mantenerse estable durante $0.4\ \mathrm{s}$ para activarse; cualquier cambio
+  de sentido obliga a pasar por parada y reiniciar la confirmación, mientras que
+  la palma abierta detiene de forma instantánea.
+\end{itemize}
 
-Estos avances no demuestran todavía la finalización del reto. La evaluación
-definitiva deberá incorporar reconocimiento de la fotografía desde el robot,
-navegación autónoma, retorno, anuncio correcto y tiempos con penalizaciones.
-La separación modular facilita localizar los fallos y repetir las pruebas de
-percepción antes de ejecutar una misión completa.
+\subsection{Percepción visual de señales direccionales para Task A}
+
+Para interpretar los carteles circulares de giro del circuito (flechas azules en
+el tramo de ida y flechas rojas en el de vuelta), se implementó una tubería
+clásica de visión geométrica libre de entrenamiento supervisado:
+
+\begin{enumerate}
+  \item \textbf{Detección de candidatos circulares:} la imagen BGR de la cámara
+  OAK-D se reescala a un ancho máximo de $640\ \mathrm{px}$ y se extraen bordes
+  Canny sobre una combinación máxima entre luminancia y canales azul/rojo para
+  resaltar ambos colores de señal frente al fondo. Se ajustan elipses
+  candidatas con diámetro mínimo de $55\ \mathrm{px}$ y se descartan carteles
+  recortados contra los bordes del encuadre.
+  \item \textbf{Verificación cromática por tramo:} dentro de cada elipse se
+  muestrea el espacio HSV (separando azul en $H\in[90,135]$ y rojo en las dos
+  bandas extremas de matiz $H\le 12$ o $H\ge 168$) y se descartan discos que no
+  correspondan al color activo del tramo actual (\texttt{azul} en ida,
+  \texttt{rojo} en vuelta).
+  \item \textbf{Análisis geométrico de flecha:} dentro de la región interior se
+  evalúa la simetría y orientación de segmentos y vértices de punta para
+  clasificar \texttt{IZQUIERDA} o \texttt{DERECHA}, rechazando discos vacíos,
+  carteles de prohibición/STOP y texturas de fondo.
+  \item \textbf{Confirmación temporal y rearme:} una maniobra solo se dispara si
+  un único cartel del color correcto se detecta de forma consistente en tres
+  fotogramas nuevos consecutivos, y no se rearma hasta acumular al menos
+  $1.5\ \mathrm{s}$ de ausencia visual y $0.4\ \mathrm{m}$ de desplazamiento.
+\end{enumerate}
+
+\section{Estrategias de navegación autónoma, sensores y toma de decisiones}
+
+\subsection{Integración sensorial y autoridad única}
+
+La seguridad del robot se apoya en cuatro flujos sensoriales integrados bajo el
+principio de \textbf{autoridad única de velocidad}: un único nodo supervisor en
+ROS~2 publica mensajes \texttt{TwistStamped} en \texttt{/cmd\_vel}, anulando el
+movimiento a $(0,0)$ ante la expiración o invalidez de cualquier fuente:
+
+\begin{itemize}
+  \item \textbf{RPLIDAR (\texttt{/scan}):} transformado al marco del chasis
+  (\texttt{base\_link} $\rightarrow$ \texttt{rplidar\_link}) mediante el árbol
+  estático de transformaciones (TF) para corregir la rotación de montaje del
+  sensor. Toda lectura con antigüedad $>0.6\ \mathrm{s}$ bloquea el avance.
+  \item \textbf{Odometría (\texttt{/odom}):} validada en finitud numérica,
+  norma unitaria de cuaternión y estabilidad de marcos de referencia (un cambio
+  inesperado de marco revoca el permiso de movimiento). Registra la posición
+  inicial~A tras confirmar sensores válidos y mide la variación angular en giros.
+  \item \textbf{Cámara OAK-D:} entregada con perfil QoS de sensores en canal
+  separado, validando dimensiones de trama y caducidad de recepción de
+  $1.0\ \mathrm{s}$.
+  \item \textbf{Latido de control del host:} el proceso de percepción envía
+  órdenes de estado con caducidad de $0.5\ \mathrm{s}$ medidas sobre reloj
+  monotónico compartido; la pérdida de latido o el fin de flujo detiene el
+  robot.
+\end{itemize}
+
+\subsection{Evasión reactiva conservadora y control de giros (Task A)}
+
+La estrategia de navegación autónoma combina evasión local basada en LiDAR con
+maniobras discretas guiadas por las señales visuales y cerradas por odometría:
+
+\begin{enumerate}
+  \item \textbf{Evasión LiDAR por cobertura de sectores:} el escaneo se divide
+  en un cono frontal ($\pm 35^\circ$) y dos sectores laterales. A diferencia de
+  enfoques ingenuos que consideran cualquier rayo sin retorno ($+\infty$) como
+  espacio libre, cada sector exige una \textbf{cobertura mínima del $30\%$} de
+  lecturas finitas (al menos $3$ rayos útiles) y $\le 10\%$ de errores
+  (\texttt{NaN} o fuera de rango). Si un sector carece de cobertura suficiente,
+  se declara no observable y fuerza parada inmediata. Con cobertura válida, el
+  robot avanza a $0.10\ \mathrm{m/s}$, reduce o corrige ante precaución a
+  $0.45\ \mathrm{m}$ y detiene el avance si un obstáculo frontal entra a
+  $0.32\ \mathrm{m}$ o un lateral a $0.28\ \mathrm{m}$, girando a
+  $0.40\ \mathrm{rad/s}$ hacia el costado más despejado.
+
+  \item \textbf{Arbitraje con señales direccionales:} cuando aparece una flecha
+  confirmada correspondiente al color del tramo, su dirección tiene prioridad
+  sobre la preferencia lateral de la evasión ante un muro. El robot ejecuta un
+  giro controlado de $90^\circ \pm 5^\circ$ integrando la diferencia angular de
+  odometría (con manejo continuo de cruces en $\pm\pi$). Si durante el giro la
+  holgura lateral o frontal cae por debajo de $0.32\ \mathrm{m}$ o falla el
+  LiDAR/TF, se detiene sin invertir jamás el sentido ordenado por la señal; si
+  excede la tolerancia angular o agota $12\ \mathrm{s}$, enclava parada de
+  seguridad.
+
+  \item \textbf{Transición hacia reconocimiento y retorno:} durante el prototipo
+  actual, al detectar el rostro objetivo en tres fotogramas nuevos se pausa de
+  inmediato el desplazamiento. Para completar el contrato integral de
+  competición, esta lógica se extiende con la detección de señal de meta para
+  separar el recorrido en etapas (evitando confundir A y B), un barrido
+  rotacional en B para ubicar el rostro solicitado entre varias fotos, la
+  lectura exclusiva del QR vinculado a esa fotografía y la conmutación al tramo
+  de señales rojas para regresar a~A.
+\end{enumerate}
+
+\section{Justificación de modelos, algoritmos y decisiones de diseño}
+
+La Tabla~\ref{tab:justificacion} resume los principales criterios técnicos que
+guiaron la selección de modelos y los compromisos de ingeniería asumidos frente
+a otras alternativas.
+
+\begin{table}[htbp]
+  \centering
+  \small
+  \begin{tabularx}{\textwidth}{@{}P{3.4cm}P{4.2cm}Y@{}}
+    \hline
+    \textbf{Elección adoptada} & \textbf{Alternativa considerada} & \textbf{Justificación técnica y compromiso}\\
+    \hline
+    YuNet + SFace preentrenados en CPU &
+    Entrenamiento propio o inferencia en nube/GPU &
+    Opera sin conexión a internet (requisito del laboratorio) ni GPU, con
+    alineación facial integrada; exige cuidar iluminación y calidad de galería.\\
+    Decisión dual $(\tau,\mu)$ con rechazo &
+    Vecino más cercano que siempre etiqueta &
+    Minimiza penalizaciones por falsa identificación en competición, aceptando
+    rechazar fotogramas borrosos o ambiguos.\\
+    MediaPipe + reglas geométricas (Task~B) &
+    Clasificador neuronal de gestos propio &
+    Evita recolectar y etiquetar miles de manos, ofrece interpretabilidad directa
+    y permite imponer bandas muertas de seguridad y confirmación de $0.4\ \mathrm{s}$.\\
+    Visión geométrica Canny/HSV para flechas &
+    Detector de objetos YOLO reentrenado &
+    No requiere dataset de entrenamiento de carteles y permite ajustar
+    tolerancias de color por tramo; resulta sensible a variaciones extremas de
+    iluminación o oclusión parcial.\\
+    Navegación reactiva + señales + odometría frente a solo SLAM/Nav2 &
+    Dependencia única de \texttt{slam\_toolbox} + Nav2 &
+    Aunque se evaluó una base SLAM/Nav2 con exploración por fronteras, su
+    ajuste en pasillos estrechos con desfases de reloj Create~3/Pi resultó
+    frágil y no incorporaba flechas ni QR; la estrategia reactiva da control
+    directo, aunque exige integrar explícitamente la meta y el retorno.\\
+    Cobertura LiDAR mínima del $30\%$ como bloqueo &
+    Tratar rayos $+\infty$ como camino despejado &
+    Evita colisiones ante zonas ciegas o pérdida de retornos en hardware real;
+    redujo falsos paros al calibrarse de $50\%$ a $30\%$ tras medir $37$--$47\%$
+    de retornos finitos.\\
+    Procesamiento en host + canal de video a $5\ \mathrm{FPS}$ &
+    Ejecución completa a bordo o video crudo sin límite &
+    Facilita depuración y protege \texttt{/cmd\_vel} de congestión Wi-Fi;
+    depende de mantener reloj monotónico compartido y conexión inalámbrica.\\
+    \hline
+  \end{tabularx}
+  \caption{Justificación de selección de modelos, algoritmos y decisiones de diseño.}
+  \label{tab:justificacion}
+\end{table}
+
+\section{Resultados experimentales preliminares}
+\label{sec:resultados}
+
+\subsection{Evaluación del reconocimiento facial}
+
+La metodología facial se evaluó en cortes progresivos manteniendo siempre
+separadas las referencias de galería, el conjunto de calibración y las
+consultas reservadas (Tabla~\ref{tab:resultados_facial}).
+
+\begin{table}[htbp]
+  \centering
+  \small
+  \begin{tabularx}{\textwidth}{@{}P{4.5cm}cccY@{}}
+    \hline
+    \textbf{Corte experimental} & \textbf{Consultas} & \textbf{Aciertos} & \textbf{Errores} & \textbf{Rechazos y negativos simulados}\\
+    \hline
+    Colección inicial (26 fotos, 5 identidades) &
+    5 & 4 & 0 &
+    1 rechazo por similitud baja; 5/5 negativos simulados rechazados
+    ($\tau=0.5726$, $\mu=0.2691$).\\
+    Corte intermedio (6 identidades) &
+    6 & 4 & 0 &
+    2 rechazos (ambigüedad / similitud insuficiente); 6/6 negativos simulados
+    rechazados ($\tau=0.5735$, $\mu=0.2498$).\\
+    Galería ampliada (74 fotos, 13 identidades) &
+    13 & 13 & 0 &
+    0 rechazos; 13/13 negativos simulados rechazados (47 referencias válidas,
+    13 calibración, 13 evaluación).\\
+    \hline
+  \end{tabularx}
+  \caption{Resultados exploratorios de reconocimiento facial en particiones
+  locales reservadas.}
+  \label{tab:resultados_facial}
+\end{table}
+
+Los cortes muestran cero identificaciones incorrectas en todas las evaluaciones
+y rechazo completo de los negativos simulados; sin embargo, al provenir de
+colecciones locales pequeñas, aún deben validarse sistemáticamente con
+fotografías impresas vistas desde la cámara del robot en pista y con personas
+desconocidas independientes.
+
+\subsection{Pruebas de integración, simulación y robot físico}
+
+De manera paralela a la evaluación facial, el sistema cuenta con pruebas
+automatizadas y ensayos físicos parciales:
+\begin{itemize}
+  \item \textbf{Verificación de software:} se registraron \textbf{164 pruebas
+  unitarias} superadas en desarrollo (113 correspondientes a Task~A y 51 a
+  Task~B), incluidas 17 pruebas específicas de detección y control de señales
+  direccionales sobre las 10 láminas del archivo de referencia y sus reflejos
+  horizontales.
+  \item \textbf{Task~B (gestos):} se confirmó el control completo en simulación
+  Gazebo y en movimiento físico sobre el robot real con envío de comandos
+  \texttt{TwistStamped}, además de recepción de video comprimido en panel
+  lateral a $5\ \mathrm{FPS}$.
+  \item \textbf{Task~A (autónoma):} se confirmó movimiento físico en el robot
+  real combinando evasión LiDAR y reconocimiento facial en vivo, ensayo en el
+  cual se observaron coberturas finitas de $37$--$47\%$ y pausas puntuales de
+  recepción de hasta $1.66\ \mathrm{s}$, lo que permitió ajustar los umbrales de
+  seguridad y cobertura. Las pruebas físicas de giros con carteles impresos,
+  lectura QR y retorno completo permanecen en ejecución de laboratorio.
+\end{itemize}
+
+\pendiente{Incorporar la tabla oficial de resultados en competición para
+Task~A y Task~B: llegada a B, persona solicitada, palabra QR (Task~A), retorno a
+A, tiempo total, colisiones, intervenciones y puntuación final.}
+
+\section{Limitaciones y mejoras futuras}
+
+A partir de las pruebas realizadas se identificaron las principales limitaciones
+del sistema actual y sus líneas concretas de mejora:
+
+\begin{enumerate}
+  \item \textbf{Dependencia de iluminación y plano único del LiDAR:} la
+  detección de flechas en HSV puede degradarse bajo sombras fuertes o reflejos, y
+  el LiDAR bidimensional no percibe obstáculos muy bajos por debajo de su altura
+  de montaje. \emph{Mejora futura:} incorporar calibración adaptativa de balance
+  de blancos/luminancia y fusionar la nube de puntos de profundidad de la cámara
+  OAK-D para obstáculos bajos.
+  \item \textbf{Choques diagonales y huella del robot:} la evaluación por
+  sectores discretos (frontal e izquierdo/derecho) no certifica toda la
+  envolvente circular del chasis en giros cercanos a esquinas. \emph{Mejora
+  futura:} proyectar la huella geométrica completa del robot sobre los puntos
+  del escáner o reintegrar un mapa de costos local con control de colisiones.
+  \item \textbf{Completitud de la secuencia final de Task~A:} el prototipo
+  reconoce rostros durante el avance y todavía no cierra el ciclo completo de
+  meta~B, barrido facial multi-foto, lectura QR asociada y vuelta autónoma a~A.
+  \emph{Mejora futura:} integrar la máquina de estados por etapas con detector de
+  meta, decodificador QR espacialmente acotado a la caja facial confirmada y
+  navegación de retorno por señales rojas más verificación odométrica/visual
+  de~A.
+  \item \textbf{Latencia inalámbrica y desacoplamiento de red:} el transporte de
+  video y órdenes entre laptop y robot depende de la estabilidad del router de
+  laboratorio, con pausas observadas de hasta $1.66\ \mathrm{s}$ en recepción.
+  \emph{Mejora futura:} medir cuantitativamente los tiempos de frenado y latencia
+  de extremo a extremo, y migrar la inferencia liviana (detección de señales y
+  parada de emergencia) directamente a bordo de la Raspberry~Pi del robot.
+  \item \textbf{Generalización facial en impresiones:} las pruebas actuales se
+  apoyan en fotografías digitales de colección pequeña y negativos simulados.
+  \emph{Mejora futura:} ampliar la evaluación con carteles impresos a distintas
+  distancias y ángulos capturados directamente por la cámara OAK-D del robot.
+\end{enumerate}
 
 \clearpage
 \phantomsection
@@ -605,58 +602,101 @@ OpenCV.
 \emph{DNN-based Face Detection and Recognition}.
 \href{https://docs.opencv.org/4.x/d0/dd4/tutorial_dnn_face.html}
 {Documentación oficial de detección, alineación y reconocimiento facial}.
-Consulta: 7 de noviembre de 2026.
+Consulta: noviembre de 2026.
 
 \bibitem{mediapipe}
 Google AI Edge.
 \emph{Hand Landmarker}.
 \href{https://developers.google.com/edge/mediapipe/solutions/vision/hand_landmarker}
-{Documentación oficial de los puntos de la mano}.
-Consulta: 7 de noviembre de 2026.
+{Documentación oficial de estimación de puntos de la mano}.
+Consulta: noviembre de 2026.
 
 \bibitem{ros2}
 ROS 2.
-\emph{Topics}, documentación Jazzy.
+\emph{Topics y arquitectura DDS}, documentación Jazzy.
 \href{https://github.com/ros2/ros2_documentation/blob/jazzy/source/Concepts/Basic/About-Topics.rst}
 {Referencia oficial de comunicación mediante tópicos}.
-Consulta: 7 de noviembre de 2026.
+Consulta: noviembre de 2026.
 
 \end{thebibliography}
 
+\clearpage
 \appendix
-\section{Reproducibilidad y evidencias por completar}
+\section{Detalles de implementación y trazabilidad de módulos}
 
-Los originales, descriptores y resultados personales se conservan localmente
-y fuera de Git. La versión compartida de los notebooks no incluye las salidas
-con fotografías. Se mantiene una galería etiquetada y un manifiesto auditable;
-la incorporación de fotos nuevas exige repetir el proceso sin reutilizar la
-evaluación para ajustar parámetros.
+En concordancia con el enfoque metodológico del cuerpo principal, este apéndice
+resume la correspondencia entre los subsistemas descritos y los archivos de
+implementación del repositorio. Los datos personales, pesos preentrenados
+(\texttt{.onnx}, \texttt{.task}) y registros locales de sesión permanecen fuera
+del control de versiones conforme a \texttt{.gitignore}.
 
 \begin{table}[htbp]
   \centering
-  \small
-  \begin{tabularx}{\textwidth}{@{}P{5.4cm}Y@{}}
+  \footnotesize
+  \begin{tabularx}{\textwidth}{@{}P{6.2cm}Y@{}}
     \hline
-    \textbf{Archivo o componente} & \textbf{Evidencia}\\
+    \textbf{Módulos de implementación} & \textbf{Detalle técnico y protocolos}\\
     \hline
-    Notebook facial y módulo de reconocimiento &
-    Partición, extracción, calibración y consulta externa\\
-    \texttt{particion\_rostros.json} &
-    Roles de las fotografías y sus hashes\\
-    \texttt{criterio.json} y \texttt{evaluacion.json} &
-    Parámetros calibrados y resultados reservados\\
-    Reglas y puente de gestos &
-    Convención, confirmación temporal y caducidad\\
-    Registros de misión &
-    Pendientes de completar con los recorridos de ambas modalidades\\
+    \texttt{task 1/reconocimiento\_\allowbreak facial.py}\\
+    \texttt{task 1/modelos\_\allowbreak rostros.py}\\
+    \texttt{task 1/01\_\allowbreak reconocimiento\_\allowbreak rostros.ipynb} &
+    Carga verificada por SHA-256 de YuNet y SFace; partición auditable en
+    \texttt{particion\_\allowbreak rostros.json}; calibración y evaluación
+    separadas.\\
+    \texttt{task 1/interfaz\_\allowbreak facial.py}\\
+    \texttt{task 1/prueba\_\allowbreak facial\_\allowbreak robot.py} &
+    Panel OpenCV en vivo con entrada de nombre objetivo sin tildes, sugerencias
+    de galería y confirmación en tres fotogramas nuevos.\\
+    \texttt{task 1/evasion\_\allowbreak lidar.py}\\
+    \texttt{task 1/busqueda\_\allowbreak lidar\_\allowbreak ros.py}\\
+    \texttt{task 1/control\_\allowbreak busqueda.py} &
+    Lógica de cobertura LiDAR ($\ge 30\%$, máx. $10\%$ errores), verificación de
+    TF (\texttt{base\_\allowbreak link} $\rightarrow$ \texttt{rplidar\_\allowbreak link}),
+    validación de \texttt{/odom} y puerta única sobre \texttt{/cmd\_\allowbreak vel}
+    (\texttt{TwistStamped}).\\
+    \texttt{task 1/geometria\_\allowbreak senales.py}\\
+    \texttt{task 1/senales\_\allowbreak giro.py}\\
+    \texttt{task 1/control\_\allowbreak giros.py} &
+    Detección geométrica de discos/flechas (HSV azul/rojo, Canny, elipses) y
+    control odométrico de giros de $90^\circ \pm 5^\circ$ con enclavamiento de
+    seguridad y rearme temporal/espacial.\\
+    \texttt{task 1/busqueda\_\allowbreak robot.py}\\
+    \texttt{task 1/ejecutar\_\allowbreak autonomo\_\allowbreak robot.sh} &
+    Orquestador host--Docker con modos aislados (\texttt{--solo-evasion},
+    \texttt{--solo-reconocimiento}, \texttt{--solo-senales},
+    \texttt{--evasion-reconocimiento}) sin copiar datos faciales al contenedor.\\
+    \texttt{task 2/gestos.py}\\
+    \texttt{task 2/control\_\allowbreak gestos.py}\\
+    \texttt{task 2/puente\_\allowbreak gestos\_\allowbreak ros.py}\\
+    \texttt{task 2/webcam\_\allowbreak gestos.py} &
+    Clasificador MediaPipe (21 puntos), filtro de $0.4\ \mathrm{s}$, puente
+    JSON por \texttt{stdin} con vigilante monotónico a $20\ \mathrm{Hz}$ y
+    caducidad de $0.5\ \mathrm{s}$.\\
+    \texttt{task 2/camara\_\allowbreak robot.py}\\
+    \texttt{task 2/camara\_\allowbreak robot\_\allowbreak ros.py} &
+    Transporte separado de fotogramas OAK-D comprimidos hacia el host a un
+    máximo de $5\ \mathrm{FPS}$ y caducidad de $1.0\ \mathrm{s}$.\\
+    \texttt{task 1/tests/} y \texttt{task 2/tests/} &
+    Conjunto de 164 pruebas automatizadas (lógica facial, señales, cobertura
+    LiDAR, protocolos de tiempo real, gestos y transporte de cámara).\\
     \hline
   \end{tabularx}
-  \caption{Fuentes de evidencia del equipo.}
+  \caption{Correspondencia entre subsistemas metodológicos y artefactos de
+  implementación.}
+  \label{tab:apendice_archivos}
 \end{table}
 
-Antes de entregar se deben completar autores y fecha, registrar las versiones
-finales de dependencias, incorporar los ensayos de misión y actualizar las
-conclusiones. Los fragmentos extensos de código que sean necesarios para la
-reproducibilidad se añadirán en este apéndice.
+\section{Protocolo de comunicación y parámetros operativos}
+
+Para garantizar la reproducibilidad en entorno de laboratorio sin conexión a
+internet, la capa de red ROS~2 utiliza descubrimiento DDS en subred con par
+estático explícito (\texttt{rmw\_\allowbreak fastrtps\_\allowbreak cpp},
+\texttt{ROS\_\allowbreak AUTOMATIC\_\allowbreak DISCOVERY\_\allowbreak RANGE=SUBNET}
+y \texttt{ROS\_\allowbreak STATIC\_\allowbreak PEERS}), sincronización horaria de
+la Raspberry~Pi al inicio de cada sesión y contenedores en modo de red
+\texttt{host}. Los parámetros activos de navegación autónoma y señales se
+centralizan en archivos de configuración JSON (\texttt{evasion\_\allowbreak lidar.json}
+y \texttt{senales\_\allowbreak giro.json}) para ajustar umbrales sin alterar el
+código de control.
 
 \end{document}
