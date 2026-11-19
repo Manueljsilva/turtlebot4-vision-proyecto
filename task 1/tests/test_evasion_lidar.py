@@ -1,6 +1,6 @@
 """Regresiones de evasión; no necesitan ROS, Docker ni robot."""
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import math
 from types import SimpleNamespace
 import unittest
@@ -40,11 +40,10 @@ class EvasionLidarTests(unittest.TestCase):
         self.sector(40, 90, 0.20)
         self.assertLess(calcular_velocidad_evasion(self.analizar(), self.cfg)[1], 0)
 
-    def test_precaucion_reduce_avance(self):
+    def test_precaucion_gira_sobre_el_sitio_sin_avance(self):
         self.sector(-15, 15, 0.4)
         vx, wz = calcular_velocidad_evasion(self.analizar(), self.cfg)
-        self.assertGreater(vx, 0)
-        self.assertLess(vx, self.cfg.velocidad_avance)
+        self.assertEqual(vx, 0)
         self.assertNotEqual(wz, 0)
 
     def test_regresion_una_lectura_trasera_no_autoriza_avanzar(self):
@@ -97,8 +96,10 @@ class EvasionLidarTests(unittest.TestCase):
 
     def test_offset_lidar_ubica_obstaculo_al_frente_del_robot(self):
         self.sector(-105, -75, 0.25)
-        self.assertGreater(calcular_velocidad_evasion(self.analizar(), self.cfg)[0], 0)
-        self.assertEqual(calcular_velocidad_evasion(self.analizar(math.pi / 2), self.cfg)[0], 0)
+        self.assertEqual(self.analizar().dist_frente, 2.5)
+        frente_rotado = self.analizar(math.pi / 2)
+        self.assertEqual(frente_rotado.dist_frente, .25)
+        self.assertEqual(calcular_velocidad_evasion(frente_rotado, self.cfg)[0], 0)
 
     def test_configuracion_no_finita_o_fuera_de_limites_se_rechaza(self):
         for nombre in asdict(self.cfg):
@@ -141,7 +142,7 @@ class EvasionLidarTests(unittest.TestCase):
         self.assertTrue(all(s.suficiente for s in estado.sectores))
 
     def test_umbrales_precaucion_y_parada_son_distintos(self):
-        for distancia, avanzar, girar in ((0.46, True, False), (0.44, True, True),
+        for distancia, avanzar, girar in ((0.46, True, False), (0.44, False, True),
                                          (0.31, False, True)):
             with self.subTest(distancia=distancia):
                 self.scan.ranges = [2.5] * 360
@@ -210,8 +211,30 @@ class EvasionLidarTests(unittest.TestCase):
                 self.scan.ranges = [2.5] * 360
                 self.sector(50, 80, distancia)
                 vx, wz = calcular_velocidad_evasion(self.analizar(), self.cfg)
-                self.assertGreater(vx, 0)
+                self.assertEqual(vx, 0. if corregir else self.cfg.velocidad_avance)
                 self.assertEqual(wz < 0, corregir)
+
+    def test_evasion_no_combina_traslacion_y_rotacion_en_ambos_sentidos(self):
+        base = self.analizar()
+        for frente in (.2, .32, .4, .45, .6, 2.):
+            for izquierda in (.2, .27, .4, 1.):
+                for derecha in (.2, .27, .4, 1.):
+                    with self.subTest(frente=frente, izq=izquierda, der=derecha):
+                        estado = replace(base, dist_frente=frente, dist_izquierda=izquierda,
+                            dist_derecha=derecha, peligro_parada=frente <= self.cfg.distancia_parada_m,
+                            precaucion=frente <= self.cfg.distancia_precaucion_m)
+                        vx, wz = calcular_velocidad_evasion(estado, self.cfg)
+                        self.assertFalse(vx != 0 and wz != 0)
+
+    def test_solo_reanuda_avance_cuando_desaparece_la_necesidad_de_girar(self):
+        self.assertEqual(decidir_scan(self.scan, 0., .1, self.cfg)[:2], (.1, 0.))
+        self.sector(-20, 20, .40)
+        vx, wz = decidir_scan(self.scan, 0., .1, self.cfg)[:2]
+        self.assertEqual(vx, 0.)
+        self.assertAlmostEqual(wz, .3)
+        self.assertEqual(decidir_scan(self.scan, 0., .7, self.cfg)[:2], (0., 0.))
+        self.scan.ranges = [2.5]*360
+        self.assertEqual(decidir_scan(self.scan, 0., .1, self.cfg)[:2], (.1, 0.))
 
 
 if __name__ == '__main__':

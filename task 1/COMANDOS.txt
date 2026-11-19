@@ -61,8 +61,9 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
 # Esto NO ejecuta A -> B -> A, reconocimiento, flechas ni QR.
 # Velocidades de esta primera prueba: 0.10 m/s y 0.40 rad/s, independientes de Task 2.
 # Se ajustan en task 1/config/evasion_lidar.json; limites 0.306 m/s y 1.90 rad/s.
-# Precaucion desde 0.45 m; a 0.32 m deja de avanzar y decide el giro con datos validos.
-# Correccion lateral desde 0.28 m. Distancias medidas por el LiDAR.
+# Precaucion desde 0.45 m: avance cero y giro sobre el sitio; a 0.32 m conserva
+# avance cero y usa el giro de emergencia existente con datos validos.
+# Correccion lateral desde 0.28 m: tambien gira con avance cero. Distancias LiDAR.
 # Cobertura minima 30% y al menos tres retornos por sector; NaN/fuera <=10%.
 # Si no hay suficientes retornos, falta TF o pasan 0.6s sin scan, ordena detener.
 # Reiniciar este lanzador aplica cambios locales a Docker; no reiniciar el robot.
@@ -175,3 +176,146 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
 # Al confirmar el rostro sigue detenido; no cambia de tramo ni lee meta/QR todavia.
 # Pendientes: validar señales impresas, sentido/angulo/frenado y reaccion a video retrasado.
 # La edad de imagen mide recepcion local; no detecta por si sola retraso previo del sensor/red.
+
+
+# 13) META B + ROSTRO + QR, PRIMERO SIN MOVIMIENTO
+# Robot cerca de B, bandera del PDF visible. No recorre A -> B ni registra A.
+# Docker/controladores activos; confirmar IP/dominio actuales de COMANDOS_LAB.txt.
+# Cada QR al costado de su foto, a altura similar; separar las parejas.
+bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO" --prueba-meta-b
+# Escribir persona y pulsar Buscar. --nombre solo precarga, no inicia.
+# Espera 3 imagenes nuevas de la bandera. Antes no analiza rostros.
+# Mostrar fotos/QR a la camara (sin mover robot). Comprueba nombres y QR del objetivo.
+# Pausa desde el primer acierto; 3 imagenes nuevas del mismo rostro/palabra confirman.
+# No completa con otro QR, asociacion ambigua, dos fotos del objetivo ni QR ilegible.
+# Resultado textual en datos/sesiones/prueba_b_*.json local ignorado, sin fotos.
+
+
+# 14) EL MISMO ENSAYO CON GIRO SOBRE EL SITIO (SIN AVANCE NI REGRESO)
+# Cerrar el bloque 13 y los controles de gestos/teclado/Nav2/otras evasiones.
+# Colocar el robot cerca de B con espacio para girar; primero ver la bandera.
+bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO" --prueba-meta-b --mover
+# Nombre + Buscar -> bandera 3/3 -> cero y reposo odometrico 0.7 s -> giro hasta 0.25 rad/s.
+# Sin --avanzar-hasta-meta el avance es SIEMPRE 0.
+# Limites: una vuelta medida por odometria o 90 s desde el comienzo del barrido.
+# Camara/interfaz/odometria/LiDAR/TF caducados o espacio insuficiente: cero.
+# Con el primer rostro objetivo aceptado pausa; verifica el QR junto a su foto.
+# Si pierde el objetivo sin completar, continua el barrido dentro de los limites.
+# QR confirmado: guarda palabra, muestra vista de prueba y permanece detenido.
+# Fin de vuelta/plazo/discontinuidad: detenido; cerrar y revisar para repetir.
+# Esc/Salir/Ctrl+C terminan e intentan cero. No usar Ctrl+Z.
+# AUN NO REGRESA: falta orientar salida de B, enlazar rojo y validar una nueva meta A.
+# La edad de recepcion local no mide el retraso previo del video.
+
+
+# 15) AVANZAR CON EVASION HASTA VER META, FRENAR Y BUSCAR ROSTRO/QR
+# Cerrar los otros controles. Ubuntu normal; Docker/controladores ya preparados.
+# Confirmar IP/dominio actuales. Espacio despejado; no mostrar la meta inicial A.
+# La evasion conserva choques diagonales pendientes: no dar el recorrido por validado.
+bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO" \
+  --prueba-meta-b --avanzar-hasta-meta --mover
+# Escribir nombre y pulsar Buscar. Espera camara y sensores frescos antes de avanzar.
+# NAVEGAR = evasion existente (config actual: 0.10 m/s, giro evasivo 0.40 rad/s).
+# Meta 3/3 = enclava fin de avance, publica cero y espera reposo odometrico 0.7 s.
+# Solo despues y con imagen nueva busca rostros girando (<=0.25 rad/s, max. 1 vuelta/90 s).
+# Objetivo aceptado = pausa giro, lee solo su QR y confirma 3 imagenes nuevas.
+# QR listo = JSON local sin fotos y detenido; no registra A ni regresa.
+# Ver CONTROL: para el motivo real de una parada, CAMARA: para el estado del video.
+# Pausa de camara/GUI detiene; recuperar datos no inventa un salto de odometria.
+# Fallo terminal detiene movimiento, pero la vision ya habilitada sigue quieta.
+# Para repetir movimiento tras fallo/límite: cerrar y revisar, no reanuda automaticamente.
+# Detecta bandera visualmente, NO mide distancia a ella ni identifica A/B por ID.
+# Este ensayo NO sigue flechas. Esc/Salir/Ctrl+C terminan; no usar Ctrl+Z.
+# Para comprobar decisiones sin publicador, ejecutar este bloque quitando --mover.
+
+# Revision de recepcion /odom (mismo comando del bloque 15):
+# ODOM_RX = edad de recepcion local, maximo intervalo de callbacks y ultimo corte.
+# Corte temporal: cero; exige >=3 paquetes nuevos / 0.7 s estables para recuperar.
+# Salto espacial/marca atras/cambio de marco: movimiento bloqueado; revisar CONTROL.
+# Durante barrido, corte >2 s tambien bloquea por incertidumbre angular.
+# Fallo anterior a meta: puede habilitar vision al confirmar reposo despues de meta,
+# pero NO libera movimiento. Imagen reciente sigue siendo obligatoria.
+
+# Revision QR (mismo comando; cerrar y relanzar):
+# La terminal muestra [QR] y la ventana detectados/legibles/confirmacion.
+# QR SIN LECTURA = localizado sin texto; QR LEGIBLE = texto aun sujeto a asociacion.
+# QR OBJETIVO = asociacion aceptada; QR GUARDADO + palabra = resultado confirmado.
+# QR en esquina: mostrar foto completa con contorno visible, una cara y un QR.
+# Sin contorno fiable conserva vecindad lateral; no selecciona QR ajeno por defecto.
+# Si QR es muy pequeño: imprimir/mostrar mayor, enfocado, completo y con margen blanco.
+# Para diagnosticar enviar las lineas [QR]; no hace falta guardar capturas de alumnos.
+
+
+# 16) ENSAYO DEL COMPAÑERO: ESPERAR A LA PARED ANTES DE GIRAR, SIN MOVIMIENTO
+# Snapshot e78c3b5 de mejora-competicion, SOLO su controlador de giros y config.
+# Conserva nuestro perfil LiDAR (0.10 m/s, 0.40 rad/s, parada 0.32 m).
+# No cambia de rama ni sustituye nuestro controlador; Task 2 y ensayo B conservados.
+# Desde Ubuntu normal. Docker/controladores activos una sola vez; IP/dominio vigentes.
+cd "/ruta/a/turtlebot4-vision-proyecto"
+export TB4_IP=10.87.179.100
+export TB4_DOMINIO=5
+bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO" \
+  --evasion-reconocimiento --senales --tramo ida --ensayo-giro-companero
+# Nombre + Buscar como antes; no mostrar el rostro objetivo durante el ensayo de giros.
+# Sin --mover no hay publicador. Esperar camara; confirmar flecha azul en 3 imagenes.
+# [GIRO ENSAYO] muestra fase, direccion, frente_m, pendiente_s y velocidades propuestas.
+# ESPERA_PARED = flecha guardada, frente todavia >0.52 m. La evasion conserva su propuesta.
+# GIRANDO = umbral alcanzado; vx_propuesto=0, wz negativa derecha / positiva izquierda.
+# Para variar distancia sin mover robot: acercar un panel con la flecha visible tambien
+# para el LiDAR. No usar personas como obstaculo de prueba. Datos insuficientes detienen.
+# Al no girar realmente no completara 90 grados; tras 12 s puede enclavar FALLO.
+# Cerrar y relanzar para otro intento, no tratar ese timeout quieto como averia del robot.
+# Caducidad conocida del original: mantener flecha visible >7 s con frente >0.52 m,
+# despues acercar panel. Pierde la pendiente y no rearma el mismo ID: observar SIN_FLECHA_PENDIENTE.
+# No combinar --ensayo-giro-companero con --config-senales, --prueba-meta-b o --solo-senales.
+
+
+# 17) MISMO ENSAYO CON AVANCE Y GIRO REAL, DESPUES DE CERRAR EL BLOQUE 16
+# Cerrar teclado/gestos/Nav2 y otros controles. Flecha en pared y salida lateral despejada.
+# Primera colocacion de ensayo: retorno frontal aprox. 0.8-1.0 m y flecha ya distinguible.
+# No es una distancia validada para la competicion. Comenzar mas lejos puede agotar los 6 s.
+bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO" \
+  --evasion-reconocimiento --senales --tramo ida --ensayo-giro-companero --mover
+# Buscar inicia evasion aun sin flecha. Con flecha confirmada espera frente <=0.52 m
+# para proponer giro; frente/laterales <=0.32 m bloquean. 52 cm es retorno LiDAR, NO distancia al cartel.
+# Debe girar 90 grados por odometria antes de seguir; despues vuelve a avanzar con evasion.
+# Enviar 5-10 lineas [GIRO ENSAYO]/[BUSQUEDA] al acercarse y empezar el giro.
+# Observar sentido/angulo, distancia inicial del giro y si pierde/repite la señal.
+# El controlador original conserva defectos de memoria/coordinacion; no es mision validada.
+# Si gira al lado equivocado, cerrar y conservar log; no compensarlo moviendo la flecha.
+# Esc/Salir/Ctrl+C cierran e intentan cero. No Ctrl+Z; mantener Wi-Fi del robot.
+# Para rojo: cerrar y repetir cambiando ida por vuelta. No ejecuta retorno a A.
+# Para nuestro controlador anterior: cerrar y quitar SOLO --ensayo-giro-companero.
+# Meta/rostro/QR sigue pendiente en bloques 13-15; este ensayo no incorpora meta/QR.
+# Detalles: task 1/experimentos/mejora_competicion/README.md.
+
+# Diagnostico tras el primer intento fisico (mismo bloque 16, SIN --mover):
+# El registro aportado giro por evasion a ~0.44 m; no consumio flecha (ID 0).
+# Pulsar Buscar ANTES de comprobar el 3/3: la vista previa no inicia una maniobra.
+# Mostrar flecha azul completa y esperar 3 imagenes nuevas; no inferir giro de flecha
+# solo porque el robot gira ante una pared. No bajar distancias todavia.
+# [SENALES ENSAYO] = iniciada/confirmaciones, evento_id, posterior a Buscar y ultimo ID enviado.
+# [GIRO ENSAYO] = id_recibido, ultimo_id_recibido, id_consumido y fase/distancia.
+# Copiar ambas lineas junto a [BUSQUEDA]; no hace falta enviar fotos de personas.
+# Estos registros no habilitan movimiento ni renuevan eventos viejos.
+
+# Como leer la distancia (nueva prueba sin movimiento: 3/3 y IDs recibidos confirmados):
+# disparo_m=0.52 es el umbral; frente_m es el retorno frontal actual del LiDAR.
+# fase=GIRANDO puede estar BLOQUEADA: revisar [BUSQUEDA] y wz_propuesto.
+# wz_propuesto=0 no pide rotacion; publicando=false confirma ausencia de publicador.
+# En el registro nuevo: frente ~0.407 m, pero derecha ~0.25 m bloqueo el giro (barrera 0.32 m).
+# No interpretar esa muestra como giro real a 41 cm. No mide distancia exacta a la flecha.
+# Repetir sin --mover con espacio a ambos lados y observar primera propuesta wz no nula.
+# Si la maniobra ya esta en FALLO por 12 s, cerrar y relanzar antes de otro intento.
+
+# Revision del 19/11: evasion SIN arcos en Task 1.
+# Cualquier giro evasivo (frontal o lateral) ordena vx=0; no avanza mientras gira.
+# Reanuda avance recto cuando deja de necesitar correccion y hay sensores validos.
+# Flecha 3/3: umbral frente <=0.52 m, frente/laterales >0.32 m para autorizar giro.
+# Ese giro ya usa vx=0 y debe completar 90 grados por odometria antes de continuar.
+# Sin flecha pendiente, la evasion empieza a girar al llegar a precaucion 0.45 m,
+# o por lateral <0.28 m; no confundirlo con la maniobra de flecha a 0.52 m.
+# El ultimo fragmento aportado estaba en FALLO y publicando=false: no reanuda por
+# mostrar otro cartel. Cerrar con Ctrl+C y relanzar el bloque 16 o 17 para repetir.
+# --mover es imprescindible para publicar; el cambio se copia a Docker al relanzar.
+# Esto separa ordenes lineal/angular; frenado real y estabilidad del giro siguen por medir.

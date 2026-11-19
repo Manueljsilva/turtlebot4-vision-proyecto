@@ -21,7 +21,8 @@ from prueba_facial_robot import (TAREA, TOPICO, ConsultaEnVivo, cargar_sistema, 
 from senales_giro import ConsultaSenales, dibujar_detecciones
 
 
-def preparar_movimiento(comando_camara, contenedor, config, mover, config_senales=None, tramo='ida'):
+def preparar_movimiento(comando_camara, contenedor, config, mover, config_senales=None, tramo='ida',
+                        control_giros_origen=None):
     """Usa la misma sesión Docker/red de cámara; nunca copia datos faciales."""
     remoto = str(Path(comando_camara[-2]).parent)
     base = comando_camara[:comando_camara.index(contenedor) + 1]
@@ -43,7 +44,8 @@ def preparar_movimiento(comando_camara, contenedor, config, mover, config_senale
                      'python3 -c "import rclpy, tf2_ros, nav_msgs.msg, sensor_msgs.msg, geometry_msgs.msg"'])
     for archivo in ('evasion_lidar.py', 'seguridad_lidar.py', 'control_giros.py',
                     'control_busqueda.py', 'busqueda_lidar_ros.py'):
-        ejecutar_comando(['sudo', '-n', 'docker', 'cp', str(TAREA / archivo), f'{contenedor}:{remoto}/{archivo}'])
+        origen = control_giros_origen if archivo == 'control_giros.py' and control_giros_origen else TAREA / archivo
+        ejecutar_comando(['sudo', '-n', 'docker', 'cp', str(origen), f'{contenedor}:{remoto}/{archivo}'])
     ejecutar_comando(['sudo', '-n', 'docker', 'cp', str(config), f'{contenedor}:{remoto}/config.json'])
     opciones_senales = []
     if config_senales is not None:
@@ -67,6 +69,7 @@ class PuenteBusqueda:
         self.cerrojo = threading.Lock()
         self.datos = dict(orden='ESPERAR', actividad_ns=0, camara_ns=None)
         self.senales = senales
+        self.ultima_senal_enviada = None
         if senales:
             self.datos['senal'] = None
         self.estado = None
@@ -90,6 +93,9 @@ class PuenteBusqueda:
                     datos = dict(self.datos)
                 self.proceso.stdin.write(json.dumps(dict(version=1, secuencia=secuencia, **datos)) + '\n')
                 self.proceso.stdin.flush()
+                if datos.get('senal') is not None:
+                    with self.cerrojo:
+                        self.ultima_senal_enviada = dict(datos['senal'])
                 secuencia += 1
                 self.fin.wait(0.1)
         except (OSError, ValueError) as exc:
@@ -127,6 +133,10 @@ class PuenteBusqueda:
         if estado and reciente(estado.get('recibido_ns'), ahora_ns, EDAD_CAMARA_NS):
             return estado
         return None
+
+    def ultimo_envio_senal(self):
+        with self.cerrojo:
+            return dict(self.ultima_senal_enviada) if self.ultima_senal_enviada else None
 
     def comprobar(self):
         if self.fallo or self.proceso.poll() is not None:
@@ -193,6 +203,13 @@ def dibujar_busqueda(imagen, resultado, estado_camara, entrada, estado_ros, move
     pie = 'MOVIMIENTO ACTIVADO' if mover else 'SIN MOVIMIENTO'
     pie += (f" | {tramo.upper()} | {senales['estado']}" if senales is not None
             else ' | Evasion + reconocimiento | Esc: detener y salir')
+    if senales is not None and entrada.sesion.inicio_ns is None:
+        pie = 'VISTA PREVIA; pulsar Buscar | ' + pie
+    diagnostico = estado_ros.get('giro_ensayo') if estado_ros else None
+    if diagnostico is not None:
+        frente = diagnostico['frente_m']
+        distancia = '-' if frente is None else f'{frente:.2f} m'
+        pie = f"ENSAYO COMPANERO | {diagnostico['fase']} | frente {distancia} | {pie}"
     escribir(panel, pie, 18, 693, limite=96)
     return panel
 
@@ -209,15 +226,31 @@ def main(argv=None):
     parser.add_argument('--senales', action='store_true', help='Confirmar señales y ejecutar giros con odometría')
     parser.add_argument('--tramo', choices=('ida', 'vuelta'), default='ida')
     parser.add_argument('--config-senales', type=Path, default=TAREA/'config/senales_giro.json')
+    parser.add_argument('--ensayo-giro-companero', action='store_true',
+                        help='Probar espera de pared del snapshot e78c3b5, sin fusionar la rama')
     args = parser.parse_args(argv)
+    if args.ensayo_giro_companero and not args.senales:
+        parser.error('--ensayo-giro-companero requiere --senales')
+    if args.ensayo_giro_companero and args.config_senales != TAREA/'config/senales_giro.json':
+        parser.error('El ensayo usa su configuración de señales original; no combinar con --config-senales')
     video, puente = None, None
     ventana = 'Task 1 - evasion y busqueda de persona'
     abierta = False
     try:
         if not (os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY')):
             raise ValueError('Esta prueba requiere una terminal de Ubuntu con interfaz gráfica')
-        cargar_config(args.config)
-        cfg_senales = cargar_config_senales(args.config_senales) if args.senales else None
+        cfg_evasion = cargar_config(args.config)
+        control_origen = None
+        if args.ensayo_giro_companero:
+            from ensayo_giros_companero import CONFIG, CONTROL, SNAPSHOT, cargar_ensayo
+            _, cfg_senales = cargar_ensayo()
+            args.config_senales, control_origen = CONFIG, CONTROL
+            print(f'[ENSAYO GIROS] Compañero {SNAPSHOT[:7]}: pared {cfg_senales.esperar_pared_m:.2f} m, '
+                  f'memoria {cfg_senales.tiempo_espera_pared_s:.1f} s; '
+                  f'avance {cfg_evasion.velocidad_avance:.2f} m/s, giro {cfg_evasion.velocidad_giro:.2f} rad/s. '
+                  'Controlador original con configuración LiDAR local; no es la misión completa.', flush=True)
+        else:
+            cfg_senales = cargar_config_senales(args.config_senales) if args.senales else None
         consulta_senales = ConsultaSenales(args.tramo, cfg_senales) if args.senales else None
         inicio_senales = None
         cv2.setNumThreads(1)
@@ -226,7 +259,8 @@ def main(argv=None):
         entrada = EntradaBusqueda(consulta, sesion)
         comando_camara = preparar_camara(args.ip, args.dominio, args.contenedor, args.topico_camara)
         comando_control = preparar_movimiento(comando_camara, args.contenedor, args.config, args.mover,
-            args.config_senales if args.senales else None, args.tramo)
+            args.config_senales if args.senales else None, args.tramo,
+            control_giros_origen=control_origen)
         VideoRobot = cargar_transporte()
         video = VideoRobot(subprocess.Popen(comando_camara, stdin=subprocess.PIPE, stdout=subprocess.PIPE))
         puente = PuenteBusqueda(comando_control, senales=args.senales)
@@ -276,6 +310,13 @@ def main(argv=None):
             if ahora - ultimo_log >= 1_000_000_000:
                 print(f"[BUSQUEDA] {sesion.orden} | {resultado['nombre']} | "
                       f"{estado_ros['estado'] if estado_ros else 'Esperando nodo ROS'}", flush=True)
+                if args.ensayo_giro_companero:
+                    from ensayo_giros_companero import diagnostico_senales
+                    print('[SENALES ENSAYO] ' + json.dumps(diagnostico_senales(
+                        resultado_senales, sesion.inicio_ns, ahora, puente.ultimo_envio_senal()),
+                        ensure_ascii=False), flush=True)
+                    print('[GIRO ENSAYO] ' + json.dumps(
+                        estado_ros.get('giro_ensayo') if estado_ros else None, ensure_ascii=False), flush=True)
                 ultimo_log = ahora
             anotada = dibujar_detecciones(imagen, resultado_senales, args.tramo) if (
                 imagen is not None and resultado_senales is not None) else imagen

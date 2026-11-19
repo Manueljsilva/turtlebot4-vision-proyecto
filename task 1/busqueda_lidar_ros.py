@@ -55,6 +55,7 @@ class BusquedaLidarNode(EvasionLidarNode):
         self.motivo_control = 'Esperando Buscar'
         self._estado_ns = 0
         self.giros = giros
+        self.ultima_senal_recibida = None
         super().__init__(mover, cfg)
         qos_odom = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT)
         self.sub_odom = self.create_subscription(Odometry, '/odom', self.odometria, qos_odom)
@@ -68,6 +69,8 @@ class BusquedaLidarNode(EvasionLidarNode):
         linea = self.entrada.tomar()
         if linea is not None:
             self.puerta.recibir(linea, ahora)
+            if self.puerta.senal is not None:
+                self.ultima_senal_recibida = dict(self.puerta.senal)
         permitido, self.motivo_control = self.puerta.permiso(ahora, self.pose, self.pose_ns)
         permitido = permitido and not self.entrada.fin.is_set() and not self._terminar
         if self.giros is not None and not self.puerta.senales_activas:
@@ -77,6 +80,7 @@ class BusquedaLidarNode(EvasionLidarNode):
             vx, wz = 0.0, 0.0
         elif vx == 0.0 and wz == 0.0:
             self.motivo_control = 'LiDAR/TF insuficientes: detenido; revisar terminal'
+        diagnostico_giro = None
         if self.giros is not None:
             scan = self._scan
             edad = None if self._recibido_ns is None else (ahora-self._recibido_ns)/1e9
@@ -87,11 +91,28 @@ class BusquedaLidarNode(EvasionLidarNode):
                 vx, wz, motivo = giro
                 if permitido:
                     self.motivo_control = motivo
+            if hasattr(self.giros, 'pendiente'):
+                pendiente = self.giros.pendiente
+                maniobra = self.giros.activo or pendiente
+                fase = ('FALLO' if self.giros.fallo else 'GIRANDO' if self.giros.activo
+                        else 'ESPERA_PARED' if pendiente else 'SIN_FLECHA_PENDIENTE')
+                diagnostico_giro = dict(fase=fase, permitido=permitido,
+                    direccion=maniobra['direccion'] if maniobra else None,
+                    frente_m=lidar.dist_frente if lidar is not None and lidar.observacion_valida else None,
+                    disparo_m=self.giros.cfg.esperar_pared_m,
+                    pendiente_s=(ahora-pendiente['recibido_ns'])/1e9 if pendiente else None,
+                    id_consumido=self.giros.ultimo_id, vx_propuesto=vx, wz_propuesto=wz,
+                    publicando=self.pub_cmd is not None,
+                    id_recibido=self.puerta.senal['id'] if self.puerta.senal else None,
+                    ultimo_id_recibido=self.ultima_senal_recibida['id'] if self.ultima_senal_recibida else None)
         super().publicar_velocidad(vx, wz)
         if ahora - self._estado_ns >= 200_000_000:
-            print(json.dumps(dict(version=1, recibido_ns=ahora, a=self.puerta.punto_a,
+            estado = dict(version=1, recibido_ns=ahora, a=self.puerta.punto_a,
                                   estado=self.motivo_control, vx=vx, wz=wz,
-                                  mover=self.pub_cmd is not None)), flush=True)
+                                  mover=self.pub_cmd is not None)
+            if diagnostico_giro is not None:
+                estado['giro_ensayo'] = diagnostico_giro
+            print(json.dumps(estado), flush=True)
             self._estado_ns = ahora
         return vx, wz
 

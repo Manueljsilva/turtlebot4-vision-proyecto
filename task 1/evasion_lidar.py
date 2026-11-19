@@ -149,6 +149,7 @@ def analizar_lidar(ranges, angle_min, angle_increment, range_min, range_max,
 
 
 def calcular_velocidad_evasion(estado, cfg=None):
+    """Avanzar recto o girar sobre el sitio; no combinar ambas órdenes."""
     cfg = cfg or ConfigEvasion()
     if not estado.observacion_valida or estado.proximidad_no_cuantificable:
         return 0.0, 0.0
@@ -157,11 +158,11 @@ def calcular_velocidad_evasion(estado, cfg=None):
     if estado.peligro_parada:
         return 0.0, sentido * vw
     if estado.precaucion:
-        return vx * 0.45, sentido * vw * 0.75
+        return 0.0, sentido * vw * 0.75
     if estado.dist_izquierda < cfg.distancia_lateral_m and estado.dist_derecha > estado.dist_izquierda + 0.08:
-        return vx * 0.8, -0.35 * vw
+        return 0.0, -0.35 * vw
     if estado.dist_derecha < cfg.distancia_lateral_m and estado.dist_izquierda > estado.dist_derecha + 0.08:
-        return vx * 0.8, 0.35 * vw
+        return 0.0, 0.35 * vw
     return vx, 0.0
 
 

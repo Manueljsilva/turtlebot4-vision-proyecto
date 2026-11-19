@@ -154,6 +154,34 @@ def cargar_ros_simulado():
 
 
 class NodoIntegradoTests(unittest.TestCase):
+    def test_evasion_publica_giro_sin_avance_y_luego_reanuda_recto(self):
+        mod = cargar_ros_simulado()
+        entrada = NS(fin=threading.Event(), linea=None)
+        def tomar():
+            linea, entrada.linea = entrada.linea, None
+            return linea
+        entrada.tomar = tomar
+        nodo = mod.BusquedaLidarNode(True, ConfigEvasion(), entrada)
+        pose = dict(frame_id='odom', child_frame_id='base_link', x=0., y=0., yaw=0.)
+        for i, frente in enumerate((1., .40, .40, 1.)):
+            ahora = 8_000_000_000+i*100_000_000
+            nodo.pose, nodo.pose_ns = pose, ahora
+            entrada.linea = json.dumps(dict(version=1, secuencia=i, orden='BUSCAR',
+                actividad_ns=ahora, camara_ns=ahora))
+            scan = NS(header=NS(frame_id='base_link'), angle_min=-pi, angle_increment=2*pi/360,
+                      range_min=.05, range_max=12., ranges=[frente if abs(-pi+j*2*pi/360)<.15 else 1.
+                                                         for j in range(360)])
+            with patch.object(mod.time, 'monotonic_ns', return_value=ahora), patch('sys.stdout', new_callable=io.StringIO):
+                nodo._scan_cb(scan)
+                nodo._ciclo()
+            cmd = nodo.pub_cmd.mensajes[-1].twist
+            if frente == 1.:
+                self.assertEqual((cmd.linear.x, cmd.angular.z), (.1, 0.))
+            else:
+                self.assertEqual(cmd.linear.x, 0.)
+                self.assertGreater(cmd.angular.z, 0.)
+        self.assertEqual(len(nodo.publicadores), 1)
+
     def test_flecha_prevalece_sobre_evasion_de_muro_y_no_avanza_antes_de_90(self):
         mod = cargar_ros_simulado()
         entrada = NS(fin=threading.Event(), linea=None)
@@ -189,7 +217,9 @@ class NodoIntegradoTests(unittest.TestCase):
         self.assertLess(wz, 0.)
         nodo.pose['yaw'] = -pi/2
         self.assertEqual(ciclo(3), (0., 0.))
-        self.assertGreater(ciclo(4)[0], 0.)
+        self.assertEqual(ciclo(4)[0], 0.)  # El scan aún muestra pared: evasión sin arcos.
+        scan.ranges = [1.]*360  # Frente libre después del giro.
+        self.assertEqual(ciclo(5), (.1, 0.))
         self.assertEqual(len(nodo.publicadores), 1)
 
     def test_giro_en_salida_unica_lidar_caducado_para_y_el_rostro_sigue_teniendo_prioridad(self):
