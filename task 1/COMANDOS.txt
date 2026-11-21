@@ -373,3 +373,11 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
 # Mostrar meta, esperar reposo, luego foto objetivo + QR nitido/completo/borde blanco.
 # Solo "QR del objetivo confirmado y guardado" / 3/3 confirma exito de lectura.
 # Despues repetir bloque 18 incluyendo flechas azules/rojas: no se probaron esta vez.
+
+# Nueva prueba B (21/11): legibles=0 siempre; el problema precede a las confirmaciones.
+# Repetir bloque 13 sin --mover. [QR] ahora incluye imagen=320x240px | QR_px=28x31
+# (ejemplo, no medidas del usuario): dimensiones nativas, antes de ampliar el recorte.
+# Mostrar QR mas grande/nitido/completo con borde blanco junto al rostro objetivo.
+# Primero lograr legibles=1; luego tres imagenes nuevas consistentes para guardar.
+# Tres confirmaciones no son tres fases ni segundos; imagen repetida no cuenta.
+# Flecha: antes del 3/3 aun puede actuar evasion. Pausa desde candidata pendiente de implementar.

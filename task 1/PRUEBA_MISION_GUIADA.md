@@ -126,6 +126,29 @@ incluidas flechas azules/rojas. Las flechas no se ensayaron en el intento del
 El regreso se inicia después de guardar QR: orientar a entrada B +180° y
 avanzar siguiendo rojo, no conducir marcha atrás ni reproducir la ruta de ida.
 
+## Qué significa confirmar tres veces
+
+Son tres **imágenes nuevas consecutivas consistentes**, no tres fases ni tres
+segundos. Flecha, meta y rostro/QR tienen cuentas distintas. Con 5 FPS estables
+serían aproximadamente 0.4 s desde la primera hasta la tercera evidencia; esa
+tasa no está garantizada y no incluye toda la latencia. Una imagen repetida
+no suma. Si se pierde evidencia o caduca la imagen se reinicia la cuenta.
+
+El último registro del ensayo B mantiene **legibles=0**: localiza un QR, pero
+no obtiene su texto. Reducir el número de confirmaciones no permite votar una
+palabra que todavía no se ha leído. `[QR]` muestra ahora la resolución recibida
+y el tamaño de las cajas, por ejemplo `imagen=320x240px | QR_px=28x31`.
+Estos píxeles son de la imagen recibida, antes de ampliación del recorte; no
+miden centímetros ni fijan un mínimo universal de lectura. Probar primero QR
+más grande/nítido/completo con borde blanco y el rostro objetivo en la misma
+imagen, manteniendo --prueba-meta-b sin --mover.
+
+En navegación, **antes de confirmar la flecha puede intervenir la evasión**.
+La prioridad de la dirección visual empieza tras 3/3. Queda pendiente una
+pausa ante candidata fresca cercana a pared mientras se confirma; no está
+implementada por este ajuste de diagnóstico. No asumir protección desde 1/3
+ni reducir la barrera de seguridad para compensar imágenes lentas.
+
 ## Cómo evita confundir las banderas
 
 Valores iniciales de ensayo en [config/mision_guiada.json](config/mision_guiada.json),

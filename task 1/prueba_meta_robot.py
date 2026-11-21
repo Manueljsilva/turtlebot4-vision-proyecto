@@ -55,6 +55,7 @@ class EnsayoB:
         self.fallo_movimiento = None
         self.estado_qr = 'Esperando meta, reposo y persona objetivo'
         self.qr_asociado = None
+        self.tamano_imagen = None
 
     def recibir_control(self, estado, ahora):
         if not estado or not reciente(estado.get('recibido_ns'), ahora, EDAD_CAMARA_NS):
@@ -68,12 +69,14 @@ class EnsayoB:
     def actualizar(self, imagen, marca, ahora, pausar=None):
         s = self.sesion
         if not reciente(marca, ahora, EDAD_CAMARA_NS) or imagen is None:
+            self.tamano_imagen = None
             self.caras, self.percepcion = [], dict(meta=None, codigos=[])
             self.qr_asociado = None
             if s.palabra is None:
                 self.estado_qr = 'Esperando imagen reciente para leer QR'
             s.actualizar(self.percepcion, [], None, '', None, ahora)
             return None
+        self.tamano_imagen = (imagen.shape[1], imagen.shape[0])
         if (s.inicio_ns is None or marca <= s.inicio_ns or marca == self.ultima_marca
                 or (self.ultima_marca is not None and marca < self.ultima_marca)
                 or s.orden in ('PARAR', 'QR_LISTO')):
@@ -107,6 +110,7 @@ class EnsayoB:
         # Una inferencia lenta no convierte un paquete antiguo en una imagen reciente.
         s.actualizar(self.percepcion, self.caras, asociacion, motivo, marca, terminado)
         if not reciente(marca, terminado, EDAD_CAMARA_NS):
+            self.tamano_imagen = None
             self.caras, self.percepcion = [], dict(meta=None, codigos=[])
             self.qr_asociado = None
             self.estado_qr = 'Imagen caducada durante lectura; esperando fotograma reciente'
@@ -121,7 +125,15 @@ class EnsayoB:
         codigos = self.percepcion['codigos']
         legibles = sum(texto_valido(q['texto']) for q in codigos)
         return (f'{self.estado_qr} | detectados={len(codigos)}, legibles={legibles} | '
-                f'confirmacion={self.sesion.confirmaciones}/3')
+                f'confirmacion={self.sesion.confirmaciones}/3 | {self.detalle_imagen_qr()}')
+
+    def detalle_imagen_qr(self):
+        imagen = ('x'.join(str(v) for v in self.tamano_imagen)+'px' if self.tamano_imagen else
+                  'sin imagen reciente')
+        # Cajas ya expresadas en la imagen original, no en el recorte ampliado.
+        tamanos = ','.join(f'{round(q["caja"][2])}x{round(q["caja"][3])}'
+                          for q in self.percepcion['codigos'][:3]) or 'ninguno'
+        return f'imagen={imagen} | QR_px={tamanos}'
 
 
 def guardar_resultado(sesion, carpeta):
@@ -191,7 +203,8 @@ def dibujar_prueba(imagen, estado_camara, entrada, ensayo, estado_ros, mover):
         else:
             codigos = ensayo.percepcion['codigos']
             legibles = sum(texto_valido(q['texto']) for q in codigos)
-            escribir(panel, f'QR: {len(codigos)} detectados / {legibles} legibles | Confirmacion {s.confirmaciones}/3', 18, 217)
+            escribir(panel, f'QR: {len(codigos)} vistos / {legibles} legibles | {s.confirmaciones}/3 | '+
+                     ensayo.detalle_imagen_qr(), 18, 217, limite=112)
             escribir(panel, ensayo.estado_qr, 18, 239, (70, 190, 240), limite=105)
     cv2.rectangle(panel, (0, 669), (840, 707), (27, 27, 27), -1)
     escribir(panel, (('AVANCE + GIRO ACTIVADOS' if s.avanzar else 'GIRO ACTIVADO') if mover else 'SIN MOVIMIENTO')+
