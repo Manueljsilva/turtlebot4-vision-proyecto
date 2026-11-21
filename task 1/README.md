@@ -6,14 +6,16 @@ rostro objetivo/QR propio → rojo/evasión → meta A. A también lleva bandera
 mirando al robot cuando regrese. Al confirmar meta A y reposo, aparece un panel
 grande con la palabra y el robot queda detenido. El regreso completo aún no está
 validado físicamente. Guía vigente: [PRUEBA_MISION_GUIADA.md](PRUEBA_MISION_GUIADA.md),
-bloque 18 de [COMANDOS.txt](COMANDOS.txt); 239 tests locales. **Reiniciar**, junto
+bloque 18 de [COMANDOS.txt](COMANDOS.txt); 246 tests locales. **Reiniciar**, junto
 a Salir, detiene y espera reposo antes de permitir otra persona en la misma
 ventana; el nuevo Buscar vuelve a registrar A. Reinicio aún pendiente en hardware.
 Las descripciones
 históricas de tres confirmaciones de abajo se sustituyen por una imagen nueva válida.
 
 **Ajuste vigente de la misión (21/11):** flecha memorizada hasta retorno frontal
-LiDAR <=0.30 m, con aproximación lenta a 0.05 m/s entre 0.45 y 0.30 m. Perfil
+LiDAR nominal 0.30 m, con tolerancia 0.005 m: a <=0.305 m frena y espera
+>=3 poses/0.7 s de reposo antes de ordenar el giro. Aproximación <=0.05 m/s
+en precaución. Perfil
 [config/senales_mision.json](config/senales_mision.json); el ensayo aislado 16/17
 conserva 0.48 m. Sin flecha, la evasión frontal memoriza el sentido hasta que
 el frente quede libre con margen, evitando invertirlo por centímetros entre

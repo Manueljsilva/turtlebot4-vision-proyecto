@@ -2,9 +2,17 @@
 
 Actualizado el 21 de noviembre de 2026. Fuente base: las cinco páginas de [Computer_vision_proyectos.pdf](Computer_vision_proyectos.pdf), revisadas completas. Las indicaciones del usuario del 13 y 17 de noviembre **prevalecen para Task 1**. Se distinguen los requisitos confirmados, las decisiones propuestas y los componentes realmente implementados en [ESTADO_PROYECTO.md](ESTADO_PROYECTO.md).
 
-**Prioridad actual (21/11): prueba completa A → B → A.** El usuario confirma que el QR ya funciona al aumentar su tamaño. Preparar A con bandera visible al regresar, flechas azules en ida/rojas en vuelta, B con bandera al fondo y fotografías/QR legibles. Ejecutar --mision-guiada --mover, nombre/Buscar desde A. Verificar giros, llegada B, reposo/barrido, objetivo/QR propio, orientación de entrada B +180°, vuelta y nueva meta A. La interfaz muestra ahora una tarjeta grande con la palabra solo tras FIN/QR confirmado. Pasan 239 tests locales; no hay retorno físico confirmado todavía. Publicar cada cambio terminado y verificar main, con exclusiones vigentes.
+**Prioridad actual (21/11): prueba completa A → B → A.** El usuario confirma que el QR ya funciona al aumentar su tamaño. Preparar A con bandera visible al regresar, flechas azules en ida/rojas en vuelta, B con bandera al fondo y fotografías/QR legibles. Ejecutar --mision-guiada --mover, nombre/Buscar desde A. Verificar giros, llegada B, reposo/barrido, objetivo/QR propio, orientación de entrada B +180°, vuelta y nueva meta A. La interfaz muestra ahora una tarjeta grande con la palabra solo tras FIN/QR confirmado. Pasan 246 tests locales; no hay retorno físico confirmado todavía. Publicar cada cambio terminado y verificar main, con exclusiones vigentes.
 
-**Bloqueo nuevo (21/11):** el usuario pide pasar a 0.30 m y reporta bloqueo en meta.
+**Prueba inmediata (21/11):** el nuevo registro reconoce IZQUIERDA azul pero
+se detiene a frente 0.304 m, centro 0.264 m: puede girar con el radio configurado,
+pero no avanzar hasta disparo exacto 0.300 m; luego caduca. Solo misión añade
+tolerancia de 0.005 m (nominal 0.30; activación <=0.305) y reposo de >=3 poses/0.7 s
+antes de girar. Conserva radio/márgenes/90°/plazos, sin renovar señal antigua
+desde lejos. 246 tests locales; cerrar/relanzar y probar físicamente freno/giro.
+Ver [PERFIL MISION] y `giro.disparo_efectivo_m`/`frenado_flecha_confirmado`.
+
+**Ajuste anterior (21/11):** el usuario pide pasar a 0.30 m y reporta bloqueo en meta.
 El fragmento muestra evasión en IDA, izquierda ~0.311 m contra límite 0.32 m y
 plazo agotado, sin B registrado. Se separó confirmar/frenar en meta de poder
 girar: después del reposo se permite visión estacionaria aunque el barrido esté

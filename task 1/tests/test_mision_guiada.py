@@ -339,8 +339,11 @@ class MisionTests(unittest.TestCase):
         self.assertEqual(v.senal['direccion'],'IZQUIERDA')
         # Menos espacio a izquierda: evasión elegiría derecha, señal pide izquierda.
         vx,wz,_=self.paso(senal=v.senal,sensor=lidar(.30,izquierda=.8,derecha=1.8))
-        self.assertEqual(vx,0.)
-        self.assertGreater(wz,0.)
+        self.assertEqual((vx,wz),(0.,0.))
+        self.assertEqual(self.c.giros.activo['direccion'],'IZQUIERDA')
+        for _ in range(4):
+            self.assertEqual(self.paso(sensor=lidar(.30,.8,1.8))[:2],(0.,0.))
+        self.assertGreater(self.paso(sensor=lidar(.30,.8,1.8))[1],0.)
 
     def test_giro_azul_espera_30cm_con_aproximacion_lenta_y_sin_invertir(self):
         self.iniciar()
@@ -351,7 +354,10 @@ class MisionTests(unittest.TestCase):
         self.assertEqual(self.paso(senal=ev(), sensor=lidar(.5, izquierda=.2))[:2], (0., 0.))
         self.assertEqual(self.paso(senal=ev(),sensor=lidar(.31))[:2],(.05,0.))
         vx, wz, _ = self.paso(senal=ev(), sensor=lidar(.30))
-        self.assertEqual((vx, wz), (0., .4))
+        self.assertEqual((vx,wz),(0.,0.))
+        for _ in range(4):
+            self.assertEqual(self.paso(sensor=lidar(.30))[:2],(0.,0.))
+        self.assertEqual(self.paso(sensor=lidar(.30))[:2],(0.,.4))
         self.assertEqual(self.paso(sensor=lidar(.30,derecha=.25))[:2],(0.,0.))
 
     def test_evasion_mantiene_lado_con_las_variaciones_laterales_del_registro(self):
@@ -433,13 +439,119 @@ class MisionTests(unittest.TestCase):
         self.assertIsNone(self.c.holgura)
         self.assertIn('Sin contorno',self.c.bloqueo_giro(lidar(),self.cfg))
 
+    def test_registro_304mm_frena_y_gira_sin_exigir_mas_avance_ni_otra_imagen_de_flecha(self):
+        self.iniciar()
+        ev=lambda:dict(id=1,direccion='IZQUIERDA',color='azul',marca_ns=self.t+200_000_000)
+        self.paso(senal=ev(),sensor=lidar(.558))
+        self.paso(senal=ev(),sensor=lidar(.466))
+        for _ in range(23):self.paso(sensor=lidar(.38))  # ~4.8 s sin nueva detección al frenar.
+        h=HolguraGiro(True,.264,'Contorno del registro',.12)
+        vx,wz,motivo=self.paso(sensor=lidar(.304),holgura=h)
+        self.assertEqual((vx,wz),(0.,0.))
+        self.assertIn('confirmar reposo',motivo)
+        self.assertIsNone(self.c.giros.pendiente)
+        inicio=self.c.giros.activo['inicio_ns']
+        for _ in range(4):
+            self.assertEqual(self.paso(sensor=lidar(.304),holgura=h)[:2],(0.,0.))
+        self.assertTrue(self.c.freno_flecha['confirmado'])
+        self.assertEqual(self.paso(sensor=lidar(.304),holgura=h)[:2],(0.,.4))
+        self.assertEqual(self.c.giros.activo['inicio_ns'],inicio)
+        self.assertIsNone(self.c.senal)
+        self.assertEqual(self.c.giros.ultimo_id,1)
+        d=self.c.diagnostico_giro(self.t,lidar(.304),self.cfg)
+        self.assertEqual(d['disparo_m'],.30)
+        self.assertEqual(d['disparo_efectivo_m'],.305)
+        for i in range(1,7):
+            r=self.paso(sensor=lidar(.304),holgura=h,yaw=min(pi/2,i*.3))
+            self.assertEqual(r[0],0.)
+        self.assertIsNone(self.c.giros.activo)
+        self.assertEqual(r[:2],(0.,0.))
+        self.assertEqual(self.paso(sensor=lidar(.8))[:2],(.1,0.))
+
+    def test_tolerancia_no_anticipa_giro_a_306mm_ni_quita_margen_de_avance(self):
+        self.iniciar()
+        ev=dict(id=1,direccion='IZQUIERDA',color='azul',marca_ns=self.t+200_000_000)
+        r=self.paso(senal=ev,sensor=lidar(.306),holgura=HolguraGiro(True,.266,'Contorno',.12))
+        self.assertEqual(r[:2],(0.,0.))
+        self.assertIn('margen de aproximacion',r[2])
+        self.assertIsNotNone(self.c.giros.pendiente)
+        self.assertIsNone(self.c.giros.activo)
+        self.assertEqual(self.c.cfg.radio_giro_m+self.c.cfg.margen_giro_m,.25)
+
+    def test_flecha_espera_reposo_real_y_fija_referencia_angular_una_sola_vez(self):
+        self.iniciar()
+        ev=dict(id=1,direccion='DERECHA',color='azul',marca_ns=self.t+200_000_000)
+        self.paso(senal=ev,sensor=lidar(.304))
+        inicio=self.c.giros.activo['inicio_ns']
+        for i in range(1,9):
+            self.assertEqual(self.paso(sensor=lidar(.304),x=i*.006,yaw=i*.01)[:2],(0.,0.))
+            self.assertFalse(self.c.freno_flecha['confirmado'])
+        for _ in range(4):self.assertEqual(self.paso(sensor=lidar(.304))[:2],(0.,0.))
+        self.assertTrue(self.c.freno_flecha['confirmado'])
+        self.assertEqual(self.c.giros.activo['yaw'],.08)
+        self.assertEqual(self.c.giros.activo['inicio_ns'],inicio)
+        self.assertLess(self.paso(sensor=lidar(.304))[1],0.)
+
+    def test_holgura_perdida_durante_frenado_o_giro_no_renueva_referencia(self):
+        self.iniciar()
+        ev=dict(id=1,direccion='IZQUIERDA',color='azul',marca_ns=self.t+200_000_000)
+        self.paso(senal=ev,sensor=lidar(.304))
+        for _ in range(5):
+            self.assertEqual(self.paso(sensor=lidar(.304),
+                holgura=HolguraGiro(False,None,'Sin cobertura trasera',.1))[:2],(0.,0.))
+        self.assertFalse(self.c.freno_flecha['confirmado'])
+        self.assertEqual(self.paso(sensor=lidar(.304))[:2],(0.,0.))
+        referencia=self.c.giros.activo['yaw']
+        inicio=self.c.giros.activo['inicio_ns']
+        self.assertGreater(self.paso(sensor=lidar(.304))[1],0.)
+        self.assertEqual(self.paso(sensor=lidar(.304),yaw=.2,
+            holgura=HolguraGiro(True,.24,'Contorno ocupado',0.))[:2],(0.,0.))
+        self.assertGreater(self.paso(sensor=lidar(.304))[1],0.)
+        self.assertEqual(self.c.giros.activo['yaw'],referencia)
+        self.assertEqual(self.c.giros.activo['inicio_ns'],inicio)
+
+    def test_senal_lejana_caduca_con_causa_de_aproximacion_sin_giro_temprano(self):
+        self.iniciar()
+        ev=dict(id=1,direccion='IZQUIERDA',color='azul',marca_ns=self.t+200_000_000)
+        self.paso(senal=ev,sensor=lidar(.558))
+        for _ in range(33):
+            r=self.paso(sensor=lidar(.32),holgura=HolguraGiro(True,.28,'Contorno',.6))
+            self.assertEqual(r[:2],(0.,0.))
+        self.assertEqual(self.c.fase,'FALLO')
+        self.assertIn('caducada',self.c.motivo)
+        self.assertIn('ultimo bloqueo de aproximacion',self.c.motivo)
+        self.assertIsNone(self.c.giros.activo)
+
+    def test_freno_bloqueado_agota_plazo_sin_reiniciarlo(self):
+        self.iniciar()
+        ev=dict(id=1,direccion='IZQUIERDA',color='azul',marca_ns=self.t+200_000_000)
+        self.paso(senal=ev,sensor=lidar(.304))
+        inicio=self.c.giros.activo['inicio_ns']
+        for _ in range(65):
+            r=self.paso(sensor=lidar(.304),holgura=HolguraGiro(True,.24,'Contorno ocupado',0.))
+            self.assertEqual(r[:2],(0.,0.))
+            self.assertEqual(self.c.giros.activo['inicio_ns'],inicio)
+        self.assertEqual(self.c.fase,'FALLO')
+        self.assertIn('Giro sin completar a tiempo',self.c.motivo)
+
+    def test_cambio_del_cartel_durante_frenado_sigue_detenido(self):
+        self.iniciar()
+        ev=dict(id=1,direccion='IZQUIERDA',color='azul',marca_ns=self.t+200_000_000)
+        self.paso(senal=ev,sensor=lidar(.304))
+        ev.update(direccion='DERECHA',marca_ns=self.t+200_000_000)
+        self.assertEqual(self.paso(senal=ev,sensor=lidar(.304))[:2],(0.,0.))
+        self.assertEqual(self.c.fase,'FALLO')
+        self.assertIn('durante frenado',self.c.motivo)
+
     def test_flecha_prevalece_y_limpia_la_memoria_evasiva(self):
         self.iniciar()
         self.assertGreater(self.paso(sensor=lidar(.37,.6,.5))[1],0.)
         ev=lambda:dict(id=1,direccion='DERECHA',color='azul',marca_ns=self.t+200_000_000)
         self.assertEqual(self.paso(senal=ev(),sensor=lidar(.43,.6,.5))[:2],(.05,0.))
         self.assertIsNone(self.c.evasion)
-        self.assertEqual(self.paso(senal=ev(),sensor=lidar(.30,.6,.5))[:2],(0.,-.4))
+        self.assertEqual(self.paso(senal=ev(),sensor=lidar(.30,.6,.5))[:2],(0.,0.))
+        for _ in range(4):self.assertEqual(self.paso(sensor=lidar(.30,.6,.5))[:2],(0.,0.))
+        self.assertEqual(self.paso(sensor=lidar(.30,.6,.5))[:2],(0.,-.4))
 
     def test_corte_largo_de_odometria_durante_evasion_tambien_enclava(self):
         self.iniciar()
@@ -540,7 +652,9 @@ class MisionTests(unittest.TestCase):
         self.paso(senal=ev, sensor=lidar(.40))
         self.assertIsNone(self.c.giros.activo)
         ev.update(id=2, color='rojo', marca_ns=self.t+200_000_000)
-        self.assertEqual(self.paso(senal=ev, sensor=lidar(.30))[:2], (0., -.4))
+        self.assertEqual(self.paso(senal=ev,sensor=lidar(.30))[:2],(0.,0.))
+        for _ in range(4):self.assertEqual(self.paso(sensor=lidar(.30))[:2],(0.,0.))
+        self.assertEqual(self.paso(sensor=lidar(.30))[:2],(0.,-.4))
 
     def test_salida_bloqueada_conserva_qr_y_giro_contrario_enclava(self):
         self.qr_y_salida(solo_orientar=True)
@@ -570,7 +684,8 @@ class PreparacionTests(unittest.TestCase):
         self.assertEqual(actual.confirmaciones,1)
         for cambios in ({'velocidad_aproximacion_m_s':.2}, {'velocidad_aproximacion_m_s':float('nan')},
                         {'velocidad_aproximacion_m_s':True}, {'margen_salida_evasion_m':-.1},
-                        {'radio_giro_m':0.}, {'margen_giro_m':0.}, {'margen_aproximacion_m':-.1}):
+                        {'radio_giro_m':0.}, {'margen_giro_m':0.}, {'margen_aproximacion_m':-.1},
+                        {'tolerancia_disparo_m':.02},{'tolerancia_disparo_m':float('nan')}):
             with self.subTest(cambios=cambios), self.assertRaises(ValueError):
                 ConfigMision(**cambios)
 
@@ -876,10 +991,10 @@ class NodoTests(unittest.TestCase):
                 self.assertEqual(estado['giro']['color'],'azul')
                 self.assertIsNone(estado['giro']['pendiente'])
                 self.assertIsNone(estado['giro']['conflicto'])
-            # El sensor está 10 cm detrás: rango frontal 0.30 -> centro 0.20.
+            # El sensor está 10 cm detrás: rango frontal 0.304 -> centro 0.204.
             nodo.tf_buffer=NS(lookup_transform=lambda *a:NS(transform=NS(
                 translation=NS(x=-.10,y=0.,z=.2),rotation=NS(x=0.,y=0.,z=0.,w=1.))))
-            for j,desplazamiento in enumerate((-.10,0.,0.),start=3):
+            for j,desplazamiento in enumerate((-.10,0.,0.,0.,0.,0.,0.),start=3):
                 ahora=20_000_000_000+j*300_000_000
                 nodo.tf_buffer.lookup_transform=lambda *a,tx=desplazamiento:NS(transform=NS(
                     translation=NS(x=tx,y=0.,z=.2),rotation=NS(x=0.,y=0.,z=0.,w=1.)))
@@ -887,16 +1002,16 @@ class NodoTests(unittest.TestCase):
                     camara_ns=ahora,meta=None,senal=dict(id=1,direccion='IZQUIERDA',color='azul',marca_ns=ahora),
                     qr_ns=None,qr_votos=0))
                 nodo.pose_ns=ahora
-                scan.header.frame_id='laser';scan.ranges[180]=.30
-                if j==5:
+                scan.header.frame_id='laser';scan.ranges[180]=.304
+                if j==9:
                     for i in list(range(45))+list(range(315,360)):scan.ranges[i]=float('inf')
                 with patch.object(ros.time,'monotonic_ns',return_value=ahora),patch('sys.stdout',new_callable=io.StringIO) as out:
                     nodo._scan_cb(scan);nodo._ciclo()
                 estado=json.loads(out.getvalue())
                 self.assertEqual(estado['vx'],0.)
-                self.assertEqual(estado['wz'],.4 if j==4 else 0.)
-                if j==3:self.assertAlmostEqual(estado['giro']['distancia_centro_m'],.20)
-                if j==5:self.assertIn('detras',estado['giro']['bloqueo_giro'])
+                self.assertEqual(estado['wz'],.4 if j in (7,8) else 0.)
+                if j==3:self.assertAlmostEqual(estado['giro']['distancia_centro_m'],.204)
+                if j==9:self.assertIn('detras',estado['giro']['bloqueo_giro'])
             if mover:
                 cmd=nodo.pub_cmd.mensajes[-1].twist
                 self.assertEqual((cmd.linear.x,cmd.angular.z),(0.,0.))
@@ -906,7 +1021,7 @@ class NodoTests(unittest.TestCase):
             token=ahora+300_000_000
             for j in range(5):
                 ahora=token+j*200_000_000
-                entrada.linea=json.dumps(dict(version=1,secuencia=6+j,orden='REINICIAR',actividad_ns=ahora,
+                entrada.linea=json.dumps(dict(version=1,secuencia=10+j,orden='REINICIAR',actividad_ns=ahora,
                     camara_ns=None,meta=None,senal=None,qr_ns=None,qr_votos=0,reinicio_ns=token))
                 nodo.pose_ns=ahora
                 with patch.object(ros.time,'monotonic_ns',return_value=ahora), patch('sys.stdout',new_callable=io.StringIO) as out:

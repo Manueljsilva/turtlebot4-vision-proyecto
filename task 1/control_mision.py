@@ -4,7 +4,7 @@ La odometría es local. Rojo guía el regreso; no se reproduce una ruta ni hay S
 La bandera B se coloca al fondo, frente al sentido de entrada (ensayo acordado).
 """
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 import json
 from math import atan2, cos, hypot, isfinite, pi, sin
 from pathlib import Path
@@ -34,10 +34,11 @@ class ConfigMision:
     radio_giro_m: float = .22
     margen_giro_m: float = .03
     margen_aproximacion_m: float = .02
+    tolerancia_disparo_m: float = .005
 
     def __post_init__(self):
         limites = ((.4, 2.), (1., 5.), (.2, 1.), (.4, .8), (60., 1800.), (20., 90.), (10., 120.),
-                   (.02, .10), (.02, .08), (.15, .5), (.02, .10), (.01, .10))
+                   (.02, .10), (.02, .08), (.15, .5), (.02, .10), (.01, .10), (0., .01))
         if not all(type(v) in (int, float) and isfinite(v) and a <= v <= b
                    for v, (a, b) in zip(asdict(self).values(), limites)):
             raise ValueError('Configuracion de mision fuera de limites')
@@ -112,7 +113,12 @@ class ControlMision:
         self.yaw_salida = self.inicio_orientacion_ns = None
         self.yaw_inicio_salida = self.sentido_salida = None
         self.aproximacion_ns = self.revalidacion_ns = None
-        self.giros = clase_giros('ida', cfg_senales)
+        # El disparo nominal conserva su unidad/rango LiDAR. La tolerancia de
+        # 5 mm evita exigir los últimos milímetros que el margen de avance veta.
+        # No modifica radio, holgura ni la copia original del compañero.
+        cfg_activacion = replace(cfg_senales,
+            esperar_pared_m=cfg_senales.esperar_pared_m+self.cfg.tolerancia_disparo_m)
+        self.giros = clase_giros('ida', cfg_activacion)
         if not hasattr(self.giros, 'pendiente') or cfg_senales.esperar_pared_m <= 0:
             raise ValueError('La mision requiere el controlador con espera de pared')
         self.meta_nueva = None
@@ -120,12 +126,16 @@ class ControlMision:
         self.conflicto_senal = None
         self.evasion = None
         self.holgura = None
+        self.freno_flecha = None
+        self.bloqueo_aproximacion = None
 
     def cambiar(self, fase, ahora, motivo):
         self.fase, self.desde_ns, self.motivo = fase, ahora, motivo
         self.reposo = ReposoOdometria()
         if fase not in ('IDA', 'FALLO'):
             self.evasion = None
+        if fase not in ('IDA','VUELTA','FALLO'):
+            self.freno_flecha = self.bloqueo_aproximacion = None
 
     def fallar(self, motivo, ahora):
         if self.fase not in ('FALLO', 'FIN'):
@@ -251,6 +261,10 @@ class ControlMision:
             evasion=dict(self.evasion) if self.evasion else None,
             frente_m=distancia('dist_frente'), izquierda_m=distancia('dist_izquierda'),
             derecha_m=distancia('dist_derecha'), disparo_m=self.cfg_senales.esperar_pared_m,
+            tolerancia_disparo_m=self.cfg.tolerancia_disparo_m,
+            disparo_efectivo_m=self.giros.cfg.esperar_pared_m,
+            frenado_flecha_confirmado=bool(self.freno_flecha and self.freno_flecha['confirmado']),
+            bloqueo_aproximacion=self.bloqueo_aproximacion,
             limite_giro_m=self.cfg.radio_giro_m+self.cfg.margen_giro_m,
             radio_robot_m=self.cfg.radio_giro_m, margen_giro_m=self.cfg.margen_giro_m,
             distancia_centro_m=self.holgura.distancia_minima_m if self.holgura and self.holgura.valida else None,
@@ -417,27 +431,62 @@ class ControlMision:
                         self.giros.pendiente['recibido_ns'] = ev['marca_ns']
                         self.revalidacion_ns = ev['marca_ns']
             tenia_pendiente = self.giros.pendiente is not None
+            preparando=(self.giros.activo is not None and self.freno_flecha is not None
+                        and not self.freno_flecha['confirmado'])
+            if (preparando and ev and ev['id'] == self.giros.ultimo_id
+                    and ev['color'] == self.giros.color
+                    and ev['direccion'] != self.giros.activo['direccion']):
+                self.conflicto_senal=dict(id=ev['id'],color=ev['color'],
+                    esperada=self.giros.activo['direccion'],observada=ev['direccion'],marca_ns=ev['marca_ns'])
+                self.fallar('Cambio de sentido del cartel durante frenado: detenido',ahora)
+                return cero(self.motivo)
             # El controlador original conserva evento, disparo radial y 90°.
             # Su veto antiguo por rangos sin traslación se sustituye aquí por
             # la comprobación circular completa de abajo; no editar el snapshot.
             cfg_giro=SimpleNamespace(velocidad_giro=cfg.velocidad_giro,distancia_parada_m=0.)
-            giro = self.giros.decidir(ev, pose, ahora, True, lidar, cfg_giro)
+            giro = self.giros.decidir(ev,pose,ahora,not preparando,lidar,cfg_giro)
             if self.giros.pendiente and not tenia_pendiente:
                 self.aproximacion_ns = ahora
                 self.revalidacion_ns = ev['marca_ns'] if ev else None
             elif self.giros.pendiente is None:
                 self.aproximacion_ns = self.revalidacion_ns = None
             if tenia_pendiente and self.giros.pendiente is None and self.giros.activo is None and giro is None:
-                self.fallar('Flecha pendiente caducada: cerrar y revisar antes de continuar', ahora)
+                motivo='Flecha pendiente caducada: sin nueva deteccion durante seis segundos'
+                if self.bloqueo_aproximacion:
+                    motivo+='; ultimo bloqueo de aproximacion: '+self.bloqueo_aproximacion['motivo']
+                self.fallar(motivo+'; detenido, revisar antes de reiniciar',ahora)
                 return cero(self.motivo)
             if self.giros.fallo:
                 self.fallar(self.giros.fallo, ahora)
             if giro is not None:
                 self.evasion=None
                 if self.giros.activo and self.fase != 'FALLO':
+                    activo=self.giros.activo
+                    if self.freno_flecha is None or self.freno_flecha['inicio_ns'] != activo['inicio_ns']:
+                        self.freno_flecha=dict(inicio_ns=activo['inicio_ns'],confirmado=False,
+                                               reposo=ReposoOdometria())
+                    f=self.freno_flecha
+                    if not f['confirmado']:
+                        quieto=f['reposo'].actualizar(pose,pose_ns,ahora)
+                        bloqueo=self.bloqueo_giro(lidar,cfg)
+                        if bloqueo:
+                            return cero('Flecha cercana: detenido antes del giro; '+bloqueo)
+                        if not quieto:
+                            return cero(f'Flecha cercana ({lidar.dist_frente:.3f}m): '
+                                        'frenar y confirmar reposo 0.7s antes de girar')
+                        # Fijar el inicio angular una sola vez ANTES de publicar
+                        # giro. No reiniciar el plazo original de 12 s ni volver
+                        # a cambiar esta referencia tras pausas/obstáculos.
+                        activo['yaw']=pose['yaw']
+                        self.giros.ultima_posicion=(pose['x'],pose['y'])
+                        f['confirmado']=True
+                        self.bloqueo_aproximacion=None
+                        return cero('Reposo de flecha confirmado: iniciar 90 grados sobre el sitio')
                     bloqueo = self.bloqueo_giro(lidar,cfg)
                     if bloqueo:
                         return cero('Giro por flecha bloqueado: '+bloqueo+'; no invierte sentido')
+                elif self.fase != 'FALLO':
+                    self.freno_flecha = self.bloqueo_aproximacion = None
                 return giro
             if self.giros.pendiente:
                 self.evasion=None
@@ -449,8 +498,13 @@ class ControlMision:
                 # cambiar la parada general de evasión para alcanzar la flecha.
                 limite=minimo+velocidad*(self.holgura.edad_s+.1)
                 if self.holgura.distancia_minima_m <= limite:
-                    return cero(f'Flecha pendiente: margen de aproximacion insuficiente; '
-                                f'centro={self.holgura.distancia_minima_m:.3f}m <= {limite:.3f}m')
+                    motivo=(f'centro={self.holgura.distancia_minima_m:.3f}m <= {limite:.3f}m; '
+                            f'frente={lidar.dist_frente:.3f}m, '
+                            f'disparo efectivo={self.giros.cfg.esperar_pared_m:.3f}m')
+                    self.bloqueo_aproximacion=dict(motivo=motivo,marca_ns=ahora,
+                        distancia_centro_m=self.holgura.distancia_minima_m,limite_m=limite)
+                    return cero('Flecha pendiente: margen de aproximacion insuficiente; '+motivo)
+                self.bloqueo_aproximacion=None
                 return velocidad, 0., 'Flecha pendiente: aproximar recto; lento en precaucion hasta el disparo'
             return self.evadir(ahora,lidar,cfg)
         if self.fase == 'FRENAR_B':

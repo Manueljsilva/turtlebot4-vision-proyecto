@@ -362,6 +362,9 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
 # Si cambia de sentido el mismo ID, queda detenido: no forzar giro ni bajar barreras.
 # Perfil de MISION separado: config/senales_mision.json. Ensayo aislado 16/17 sigue a 0.48 m.
 # [PERFIL MISION] anuncia disparo 0.30 m, radio 0.22 m + margen de giro 0.03 m.
+# Tolerancia 0.005 m: a frente <=0.305 m manda cero y confirma >=3 poses/0.7 s
+# de reposo antes de ordenar el giro. No exigir avanzar los ultimos 4 mm del log.
+# giro.disparo_efectivo_m / frenado_flecha_confirmado muestran esa preparacion.
 # Radio aproximado indicado por el usuario; validar fisicamente. Giro necesita contorno
 # LiDAR 360 grados y TF x/y/yaw hasta base_link, incluidos obstaculos detras.
 # Minimo al centro >0.25 m permite giro; general parada de avance sigue en 0.32 m.
@@ -375,7 +378,9 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
 # [MISION] y [QR] explican cada parada. FALLO no se libera mostrando otro cartel;
 # revisar motivo y usar Reiniciar para otro intento explicito.
 # Este modo renueva flecha pendiente SOLO con reconfirmacion en imagenes nuevas;
-# 6 s sin reconfirmacion o 30 s de aproximacion detienen. No modifica el ensayo 16/17.
+# 6 s sin reconfirmacion ANTES de activar o 30 s de aproximacion detienen.
+# Activada cerca del umbral: plazo de giro 12 s incluye frenado, sin reiniciarse.
+# Bloqueo_aproximacion es distinto de bloqueo_giro. No modifica el ensayo 16/17.
 # No combinar --mision-guiada con --senales, --tramo, --ensayo-giro-companero u otro modo.
 # Detalles, limites y colocacion: task 1/PRUEBA_MISION_GUIADA.md.
 

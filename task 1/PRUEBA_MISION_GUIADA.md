@@ -1,6 +1,6 @@
 # Ensayo integrado A → B → A
 
-Actualizado el 21 de noviembre de 2026: el usuario confirma que **el QR funciona tras aumentar su tamaño**. La prueba inmediata pasa a ser el recorrido completo, incluidas ambas banderas y flechas azules/rojas. **Una imagen nueva válida basta para aceptar una detección**. Botón **Reiniciar** para repetir sin cerrar ventana/cámara. Meta y frenado ya no exigen permiso de giro: si el barrido se bloquea, la visión estacionaria sigue activa. **239 pruebas locales pasan; todavía sin validación del recorrido completo ni del reinicio en hardware.** Disparo activo 0.30 m y radio aproximado 0.22 m aportado por el usuario, con margen 0.03 m. Los modos anteriores se conservan.
+Actualizado el 21 de noviembre de 2026: el usuario confirma que **el QR funciona tras aumentar su tamaño**. La prueba inmediata pasa a ser el recorrido completo, incluidas ambas banderas y flechas azules/rojas. **Una imagen nueva válida basta para aceptar una detección**. Botón **Reiniciar** para repetir sin cerrar ventana/cámara. Meta y frenado ya no exigen permiso de giro: si el barrido se bloquea, la visión estacionaria sigue activa. **246 pruebas locales pasan; todavía sin validación del recorrido completo ni del reinicio en hardware.** Disparo activo 0.30 m y radio aproximado 0.22 m aportado por el usuario, con margen 0.03 m. Los modos anteriores se conservan.
 Este ensayo sigue azul en la ida y rojo en la vuelta; no reproduce una trayectoria
 grabada ni incorpora SLAM/Nav2.
 
@@ -91,7 +91,8 @@ después ya no hace falta Ctrl+C entre intentos. Este botón está en --mision-g
 ## Secuencia y qué observar
 
 1. **IDA:** registra A, navega con evasión y acepta flechas azules en la primera
-   imagen nueva válida. Disparo local a frente <=0.30 m; giro de 90° por odometría,
+   imagen nueva válida. Disparo nominal 0.30 m + tolerancia 0.005 m; frena,
+   confirma reposo y gira 90° por odometría,
    siempre con avance cero. Exige contorno 360° y distancia al centro >0.25 m
    (radio 0.22 + margen 0.03 m), además de sensores/TF frescos.
 2. **FRENAR_B:** confirma una meta nueva y frena. Exige >=3 poses nuevas durante
@@ -239,16 +240,28 @@ El ensayo aislado de bloques 16/17 conserva su perfil de 0.48 m. La coordinació
 añadida **solo en la misión guiada**:
 
 - Una flecha pendiente aproxima recto: a 0.10 m/s fuera de precaución y como
-  máximo 0.05 m/s entre 0.45 y 0.30 m. A <=0.30 m pide el giro sobre el sitio.
+  máximo 0.05 m/s dentro de precaución. Disparo nominal 0.30 m, con **tolerancia
+  0.005 m**: al llegar a <=0.305 m frena y exige >=3 poses nuevas/0.7 s de reposo.
+  Solo entonces inicia 90° sobre el sitio, con yaw fijado una vez desde reposo.
   No deja que evasión gire antes en esa franja ni invierte la flecha. Exige
   contorno completo libre en base_link y sensores válidos. Para aproximar exige
   margen extra de 0.02 m + velocidad × (edad del scan + 0.1 s); si no cabe, se detiene.
 - Una imagen nueva que vuelve a confirmar el mismo cartel/sentido renueva la
   espera. Un latido o paquete repetido no la renueva. Sin reconfirmación durante
-  seis segundos, detiene el ensayo; aproximación limitada a 30 s incluso si el
+  seis segundos **antes de activar la maniobra**, detiene el ensayo; aproximación limitada a 30 s incluso si el
   cartel sigue visible. Cambio de sentido del mismo cartel pendiente también detiene.
 - Al bloquearse conserva cero; timeout de giro por flecha sigue siendo 12 s.
-  No intenta pasar por una dirección bloqueada ni resuelve automáticamente el atasco.
+  Ese plazo incluye el frenado previo y no se renueva por bloqueos. No intenta
+  pasar por una dirección bloqueada ni resuelve automáticamente el atasco.
+
+El registro del 21/11 quedó a 0.304 m: el margen adicional impedía avanzar y el
+disparo exacto 0.300 m impedía girar; al perder detección caducó la dirección.
+La tolerancia cubre esos 4 mm sin reducir el radio o margen de seguridad. A
+0.306 m aún espera; si el margen de avance veta acercarse desde más lejos,
+permanece detenido y explica el bloqueo. No amplía la espera ni dispara desde lejos.
+`giro.bloqueo_aproximacion` se distingue de `bloqueo_giro`; `disparo_m` es nominal,
+`disparo_efectivo_m` incluye tolerancia y `frenado_flecha_confirmado` indica reposo.
+«Activo» durante el frenado aún no significa que haya orden angular.
 
 **Sin flecha:** la evasión empieza desde 0.45 m y conserva el lado elegido
 durante el giro frontal; diferencias pequeñas entre lados ya no lo invierten
@@ -260,7 +273,8 @@ alineación paralela a una pared ni resolver cualquier laberinto. `giro.evasion`
 en [MISION] muestra esa memoria. Las correcciones laterales y las guardas de
 seguridad se conservan; geometría/frenado y choques diagonales aún por medir.
 
-Al relanzar, `[PERFIL MISION]` debe anunciar 0.30 m y 0.05 m/s. Son valores de
+Al relanzar, `[PERFIL MISION]` debe anunciar 0.30 m, tolerancia 0.005 m,
+reposo antes de girar y aproximación 0.05 m/s. Son valores de
 ensayo: el radio de 0.22 m fue estimado por el usuario, sin verificación independiente,
 y el retorno frontal LiDAR no mide necesariamente distancia al cartel.
 

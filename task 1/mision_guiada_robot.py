@@ -317,6 +317,7 @@ def main(argv=None):
         print('ENSAYO INTEGRADO: azul > meta B > rostro/QR > orientacion entrada+180 > rojo > meta A. '
               'No reproduce ruta ni usa mapa. Sin --mover no publica. Cerrar otros controles.', flush=True)
         print(f'[PERFIL MISION] Flecha: frente LiDAR <= {cfg_s.esperar_pared_m:.2f} m; '
+              f'tolerancia {cfg_m.tolerancia_disparo_m:.3f} m; frenar/reposo antes de girar; '
               f'aproximacion en precaucion <= {cfg_m.velocidad_aproximacion_m_s:.2f} m/s; '
               f'giro sobre el sitio: radio {cfg_m.radio_giro_m:.2f}m + margen {cfg_m.margen_giro_m:.2f}m '
               '(base_link, TF completo y contorno 360 grados). '

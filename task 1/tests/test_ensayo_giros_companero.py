@@ -53,7 +53,8 @@ class SnapshotTests(unittest.TestCase):
                 'cfg=cargar_config_senales("senales.json"); '
                 'c=ControlMision(cfg); '
                 'assert cfg.confirmaciones==1 and cfg.esperar_pared_m==0.48; '
-                'assert c.giros.cfg is cfg and c.giros.pendiente is None'],
+                'assert c.cfg_senales is cfg and c.giros.pendiente is None; '
+                'assert abs(c.giros.cfg.esperar_pared_m-(0.48+c.cfg.tolerancia_disparo_m)) < 1e-10'],
                 cwd=tmp,capture_output=True,text=True,timeout=10)
             self.assertEqual(r.returncode,0,r.stderr)
 
