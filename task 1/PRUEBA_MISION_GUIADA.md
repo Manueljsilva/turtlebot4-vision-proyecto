@@ -1,71 +1,45 @@
 # Ensayo integrado A → B → A
 
-Actualizado el 21 de noviembre de 2026: el usuario confirma que **el QR funciona tras aumentar su tamaño**. La prueba inmediata pasa a ser el recorrido completo, incluidas ambas banderas y flechas azules/rojas. **Una imagen nueva válida basta para aceptar una detección**. Botón **Reiniciar** para repetir sin cerrar ventana/cámara. Meta y frenado ya no exigen permiso de giro: si el barrido se bloquea, la visión estacionaria sigue activa. **298 pruebas locales pasan; todavía sin validación del recorrido completo ni del reinicio en hardware.** Disparo activo 0.30 m y radio aproximado 0.22 m aportado por el usuario, con margen 0.03 m. Los modos anteriores se conservan.
-Este ensayo sigue azul en la ida y rojo en la vuelta; no reproduce una trayectoria
-grabada ni incorpora SLAM/Nav2.
+Actualizado el 21 de noviembre de 2026. **304 tests Task 1 y 51 Task 2** locales.
+El usuario confirma meta B y barrido; en el último intento no hay rostro objetivo
+aceptado. La lectura QR había funcionado al aumentar su tamaño; el regreso completo
+sigue pendiente. A también lleva bandera. Pruebas físicas siguientes: **únicamente
+recorrido completo**, según el usuario. Este modo sigue azul en ida y rojo en vuelta;
+no reproduce una trayectoria grabada ni incorpora SLAM/Nav2.
 
-## Continuidad y bandera durante IDA (21/11, última revisión)
+## Salida adaptable tras flecha
 
-No se elimina la parada protectora. Se permiten recuperar dos casos: deriva
-pequeña de rumbo después de flecha (frena, corrige con holgura a <=0.12 rad/s y
-confirma reposo), y evasión al completar 90° con frente >0.45 m y avance recto
-observado/seguro. Corrección >12 s, desvío >20°, sensores caducados o huella
-ocupada detienen. Salida recta total sigue limitada a 30 s. El círculo conserva
-0.25 m; la sesión de flecha también registró un punto a 0.14 m, no ignorarlo.
+El último atasco completa IZQUIERDA a 91.3°, avanza 13 cm y no puede continuar
+recto con el margen calculado. Exigir 40 cm impedía evasión y acababa en FALLO por
+30 s. El usuario autoriza retirar ambas restricciones en la misión integrada:
 
-El usuario vio IDA durante el fallo visual de bandera. No se ha reproducido esa
-imagen; el detector sigue aceptando la referencia local y conserva sus criterios.
-La terminal ahora separa `[META VISUAL]` (VISTA/SIN META, resolución) de `[META]`
-(guardas de llegada). En ESPERAR/FALLO puede mostrar la bandera como diagnóstico,
-sin autorizar movimiento ni declarar B. Si en IDA da SIN META, cerrar y ejecutar
-`--solo-meta` sin --mover (comando de abajo), mostrar la bandera completa y guardar
-las líneas; un fotograma del vídeo permitirá revisar tamaño/ángulo/iluminación.
-La vista previa no guarda imágenes. **298 Task 1 +51 Task 2**; prueba física nueva
-pendiente. Cerrar/relanzar carga esta revisión, Reiniciar no recarga código.
+- Tras 90° confirma reposo >=3 poses/0.7 s y prefiere recto con huella protegida.
+- Si el recorrido recto se bloquea, puede actuar evasión con sensores/holgura
+  válidos antes de recorrer 40 cm. Si falta espacio de giro o datos, se detiene.
+- Una flecha nueva del tramo puede admitirse sin distancia mínima. Mismo ID no
+  se repite y el detector conserva rearme por ausencia >=1.5 s. Esto no garantiza
+  distinguir un cartel físico que reaparezca como evento nuevo.
+- Ya no hay timeout de 30 s por no completar una salida recta. Se mantienen los
+  30 s de aproximación a una flecha/meta, límites de giro y plazo total de misión.
+- La interfaz distingue «Giro ... por odometría», «Salida adaptable» y «Evasión por
+  obstáculo». Puede haber otro giro por un obstáculo después de completar la flecha.
 
-## Repetir giro y aproximación (21/11, revisión anterior)
+Los giros de flecha siguen siendo **90°**, con reposo, tolerancia 5° y plazo 12 s.
+La idea de usar la flecha para elegir lado y terminar al encontrar salida libre
+queda pendiente; **todavía no está implementada**. Radio aproximado 0.22 m más
+margen 0.03 m, frescura de sensores y criterio facial se conservan. Los perfiles de
+ensayos históricos mantienen su mínimo de 0.4 m; solo el adaptador de misión lo
+sustituye por cero. No se modifican los originales del compañero ni Task 2.
 
-El usuario observó 90° por flecha y luego otro giro. Ahora se confirma reposo
-tras los 90° y se realiza una salida recta protegida a <=0.05 m/s hasta los
-0.40 m de rearme. No se encadena una corrección lateral en el mismo sitio.
-La ventana/telemetría muestran grados medidos, `ultimo_completado` y
-`salida_recta`; el ángulo de flecha sigue siendo 90°. Un camino ocupado detiene,
-sin forzar salida ni recortar el radio; desviación >5° o salida >30 s enclavan.
+`[META VISUAL]` separa detección/resolución de `[META]` de llegada. El último
+registro aproxima sin evasión a 0.444 m y confirma B a 0.392 m; después inicia
+BUSCAR_B, con cámara 250x250 y sin objetivo aceptado. El tamaño de la foto puede
+influir, pero ese registro no distingue el motivo del rechazo. Revisar vídeo y
+mensajes dentro de la misión completa. No se guardan imágenes automáticamente.
 
-Para aproximar se comprueba el disco de 0.25 m trasladado hacia delante; el
-margen de frenado se aplica a ese recorrido, sin inflar el ancho hacia una
-pared lateral. Diagonales, contorno ocupado, datos insuficientes/caducados siguen
-deteniendo. **Una distancia al centro <=0.25 m sigue bloqueando giro**: fue el
-motivo del último fragmento, después de iniciar derecha y antes del timeout.
-
-Una bandera vista lejos no gasta el plazo final: el acercamiento lento de 30 s
-comienza al entrar en frontal <=0.49 m; llegada sigue <=0.40 m. Sensores/guardas
-de etapa intactos. Cerrar y relanzar para cargar estos cambios. Probar primero
-una flecha con salida despejada; comprobar 90°, reposo y avance recto antes de
-añadir meta. El mismo comando de misión de abajo sirve. Validación local actual:
-**290 Task 1 y 51 Task 2**, sin validar físicamente esta revisión.
-
-## Correcciones graves revisadas antes de repetir (21/11)
-
-Se integra main **ca5d880** del compañero y se completan sus soluciones. No aumenta
-velocidades ni cambia el disparo nominal de flecha/meta, radio, márgenes o reposo.
-
-- Avance normal: ambos laterales demasiado cercanos detienen; el contorno válido
-  frontal/lateral en base_link protege también el avance ante objetos diagonales.
-- Segunda flecha: se conserva aunque desaparezca mientras espera rearme de **0.40 m
-  desde el giro previo**. No consume ID ni deja girar a evasión en sentido contrario.
-  Conserva plazo total de recepción **30 s**. Si llega al umbral frontal sin rearme,
-  se detiene y explica la causa; no se fuerza un giro ni se baja esa guarda.
-- QR leído y recibido fresco: retención de hasta **5 s** para recuperar sensores.
-  Si caduca, el nodo pide volver a leer esa misma confirmación mediante su marca;
-  GUI vuelve a exigir una imagen nueva del objetivo y su QR propio. Un estado viejo
-  sin acuse no borra una palabra ya aceptada. Imagen reciente no rescata QR antiguo.
-- Telemetría: pipe lleno/sin lector no bloquea el siguiente ciclo de parada. El
-  lanzador copia `telemetria_ros.py` tanto para misión como para búsqueda aislada.
-
-Validación local: 277 tests Task 1 y 51 Task 2, incluidos canales POSIX y recuperación.
-Cerrar/relanzar una vez carga esta revisión. Después sirve Reiniciar para repetir.
-Prueba física pendiente; hallazgos medios de la auditoría se mantienen separados.
+Cerrar y relanzar una vez carga los nuevos módulos en Docker. Reiniciar permite
+otro intento/persona, pero no recarga código. No aumentar velocidades ni reducir
+márgenes para resolver una parada sin revisar su diagnóstico.
 
 ## Colocación acordada
 
@@ -87,35 +61,15 @@ Prueba física pendiente; hallazgos medios de la auditoría se mantienen separad
 
 ## Ejecutar
 
-Si la bandera no aparece reconocida, cerrar primero el control anterior con
-Ctrl+C y comprobar **solo cámara y detector**, sin movimiento:
+Desde Ubuntu normal, en la raíz del proyecto, con IP/dominio vigentes y el
+robot preparado, cerrar el programa anterior y ejecutar el recorrido completo:
 
 ```bash
 bash "task 1/ejecutar_autonomo_robot.sh" \
-  --ip 10.87.179.100 --dominio 5 --solo-meta
-```
-
-Mostrar la bandera completa: debe aparecer **META VISTA** y su cuadro. No pide
-nombre ni Buscar, no carga galería y no crea publicador de velocidad. No confirma
-llegada a B/A. Si muestra «Sin imagen reciente», falta continuidad de cámara;
-no se puede comprobar la bandera sobre una imagen caducada. Esc/q/Ctrl+C cierra.
-Se conservan los PNG originales en `señales/` y el PDF. El detector no necesita
-abrir esos archivos durante la recepción en vivo.
-
-Desde Ubuntu normal, en la raíz del proyecto, con IP/dominio vigentes. Primera
-comprobación de cámara, interfaz, nombre y registro A, **sin publicador**:
-
-```bash
-bash "task 1/ejecutar_autonomo_robot.sh" \
-  --ip 10.87.179.100 --dominio 5 --mision-guiada
-```
-
-No completará el recorrido sin desplazamiento real de odometría. Cerrar con
-Ctrl+C y luego, con el circuito preparado, activar movimiento explícitamente:
-
-```bash
-bash "task 1/ejecutar_autonomo_robot.sh" \
-  --ip 10.87.179.100 --dominio 5 --mision-guiada --mover
+  --ip 10.87.179.100 --dominio 5 \
+  --mision-guiada \
+  --topico-camara /oakd/rgb/preview/image_raw/compressed \
+  --mover
 ```
 
 Escribir el nombre y pulsar Buscar. `--nombre` solo precarga el campo.
@@ -185,8 +139,8 @@ legible, asociado y confirmado. Las órdenes calculadas no miden velocidad real.
 Durante IDA/VUELTA, **META VISTA** significa detección visual. `[META]` explica
 si aún falta ausencia previa de la bandera, separación del origen, centrado,
 frontal cercano o completar un giro; una imagen nueva admisible confirma llegada.
-Antes de Buscar/registrar A, la misión permanece en ESPERAR y no analiza la
-bandera. Para verificarla en ese momento, usar --solo-meta por separado.
+Antes de Buscar/registrar A permanece en ESPERAR: puede mostrar la bandera como
+diagnóstico, sin confirmar llegada ni habilitar movimiento.
 
 El registro del 20/11 permanecía en ESPERAR, a=None y «Sin camara reciente».
 Eso no permite concluir un fallo visual de meta durante la ida. `[CAMARA]`
@@ -351,8 +305,9 @@ permanece detenido y explica el bloqueo. Esta revisión amplía la memoria a
 
 **Sin flecha ni aproximación a meta:** la evasión empieza desde 0.45 m y conserva el lado elegido
 durante el giro frontal; diferencias pequeñas entre lados ya no lo invierten
-cada ciclo. Espera frente >0.49 m para terminar, publica un ciclo cero y luego
-puede avanzar. Si el contorno invade radio+margen (0.25 m), se detiene sin
+cada ciclo. Espera frente >0.49 m para terminar; al completar 90° dentro de
+tolerancia también puede finalizar con frente >0.45 m y trayectoria recta segura.
+Publica un ciclo cero y luego puede avanzar. Si el contorno invade radio+margen (0.25 m), se detiene sin
 cambiar de sentido. Incluye obstáculos detrás y correcciones laterales. Sin salida tras 90°/12 s queda en FALLO; no gira indefinidamente.
 Esto corrige un vaivén reproducido con los mínimos del registro, sin asegurar
 alineación paralela a una pared ni resolver cualquier laberinto. `giro.evasion`
@@ -375,9 +330,9 @@ TF mayor de 5° se rechaza. `giro.distancia_centro_m` es el mínimo transformado
 `frente_m`/laterales siguen siendo rangos desde el sensor. La rotación exige
 mínimo al centro >0.25 m. Los márgenes y el radio deben comprobarse físicamente.
 
-La parada **general de avance sigue en 0.32 m**. Solo la aproximación coordinada
-a una flecha puede cruzar esa distancia con el control lento y los márgenes
-anteriores; puede detenerse antes de 0.30 m si no queda holgura. No se fuerza un
+La parada **general de avance sigue en 0.32 m**. La aproximación coordinada
+a una flecha y la salida adaptable conservan avance lento protegido por huella
+y margen longitudinal; pueden detenerse antes de 0.30 m si no queda holgura. No se fuerza un
 giro en ese caso. El controlador original del compañero conserva sus bytes;
 su veto por rangos crudos se sustituye por este control circular en la misión.
 Los ensayos aislados siguen usando sus barreras anteriores.
@@ -404,7 +359,7 @@ de medir; esta integración no demuestra que estén resueltos.
 Se guarda solo JSON UTF-8 en `datos/sesiones/mision_guiada_*.json`, ignorado por Git:
 nombre solicitado, identidad confirmada, palabra, poses/marcos A/B, fase y llegada.
 No guarda fotos, no recalibra la galería ni cambia Task 2. Los ensayos individuales
-de flechas y meta/rostro/QR siguen disponibles para aislar fallos.
+se conservan disponibles, aunque el usuario pide ahora probar solo el recorrido completo.
 
 El panel final usa Pillow 13.0.0, ya presente en la .venv compartida y declarado
 en requirements. No necesita instalar paquetes de ROS en Ubuntu ni cambiar Docker.

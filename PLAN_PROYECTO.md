@@ -2,15 +2,22 @@
 
 Actualizado el 21 de noviembre de 2026. Fuente base: las cinco páginas de [Computer_vision_proyectos.pdf](Computer_vision_proyectos.pdf), revisadas completas. Las indicaciones del usuario del 13 y 17 de noviembre **prevalecen para Task 1**. Se distinguen los requisitos confirmados, las decisiones propuestas y los componentes realmente implementados en [ESTADO_PROYECTO.md](ESTADO_PROYECTO.md).
 
-**Prioridad actual (21/11): reducir enclavamientos recuperables y aislar bandera en IDA.**
-El usuario confirmó giro correcto. Deriva pequeña tras flecha ahora puede corregir
-rumbo con reposo/holgura y giro acotado; evasión al límite puede concluir si el
-camino recto ya es seguro a >0.45 m. Mantener sensores, huella 0.25 m, límites y
-paradas de misión: no moverse hasta colisionar. **298 Task 1 + 51 Task 2** locales.
-Bandera no detectada durante IDA sigue sin reproducirse físicamente. Referencia
-positiva; `[META VISUAL]` separa detector/resolución de guardas de llegada.
-Si persiste SIN META en IDA, comprobar --solo-meta quieto y obtener fotograma;
-no reducir criterios/veto QR sin evidencia. Repetir correcciones en hardware.
+**Prioridad actual (21/11): probar la misión completa con salida adaptable.**
+El usuario autoriza eliminar los 40 cm obligatorios tras flecha y el fallo de
+30 s de esa salida. Tras reposo, preferir recto protegido; un recorrido bloqueado
+permite volver a evasión con holgura/sensores, y una flecha nueva no exige distancia
+mínima. Conservar 90°/límites, rearme visual/ID, margen/huella y paradas de misión.
+**304 Task 1 +51 Task 2** locales; falta el recorrido físico completo. No proponer
+ensayos físicos aislados como siguiente paso: el usuario tiene poco tiempo.
+Meta B y transición al barrido confirmadas en el último registro, objetivo facial
+no aceptado; vídeo 250x250, tamaño de la foto pendiente de comprobar sin relajar
+criterio. Mantener el QR propio y el retorno pendientes de esta prueba.
+
+**Posible cambio futuro, sin implementar:** usar la flecha para fijar el lado y
+terminar el giro al encontrar una salida libre como evasión, sustituyendo 90°.
+Definir criterio y límites antes de solicitar aprobación; hoy siguen 90°.
+El usuario pide diagnóstico/propuesta y confirmación antes de nuevos cambios de
+comportamiento; el ajuste de salida adaptable ya está aprobado.
 
 **Entrega anterior: repetir flecha, salida recta y llegada a meta.**
 El usuario confirmó 90° seguidos de otro giro. Tras flecha se añade reposo y salida
@@ -32,8 +39,8 @@ parada posterior. Sin prueba física nueva; mantener radio/márgenes/velocidades
 
 Cerrar/relanzar --mision-guiada --mover, nombre/Buscar desde A. Comprobar primera
 y segunda flecha, giro/reposo, meta B, objetivo/QR propio, retorno rojo y meta A.
-Rearme exige 0.40 m desde giro anterior: si pared impide alcanzarlo, detener sin
-invertir; no dar por resuelto todo circuito con giros más juntos. Tras retención
+La misión ya no exige 0.40 m desde el giro anterior: conserva una orden por ID y
+rearme visual por ausencia. Revisar repeticiones y giros cercanos en el circuito. Tras retención
 QR de 5 s sin poder aceptar, pedir nueva lectura de forma coordinada, sin falsificar
 marcas. Las guardas de parada por sensores/GUI caducados siguen activas.
 

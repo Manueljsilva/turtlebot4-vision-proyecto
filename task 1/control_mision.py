@@ -126,7 +126,10 @@ class ControlMision:
         # Los perfiles/validación de los ensayos aislados siguen intactos.
         parametros = asdict(cfg_senales)
         parametros.update(esperar_pared_m=cfg_senales.esperar_pared_m+self.cfg.tolerancia_disparo_m,
-                          tiempo_espera_pared_s=self.cfg.tiempo_aproximacion_s)
+                          tiempo_espera_pared_s=self.cfg.tiempo_aproximacion_s,
+                          desplazamiento_rearme_m=0.)
+        # Solo misión: ID nuevo y rearme visual sustituyen el mínimo de 0.40 m.
+        # No cambiar los perfiles ni los bytes de los ensayos originales.
         self.cfg_giros_mision = SimpleNamespace(**parametros)
         self.giros = clase_giros('ida', self.cfg_giros_mision)
         if not hasattr(self.giros, 'pendiente') or cfg_senales.esperar_pared_m <= 0:
@@ -138,7 +141,6 @@ class ControlMision:
         self.holgura = None
         self.freno_flecha = None
         self.bloqueo_aproximacion = None
-        self.rearme_bloqueo = None
         self.salida_flecha = None
         self.ultimo_giro_completado = None
 
@@ -155,7 +157,6 @@ class ControlMision:
             self.aproximacion_meta_ns = None
             self.senal_por_procesar = None
             self.aproximacion_ns = self.revalidacion_ns = None
-            self.rearme_bloqueo = None
             self.salida_flecha = None
 
     def fallar(self, motivo, ahora):
@@ -316,12 +317,6 @@ class ControlMision:
             return f'distancia frontal/lateral al centro={dist:.3f}m <= radio+margen={limite:.3f}m'
         return None
 
-    def rearme_insuficiente(self, pose):
-        if pose is None or self.giros.ultima_posicion is None:
-            return False
-        return hypot(pose['x'] - self.giros.ultima_posicion[0],
-                     pose['y'] - self.giros.ultima_posicion[1]) < self.giros.cfg.desplazamiento_rearme_m
-
     def diagnostico_giro(self, ahora, lidar, cfg=None):
         def distancia(campo):
             valor=getattr(lidar,campo,None) if lidar and lidar.observacion_valida else None
@@ -332,7 +327,7 @@ class ControlMision:
         return dict(color=self.giros.color,
             recibido=dict(self.ultima_senal_recibida) if self.ultima_senal_recibida else None,
             por_procesar=dict(self.senal_por_procesar) if self.senal_por_procesar else None,
-            rearme=dict(self.rearme_bloqueo) if self.rearme_bloqueo else None,
+            rearme=None, rearme_por_distancia=False,
             pendiente=dict(id=self.giros.ultimo_id,direccion=pendiente['direccion'],
                 edad_memoria_s=(ahora-self.aproximacion_ns)/1e9,
                 edad_ultima_deteccion_s=(ahora-self.revalidacion_ns)/1e9
@@ -346,7 +341,7 @@ class ControlMision:
             salida_recta=(dict(reposo_confirmado=salida['confirmado'],
                 corrigiendo=bool(salida.get('correccion')),
                 distancia_m=hypot(self.pose['x']-salida['x'],self.pose['y']-salida['y']) if self.pose else None,
-                requerido_m=self.giros.cfg.desplazamiento_rearme_m,
+                adaptable=True,
                 edad_s=(ahora-salida['inicio_ns'])/1e9) if salida else None),
             evasion=dict(self.evasion) if self.evasion else None,
             frente_m=distancia('dist_frente'), izquierda_m=distancia('dist_izquierda'),
@@ -383,12 +378,12 @@ class ControlMision:
                 recorrido_libre_m=recorrido,margen_recorrido_m=margen)
             return 0.,0.,etiqueta+': margen de aproximacion insuficiente; '+motivo
         self.bloqueo_aproximacion=None
-        accion=('avanzar recto con holgura; sin segundo giro' if etiqueta == 'Salida tras flecha'
+        accion=('avanzar recto con holgura; salida adaptable' if etiqueta == 'Salida tras flecha'
                 else 'aproximar recto hasta el umbral; sin giro evasivo')
         return velocidad,0.,etiqueta+': '+accion
 
     def salir_de_flecha(self, ahora, pose, pose_ns, lidar, cfg, solo_reposo=False):
-        """Frenar tras los 90° y avanzar con protección antes de otra evasión."""
+        """Reposo y salida protegida; un obstáculo puede devolver el control a evasión."""
         s=self.salida_flecha
         if s is None:
             return None
@@ -418,14 +413,25 @@ class ControlMision:
                 return 0.,0.,'Correccion de rumbo bloqueada: '+bloqueo
             velocidad=min(.12,cfg.velocidad_giro,max(.04,abs(error)*.8))
             return 0.,velocidad if error>0 else -velocidad,f'Corregir rumbo tras flecha: {desvio:.1f} grados restantes'
-        if hypot(pose['x']-s['x'],pose['y']-s['y']) >= self.giros.cfg.desplazamiento_rearme_m:
-            self.salida_flecha=None
-            return None
         if solo_reposo:
             return None
-        # No encadenar una corrección lateral con otros 90° en el mismo sitio.
-        # Un camino ocupado detiene: esta fase no fuerza un giro alternativo.
-        return self.aproximar(ahora,lidar,cfg,'Salida tras flecha',lento=True)
+        # Preferir recto si una corrección lateral sería innecesaria para la
+        # huella trasladada. No exigir una distancia: una pared/diagonal que
+        # bloquee ese recorrido puede necesitar evasión antes de avanzar 40 cm.
+        recto=self.aproximar(ahora,lidar,cfg,'Salida tras flecha',lento=True)
+        if not self.observado(lidar) or not self.libre(lidar,cfg):
+            return recto
+        vx_normal,wz_normal=calcular_velocidad_evasion(lidar,cfg)
+        if recto[0] > 0:
+            if vx_normal > 0 and wz_normal == 0:
+                self.salida_flecha=None  # Navegación normal ya puede continuar.
+            return recto
+        if wz_normal:
+            self.salida_flecha=None
+            self.bloqueo_aproximacion=None
+            vx,wz,motivo=self.evadir(ahora,lidar,cfg)
+            return vx,wz,'Salida tras flecha: recto bloqueado; '+motivo
+        return recto
 
     def evadir(self, ahora, lidar, cfg):
         """Conservar el lado del giro frontal hasta salir con margen, sin arcos."""
@@ -531,10 +537,6 @@ class ControlMision:
                         motivo+='; ultimo bloqueo de aproximacion: '+self.bloqueo_aproximacion['motivo']
                     self.fallar(motivo,ahora)
                     return cero(self.motivo)
-            if (self.salida_flecha is not None
-                    and ahora-self.salida_flecha['inicio_ns'] > self.cfg.tiempo_aproximacion_s*1e9):
-                self.fallar('Salida recta tras flecha agotada: detenido; revisar espacio y sensores',ahora)
-                return cero(self.motivo)
         if self.fase == 'BUSCAR_B' and ahora-self.inicio_barrido_ns >= 90_000_000_000:
             self.fallar('Barrido agotado (90 s)', ahora)
         if self.inicio_orientacion_ns is not None and self.fase in ('ORIENTAR_SALIDA', 'FRENAR_SALIDA'):
@@ -648,24 +650,6 @@ class ControlMision:
             # El controlador original conserva evento, disparo radial y 90°.
             # Su veto antiguo por rangos sin traslación se sustituye aquí por
             # la comprobación circular completa de abajo; no editar el snapshot.
-            # No consumir el ID del controlador antes de cumplir desplazamiento_rearme_m.
-            ev_giro = ev
-            esperando_rearme = False
-            if (self.giros.activo is None and self.giros.pendiente is None and ev is not None
-                    and ev['color'] == self.giros.color and ev['id'] > self.giros.ultimo_id
-                    and self.giros.ultima_posicion is not None and self.rearme_insuficiente(pose)):
-                dist_rearme = hypot(pose['x'] - self.giros.ultima_posicion[0],
-                                    pose['y'] - self.giros.ultima_posicion[1])
-                self.rearme_bloqueo = dict(
-                    id=ev['id'], direccion=ev['direccion'], color=ev['color'],
-                    distancia_m=dist_rearme, requerido_m=self.giros.cfg.desplazamiento_rearme_m,
-                    marca_ns=ev['marca_ns'],
-                )
-                self.senal_por_procesar = dict(ev)
-                esperando_rearme = True
-                ev_giro = None
-            elif self.giros.pendiente is not None or self.giros.activo is not None or not self.rearme_insuficiente(pose):
-                self.rearme_bloqueo = None
             lidar_giro = lidar
             esperar = self.giros.cfg.esperar_pared_m
             if (lidar is not None and lidar.observacion_valida
@@ -674,15 +658,18 @@ class ControlMision:
                               else SimpleNamespace(**{**vars(lidar), 'dist_frente': esperar}))
             cfg_giro=SimpleNamespace(velocidad_giro=cfg.velocidad_giro,distancia_parada_m=0.)
             activo_anterior=dict(self.giros.activo) if self.giros.activo else None
-            giro = self.giros.decidir(ev_giro,pose,ahora,not preparando,lidar_giro,cfg_giro)
-            if not esperando_rearme:
-                self.senal_por_procesar = None
+            giro = self.giros.decidir(ev,pose,ahora,not preparando,lidar_giro,cfg_giro)
+            self.senal_por_procesar = None
+            if self.giros.pendiente is not None or self.giros.activo is not None:
+                # El reposo anterior ya se comprobó arriba. No corregir el
+                # rumbo viejo mientras se prepara una nueva flecha válida.
+                self.salida_flecha=None
             if self.giros.pendiente and not tenia_pendiente:
                 if self.aproximacion_ns is None:
                     self.aproximacion_ns = ahora
                 if self.revalidacion_ns is None:
                     self.revalidacion_ns = ev['marca_ns'] if ev else None
-            elif self.giros.pendiente is None and not esperando_rearme:
+            elif self.giros.pendiente is None:
                 self.aproximacion_ns = self.revalidacion_ns = None
             if tenia_pendiente and self.giros.pendiente is None and self.giros.activo is None and giro is None:
                 motivo='Se perdio la maniobra de flecha pendiente'
@@ -739,12 +726,6 @@ class ControlMision:
             if self.giros.pendiente:
                 self.aproximacion_meta_ns=None
                 return self.aproximar(ahora,lidar,cfg,'Flecha guardada')
-            if esperando_rearme:
-                self.evasion = None
-                self.aproximacion_meta_ns = None
-                if lidar is not None and lidar.observacion_valida and lidar.dist_frente <= esperar + 1e-4:
-                    return cero('Flecha guardada: rearme insuficiente y pared cercana; detenido sin invertir')
-                return self.aproximar(ahora,lidar,cfg,'Flecha guardada: esperando rearme')
             # La evasión gira desde 0.45 m. Con bandera centrada y guardas
             # válidas se coordina un avance lento hasta 0.40 m, sin anticipar B.
             meta_encaminada=(self.meta is not None and self.meta_nueva.salida_visual and separado

@@ -325,16 +325,16 @@ def dibujar(imagen, estado_camara, entrada, vision, estado, mover):
             elif giro.get('pendiente'):
                 senal = (f"Flecha guardada: {giro['pendiente']['direccion']} {giro.get('color','')}; "
                          f"esperar frente <= {giro.get('disparo_efectivo_m',.305):.3f} m")
-            elif giro.get('rearme'):
-                r = giro['rearme']
-                senal = (f"Flecha guardada; esperando rearme ({r['distancia_m']:.2f}/{r['requerido_m']:.2f} m): "
-                         f"{r['direccion']}")
             elif giro.get('por_procesar'):
                 senal = f"Flecha recibida: {giro['por_procesar']['direccion']}; esperando sensores recientes"
+            elif giro.get('evasion'):
+                lado='IZQUIERDA' if giro['evasion']['sentido'] > 0 else 'DERECHA'
+                senal=f'Evasion por obstaculo: {lado}'
             elif giro.get('salida_recta'):
                 s=giro['salida_recta']
                 senal=('Ajustando rumbo tras flecha; sin avance' if s.get('corrigiendo') else
-                       f"Salida recta tras flecha: {s['distancia_m']:.2f}/{s['requerido_m']:.2f} m; sin otro giro")
+                       'Confirmar reposo tras flecha' if not s.get('reposo_confirmado') else
+                       'Salida adaptable: recto con holgura; evasion disponible')
         escribir(panel, senal, 18, 169)
         observados = ', '.join(c['nombre'] for c in vision.ensayo.caras) if fase == 'BUSCAR_B' else 'en espera'
         if fase in ('IDA', 'VUELTA'):
