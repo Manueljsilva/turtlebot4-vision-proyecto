@@ -20,7 +20,7 @@ from PIL import Image, ImageDraw, ImageFont
 from busqueda_robot import EntradaBusqueda, PuenteBusqueda, preparar_movimiento
 from control_busqueda import CONFIRMACIONES_VISUALES, EDAD_CAMARA_NS, reciente
 from control_mision import cargar_config_mision
-from ensayo_giros_companero import CONFIG, CONTROL, cargar_ensayo
+from ensayo_giros_companero import CONTROL, cargar_ensayo
 from evasion_lidar import cargar_config
 from interfaz_facial import BUSCAR, SALIR, dibujar_interfaz, dentro, escribir
 from percepcion_meta_qr import DetectorMetaQR, texto_valido
@@ -31,6 +31,7 @@ from senales_giro import ConsultaSenales, dibujar_detecciones
 
 
 REINICIAR = (678, 674, 830, 700)
+CONFIG_SENALES_MISION = TAREA/'config/senales_mision.json'
 
 
 class EntradaMision(EntradaBusqueda):
@@ -81,9 +82,9 @@ class PuenteMision(PuenteBusqueda):
 
 
 def preparar_mision(comando_camara, contenedor, config, mover):
-    cargar_ensayo()  # Verificar originales antes de copiarlos.
+    cargar_ensayo(config=CONFIG_SENALES_MISION)  # Verificar originales antes de copiarlos.
     comando = preparar_movimiento(comando_camara, contenedor, config, mover,
-                                  CONFIG, 'ida', control_giros_origen=CONTROL)
+                                  CONFIG_SENALES_MISION, 'ida', control_giros_origen=CONTROL)
     indice = next(i for i, v in enumerate(comando) if v.endswith('/busqueda_lidar_ros.py'))
     remoto = str(Path(comando[indice]).parent)
     for archivo in ('control_meta.py', 'control_mision.py', 'mision_ros.py'):
@@ -294,8 +295,8 @@ def main(argv=None):
         if not (os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY')):
             raise ValueError('Abrir en una terminal de Ubuntu con interfaz grafica')
         cargar_config(args.config)
-        cargar_config_mision(TAREA/'config/mision_guiada.json')
-        _, cfg_s = cargar_ensayo()
+        cfg_m = cargar_config_mision(TAREA/'config/mision_guiada.json')
+        _, cfg_s = cargar_ensayo(config=CONFIG_SENALES_MISION)
         sistema = cargar_sistema()
         cv2.setNumThreads(1)
         comando = preparar_camara(args.ip, args.dominio, args.contenedor, args.topico_camara)
@@ -315,6 +316,9 @@ def main(argv=None):
         ultimo_log = 0
         print('ENSAYO INTEGRADO: azul > meta B > rostro/QR > orientacion entrada+180 > rojo > meta A. '
               'No reproduce ruta ni usa mapa. Sin --mover no publica. Cerrar otros controles.', flush=True)
+        print(f'[PERFIL MISION] Flecha: frente LiDAR <= {cfg_s.esperar_pared_m:.2f} m; '
+              f'aproximacion en precaucion <= {cfg_m.velocidad_aproximacion_m_s:.2f} m/s; '
+              'giro sobre el sitio. Evasion frontal mantiene sentido hasta salir con margen.', flush=True)
         while True:
             puente.comprobar()
             if video.proceso.poll() is not None:

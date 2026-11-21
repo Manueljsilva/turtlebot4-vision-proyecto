@@ -2,13 +2,16 @@
 
 Actualizado el 21 de noviembre de 2026. Fuente base: las cinco páginas de [Computer_vision_proyectos.pdf](Computer_vision_proyectos.pdf), revisadas completas. Las indicaciones del usuario del 13 y 17 de noviembre **prevalecen para Task 1**. Se distinguen los requisitos confirmados, las decisiones propuestas y los componentes realmente implementados en [ESTADO_PROYECTO.md](ESTADO_PROYECTO.md).
 
-**Prioridad actual (21/11): prueba completa A → B → A.** El usuario confirma que el QR ya funciona al aumentar su tamaño. Preparar A con bandera visible al regresar, flechas azules en ida/rojas en vuelta, B con bandera al fondo y fotografías/QR legibles. Ejecutar --mision-guiada --mover, nombre/Buscar desde A. Verificar giros, llegada B, reposo/barrido, objetivo/QR propio, orientación de entrada B +180°, vuelta y nueva meta A. La interfaz muestra ahora una tarjeta grande con la palabra solo tras FIN/QR confirmado. Pasan 217 tests locales; no hay retorno físico confirmado todavía. Publicar cada cambio terminado y verificar main, con exclusiones vigentes.
+**Prioridad actual (21/11): prueba completa A → B → A.** El usuario confirma que el QR ya funciona al aumentar su tamaño. Preparar A con bandera visible al regresar, flechas azules en ida/rojas en vuelta, B con bandera al fondo y fotografías/QR legibles. Ejecutar --mision-guiada --mover, nombre/Buscar desde A. Verificar giros, llegada B, reposo/barrido, objetivo/QR propio, orientación de entrada B +180°, vuelta y nueva meta A. La interfaz muestra ahora una tarjeta grande con la palabra solo tras FIN/QR confirmado. Pasan 224 tests locales; no hay retorno físico confirmado todavía. Publicar cada cambio terminado y verificar main, con exclusiones vigentes.
 
-**Comprobación inmediata:** repetir primero la flecha azul izquierda de este
-recorrido. El registro terminó por direcciones visuales contradictorias antes
-del giro; se reprodujo y corrigió geometría equivocada en referencias pequeñas/
-JPEG. Se mantiene la parada por conflicto y el disparo de 0.48 m. Revisar nuevos
-`[FLECHA VISUAL]` y `giro` en `[MISION]`; arreglo aún pendiente en hardware.
+**Comprobación inmediata:** el usuario confirma detección azul y pide reducir
+la distancia de giro. Solo --mision-guiada pasa a **0.40 m**, con perfil separado
+senales_mision.json y aproximación a 0.05 m/s en precaución; ensayo aislado 16/17
+conserva 0.48 m. También se añade memoria del giro evasivo frontal para evitar
+el vaivén por centímetros observado en el log sin flecha pendiente. Sale con
+frente >0.49 m; lado bloqueado, 90°/12 s sin salida o corte odométrico >2 s
+durante ese giro detienen. Repetir físicamente inicio/frenado, holgura, flecha
+90° y salida del giro. No equivale a centrado de pasillo ni ruta planificada.
 
 **Aceptación vigente:** Task 1 acepta una imagen nueva válida para flecha/meta/rostro y QR propio; UI/protocolo 1/1. Conservar criterio facial, asociación, frescura, frenado, guardas de llegada/90°/distancia y seguridad. Velocidades intactas; aumento solo mencionado como futuro. config_senales.py compartido con ROS permite el perfil de una detección sin tocar originales del compañero. El ensayo B estacionario se conserva para aislar problemas si reaparecen; ya no es necesario repetirlo antes de esta prueba por la confirmación del usuario.
 
@@ -16,7 +19,7 @@ JPEG. Se mantiene la parada por conflicto y el disparo de 0.48 m. Revisar nuevos
 Ordena cero y espera >=3 poses nuevas/0.7 s de reposo; después permite elegir otra
 persona sin cerrar cámara/ventana. Limpia estado, QR y A/B, rechaza mensajes del
 intento anterior y registra un A nuevo al siguiente Buscar. Un archivo local por
-intento; no altera alcance ni velocidades. 217 tests locales pasan; probar parada,
+intento; no altera alcance ni velocidades. 224 tests locales pasan; probar parada,
 reinicio y segunda persona en hardware junto con el recorrido completo.
 
 **Evidencia anterior:** la misión llegó a B/rostro y QR 1/3 sin retorno; el ensayo B siguiente tuvo legibles=0. La confirmación posterior de lectura con QR mayor sustituye ese bloqueo. Hay diagnóstico de resolución/QR nativo. La primera flecha se envía sin esperar otros votos; la propuesta de pausar durante acumulación de tres queda sustituida. Vídeo retrasado, giros y retorno de la secuencia completa siguen pendientes. Ver ESTADO_PROYECTO.md.

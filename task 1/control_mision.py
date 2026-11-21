@@ -28,9 +28,12 @@ class ConfigMision:
     tiempo_maximo_mision_s: float = 900.
     tiempo_orientacion_s: float = 45.
     tiempo_aproximacion_s: float = 30.
+    velocidad_aproximacion_m_s: float = .05
+    margen_salida_evasion_m: float = .04
 
     def __post_init__(self):
-        limites = ((.4, 2.), (1., 5.), (.2, 1.), (.4, .8), (60., 1800.), (20., 90.), (10., 120.))
+        limites = ((.4, 2.), (1., 5.), (.2, 1.), (.4, .8), (60., 1800.), (20., 90.), (10., 120.),
+                   (.02, .10), (.02, .08))
         if not all(type(v) in (int, float) and isfinite(v) and a <= v <= b
                    for v, (a, b) in zip(asdict(self).values(), limites)):
             raise ValueError('Configuracion de mision fuera de limites')
@@ -111,10 +114,13 @@ class ControlMision:
         self.meta_nueva = None
         self.diagnostico_meta = 'Esperando inicio en A'
         self.conflicto_senal = None
+        self.evasion = None
 
     def cambiar(self, fase, ahora, motivo):
         self.fase, self.desde_ns, self.motivo = fase, ahora, motivo
         self.reposo = ReposoOdometria()
+        if fase not in ('IDA', 'FALLO'):
+            self.evasion = None
 
     def fallar(self, motivo, ahora):
         if self.fase not in ('FALLO', 'FIN'):
@@ -191,7 +197,8 @@ class ControlMision:
                 if dt < 0 or abs(dyaw) > .5 or dxy > .25:
                     self.fallar(f'Salto odometrico: dt={dt/1e9:.2f}s dxy={dxy:.3f} dyaw={dyaw:.3f}', ahora)
                 elif dt > EDAD_POSE_NS:
-                    if (self.fase in ('BUSCAR_B', 'ORIENTAR_SALIDA') or self.giros.activo is not None) and dt > 2_000_000_000:
+                    if (self.fase in ('BUSCAR_B', 'ORIENTAR_SALIDA') or self.giros.activo is not None
+                            or self.evasion is not None) and dt > 2_000_000_000:
                         self.fallar('Corte odometrico >2s durante giro: angulo incierto', ahora)
                     self.recuperando, self.reposo_odom = True, ReposoOdometria()
                 self.yaw_total += dyaw
@@ -215,8 +222,35 @@ class ControlMision:
             pendiente=dict(id=self.giros.ultimo_id,direccion=pendiente['direccion'],
                 edad_revalidacion_s=(ahora-pendiente['recibido_ns'])/1e9) if pendiente else None,
             activo=activo['direccion'] if activo else None, conflicto=self.conflicto_senal,
+            evasion=dict(self.evasion) if self.evasion else None,
             frente_m=distancia('dist_frente'), izquierda_m=distancia('dist_izquierda'),
             derecha_m=distancia('dist_derecha'), disparo_m=self.cfg_senales.esperar_pared_m)
+
+    def evadir(self, ahora, lidar, cfg):
+        """Conservar el lado del giro frontal hasta salir con margen, sin arcos."""
+        if lidar is None or not lidar.observacion_valida or lidar.proximidad_no_cuantificable:
+            return 0., 0., 'Evasion detenida: LiDAR/TF insuficientes'
+        vx, wz = calcular_velocidad_evasion(lidar, cfg)
+        if self.evasion is None and lidar.dist_frente <= cfg.distancia_precaucion_m:
+            self.evasion=dict(sentido=1. if lidar.dist_izquierda >= lidar.dist_derecha else -1.,
+                              inicio_ns=ahora, yaw=self.yaw_total)
+        if self.evasion is None:
+            return vx, wz, 'Correccion lateral sobre el sitio' if wz else 'Avance recto con evasion'
+        e=self.evasion
+        avance=e['sentido']*(self.yaw_total-e['yaw'])
+        if (ahora-e['inicio_ns'] > self.cfg_senales.tiempo_maximo_giro_s*1e9
+                or avance >= self.cfg_senales.angulo_giro_deg*pi/180 or avance < -.35):
+            self.fallar('Evasion sin salida o giro incoherente: detenido; revisar antes de reiniciar',ahora)
+            return 0., 0., self.motivo
+        if lidar.dist_frente > cfg.distancia_precaucion_m+self.cfg.margen_salida_evasion_m:
+            self.evasion=None
+            return 0., 0., 'Frente libre con margen: terminar giro evasivo antes de avanzar'
+        lateral=lidar.dist_izquierda if e['sentido'] > 0 else lidar.dist_derecha
+        if lateral <= cfg.distancia_parada_m:
+            return 0., 0., 'Evasion bloqueada hacia el lado elegido: detenido sin invertir'
+        velocidad=cfg.velocidad_giro if lidar.dist_frente <= cfg.distancia_parada_m else cfg.velocidad_giro*.75
+        lado='IZQUIERDA' if e['sentido'] > 0 else 'DERECHA'
+        return 0., e['sentido']*velocidad, f'Evasion {lado} mantenida hasta frente libre con margen'
 
     def decidir(self, ahora, pose, pose_ns, lidar, cfg, fin=False):
         def cero(motivo):
@@ -312,6 +346,9 @@ class ControlMision:
                     self.cambiar('FRENAR_A', ahora, 'Meta nueva cerca de A; confirmar reposo final')
                 return cero(self.motivo)
             # No reutilizar flechas anteriores al cambio de tramo o caducadas.
+            if self.cfg_senales.esperar_pared_m <= cfg.distancia_parada_m+.05:
+                self.fallar('Disparo de flecha sin margen suficiente sobre parada: revisar configuracion',ahora)
+                return cero(self.motivo)
             ev = self.senal if self.senal and self.senal['marca_ns'] > self.desde_ns else None
             if not evento_valido(ev, ahora):
                 ev = None
@@ -345,11 +382,16 @@ class ControlMision:
             if self.giros.fallo:
                 self.fallar(self.giros.fallo, ahora)
             if giro is not None:
+                self.evasion=None
                 return giro
-            vx, wz = calcular_velocidad_evasion(lidar, cfg) if lidar is not None else (0., 0.)
-            if self.giros.pendiente and wz:
-                return cero('Flecha pendiente: evasion pide giro; detener sin invertir flecha')
-            return vx, wz, 'Ida azul con evasion' if self.fase == 'IDA' else 'Vuelta roja con evasion'
+            if self.giros.pendiente:
+                self.evasion=None
+                if not self.libre(lidar,cfg):
+                    return cero('Flecha pendiente: aproximacion bloqueada por LiDAR/TF o espacio reducido')
+                velocidad=(min(cfg.velocidad_avance,self.cfg.velocidad_aproximacion_m_s)
+                           if lidar.dist_frente <= cfg.distancia_precaucion_m else cfg.velocidad_avance)
+                return velocidad, 0., 'Flecha pendiente: aproximar recto; lento en precaucion hasta el disparo'
+            return self.evadir(ahora,lidar,cfg)
         if self.fase == 'FRENAR_B':
             if self.reposo.actualizar(pose, pose_ns, ahora):
                 self.yaw_entrada_b = pose['yaw']

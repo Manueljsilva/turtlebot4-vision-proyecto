@@ -33,7 +33,7 @@ def diagnostico_senales(resultado, inicio_ns, ahora_ns, enviado=None):
         edad_ultimo_evento_enviado_s=(ahora_ns-enviado['marca_ns'])/1e9 if enviado else None)
 
 
-def cargar_ensayo(carpeta=CARPETA):
+def cargar_ensayo(carpeta=CARPETA, config=CONFIG):
     """Verifica el snapshot y carga el perfil local usado también en Docker."""
     carpeta = Path(carpeta)
     for nombre, esperado in HASHES.items():
@@ -45,7 +45,7 @@ def cargar_ensayo(carpeta=CARPETA):
     sys.modules[nombre_modulo] = modulo  # dataclass necesita resolver su módulo.
     try:
         spec.loader.exec_module(modulo)
-        cfg = cargar_config_senales(CONFIG)
+        cfg = cargar_config_senales(config)
     except Exception:
         sys.modules.pop(nombre_modulo, None)
         raise

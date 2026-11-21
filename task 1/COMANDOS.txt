@@ -344,7 +344,7 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
 # Escribir nombre + Buscar. Sin --mover no completara el recorrido fisico.
 # Cerrar la comprobacion anterior con Ctrl+C; despues, circuito preparado:
 bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO" --mision-guiada --mover
-# IDA azul (giro a 0.48 m) > FRENAR_B > BUSCAR_B (rostro/QR propio) >
+# IDA azul (giro de mision a 0.40 m) > FRENAR_B > BUSCAR_B (rostro/QR propio) >
 # FRENAR_QR > ORIENTAR_SALIDA (entrada B +180) > FRENAR_SALIDA > VUELTA roja > FRENAR_A > FIN.
 # Buscar solo fija nombre/inicia; no se capturan fotos ni se reconoce durante la ida.
 # QR debe aceptarse 1/1 y guardarse antes de habilitar retorno. No vuelve sin QR.
@@ -360,6 +360,11 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
 # Mostrar cartel completo y vertical. [FLECHA VISUAL] informa lectura/evento propuesto;
 # [MISION] > giro muestra recibido/pendiente/activo/conflicto y distancias.
 # Si cambia de sentido el mismo ID, queda detenido: no forzar giro ni bajar barreras.
+# Perfil de MISION separado: config/senales_mision.json. Ensayo aislado 16/17 sigue a 0.48 m.
+# [PERFIL MISION] anuncia 0.40 m y aproximacion lenta 0.05 m/s en la franja 0.45..0.40 m.
+# Flecha pendiente: recto hasta disparo con frente/laterales >0.32 m y sensores validos.
+# Sin flecha: evasion desde 0.45 m, conserva sentido hasta frente >0.49 m; sin salida
+# tras 90 grados/12 s se detiene. No es centrado de pasillo ni garantiza huella libre.
 # [MISION] y [QR] explican cada parada. FALLO no se libera mostrando otro cartel;
 # revisar motivo y usar Reiniciar para otro intento explicito.
 # Este modo renueva flecha pendiente SOLO con reconfirmacion en imagenes nuevas;

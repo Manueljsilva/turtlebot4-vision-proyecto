@@ -1,6 +1,6 @@
 # Ensayo integrado A → B → A
 
-Actualizado el 21 de noviembre de 2026: el usuario confirma que **el QR funciona tras aumentar su tamaño**. La prueba inmediata pasa a ser el recorrido completo, incluidas ambas banderas y flechas azules/rojas. **Una imagen nueva válida basta para aceptar una detección**. Nuevo botón **Reiniciar** para repetir sin cerrar ventana/cámara. **215 pruebas locales pasan; todavía sin validación del recorrido completo ni del reinicio en hardware.** Los modos anteriores se conservan.
+Actualizado el 21 de noviembre de 2026: el usuario confirma que **el QR funciona tras aumentar su tamaño**. La prueba inmediata pasa a ser el recorrido completo, incluidas ambas banderas y flechas azules/rojas. **Una imagen nueva válida basta para aceptar una detección**. Nuevo botón **Reiniciar** para repetir sin cerrar ventana/cámara. **223 pruebas locales pasan; todavía sin validación del recorrido completo ni del reinicio en hardware.** Los modos anteriores se conservan.
 Este ensayo sigue azul en la ida y rojo en la vuelta; no reproduce una trayectoria
 grabada ni incorpora SLAM/Nav2.
 
@@ -91,7 +91,7 @@ después ya no hace falta Ctrl+C entre intentos. Este botón está en --mision-g
 ## Secuencia y qué observar
 
 1. **IDA:** registra A, navega con evasión y acepta flechas azules en la primera
-   imagen nueva válida. Disparo local a frente <=0.48 m; giro de 90° por odometría,
+   imagen nueva válida. Disparo local a frente <=0.40 m; giro de 90° por odometría,
    siempre con avance cero. El bloqueo de giro a <=0.32 m frente/laterales sigue
    activo, además de los permisos por sensores/TF.
 2. **FRENAR_B:** confirma una meta nueva y frena. Exige >=3 poses nuevas durante
@@ -168,7 +168,7 @@ interfaz es 0/1 o 1/1; repetir un paquete no produce una detección nueva. Antes
 de Buscar la vista previa no envía una maniobra al controlador.
 
 La primera flecha válida se memoriza inmediatamente. El giro sigue esperando
-frente <=0.48 m y espacio/sensores válidos; completa 90° sobre el sitio. Si no
+frente <=0.40 m y espacio/sensores válidos; completa 90° sobre el sitio. Si no
 hay imagen reciente o hay señales ambiguas, no se inventa una dirección. La
 nueva aceptación no exige una pausa adicional para acumular votos.
 
@@ -212,7 +212,7 @@ sentido del cartel pendiente». El usuario mostró una sola flecha azul a la
 izquierda. La primera muestra de fallo tenía frente ~0.522 m, todavía mayor
 que el disparo 0.48 m. Se reprodujeron inversiones visuales en referencias
 pequeñas/JPEG y se corrigió la validación del tallo y brazo antes de puntuar.
-217 tests locales pasan; falta repetir con cámara/robot. Mantener el cartel
+224 tests locales pasan; falta repetir con cámara/robot. Mantener el cartel
 completo y vertical; las perspectivas fuertes siguen sin validar.
 
 Cerrar/relanzar el comando una vez carga el detector corregido. La terminal
@@ -224,16 +224,34 @@ la contradicción ni cambiar distancia/velocidad para forzarlo a girar. Una
 puntuación alta del detector no es una probabilidad calibrada de acierto.
 
 Se conserva el controlador original verificado del compañero y el perfil local
-de 0.48 m. La coordinación añadida **solo en este modo**:
+de misión [config/senales_mision.json](config/senales_mision.json), ahora **0.40 m**.
+El ensayo aislado de bloques 16/17 conserva su perfil de 0.48 m. La coordinación
+añadida **solo en la misión guiada**:
 
-- Mientras hay flecha pendiente, si la evasión propone otro giro, se detiene;
-  no invierte el sentido de la flecha ni ignora un obstáculo lateral.
+- Una flecha pendiente aproxima recto: a 0.10 m/s fuera de precaución y como
+  máximo 0.05 m/s entre 0.45 y 0.40 m. A <=0.40 m pide el giro sobre el sitio.
+  No deja que evasión gire antes en esa franja ni invierte la flecha. Exige
+  frente/laterales >0.32 m y sensores válidos; si falta espacio se detiene.
 - Una imagen nueva que vuelve a confirmar el mismo cartel/sentido renueva la
   espera. Un latido o paquete repetido no la renueva. Sin reconfirmación durante
   seis segundos, detiene el ensayo; aproximación limitada a 30 s incluso si el
   cartel sigue visible. Cambio de sentido del mismo cartel pendiente también detiene.
 - Al bloquearse conserva cero; timeout de giro por flecha sigue siendo 12 s.
   No intenta pasar por una dirección bloqueada ni resuelve automáticamente el atasco.
+
+**Sin flecha:** la evasión empieza desde 0.45 m y conserva el lado elegido
+durante el giro frontal; diferencias pequeñas entre lados ya no lo invierten
+cada ciclo. Espera frente >0.49 m para terminar, publica un ciclo cero y luego
+puede avanzar. Si el lado elegido queda a <=0.32 m, se detiene sin cambiar de
+sentido. Sin salida tras 90°/12 s queda en FALLO; no gira indefinidamente.
+Esto corrige un vaivén reproducido con los mínimos del registro, sin asegurar
+alineación paralela a una pared ni resolver cualquier laberinto. `giro.evasion`
+en [MISION] muestra esa memoria. Las correcciones laterales y las guardas de
+seguridad se conservan; geometría/frenado y choques diagonales aún por medir.
+
+Al relanzar, `[PERFIL MISION]` debe anunciar 0.40 m y 0.05 m/s. Son valores de
+ensayo: la diferencia de 8 cm respecto a parada no prueba holgura/frenado real,
+y el retorno frontal LiDAR no mide necesariamente distancia al cartel.
 
 Actividad de GUI >0.5 s, cámara >1 s, pose/LiDAR >0.6 s, TF/cobertura insuficientes
 o espacio reducido detienen según la fase. Corte odométrico coherente exige

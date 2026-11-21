@@ -6,11 +6,20 @@ rostro objetivo/QR propio → rojo/evasión → meta A. A también lleva bandera
 mirando al robot cuando regrese. Al confirmar meta A y reposo, aparece un panel
 grande con la palabra y el robot queda detenido. El regreso completo aún no está
 validado físicamente. Guía vigente: [PRUEBA_MISION_GUIADA.md](PRUEBA_MISION_GUIADA.md),
-bloque 18 de [COMANDOS.txt](COMANDOS.txt); 217 tests locales. **Reiniciar**, junto
+bloque 18 de [COMANDOS.txt](COMANDOS.txt); 224 tests locales. **Reiniciar**, junto
 a Salir, detiene y espera reposo antes de permitir otra persona en la misma
 ventana; el nuevo Buscar vuelve a registrar A. Reinicio aún pendiente en hardware.
 Las descripciones
 históricas de tres confirmaciones de abajo se sustituyen por una imagen nueva válida.
+
+**Ajuste vigente de la misión (21/11):** flecha memorizada hasta retorno frontal
+LiDAR <=0.40 m, con aproximación lenta a 0.05 m/s entre 0.45 y 0.40 m. Perfil
+[config/senales_mision.json](config/senales_mision.json); el ensayo aislado 16/17
+conserva 0.48 m. Sin flecha, la evasión frontal memoriza el sentido hasta que
+el frente quede libre con margen, evitando invertirlo por centímetros entre
+lados. Mantiene límites de giro/plazo/recepción y queda detenido si bloquea.
+No garantiza alineación con paredes ni resuelve los choques diagonales por sí
+solo; falta comprobarlo con la geometría real del circuito.
 
 Primera implementación facial local terminada el 28 de octubre de 2026. Usa la `.venv` global, OpenCV en CPU y modelos preentrenados YuNet/SFace; el notebook funciona sin ROS, Gazebo ni robot. El 13 de noviembre se incorporó una prueba separada de evasión LiDAR en hardware, con ROS en el Docker existente. Task 2 se conserva sin cambios.
 
