@@ -1,7 +1,6 @@
 # Ensayo integrado A → B → A
 
-Actualizado el 21 de noviembre de 2026: **una imagen nueva válida basta para aceptar una detección**, por petición del usuario. Preparado inicialmente el 20 de noviembre. **Implementado y comprobado localmente;
-todavía sin validación del recorrido en hardware.** Los modos anteriores se conservan.
+Actualizado el 21 de noviembre de 2026: el usuario confirma que **el QR funciona tras aumentar su tamaño**. La prueba inmediata pasa a ser el recorrido completo, incluidas ambas banderas y flechas azules/rojas. **Una imagen nueva válida basta para aceptar una detección**, por petición del usuario. Preparado inicialmente el 20 de noviembre. **209 pruebas locales pasan; todavía sin validación del recorrido completo en hardware.** Los modos anteriores se conservan.
 Este ensayo sigue azul en la ida y rojo en la vuelta; no reproduce una trayectoria
 grabada ni incorpora SLAM/Nav2.
 
@@ -9,10 +8,14 @@ grabada ni incorpora SLAM/Nav2.
 
 - Iniciar físicamente en A, apuntando hacia el camino. Buscar registra la primera
   pose odométrica válida posterior al inicio. No se inventa un origen de mapa.
+- Poner también una **bandera en A**, de frente al robot cuando regrese. Puede
+  quedar detrás del robot al arrancar hacia el circuito. Puede ser el mismo diseño
+  que B: el programa interpreta la bandera según la etapa y la posición registrada.
 - Poner la bandera B **en la pared al fondo, frente al camino**, como confirmó
   el usuario. Debe quedar aproximadamente centrada al llegar.
 - Las fotos con sus QR deben poder verse mediante giro sobre el sitio desde B;
-  no se implementa acercamiento a una foto. Separar cada pareja foto/QR.
+  no se implementa acercamiento a una foto. Separar cada pareja foto/QR. Conservar
+  el tamaño de QR que ya funcionó, completo y nítido junto al rostro objetivo.
 - La vuelta necesita flechas rojas orientadas hacia A y una bandera de meta A.
   Para el primer ensayo, separar claramente A y B y dejar espacio de giro.
   No usar dos metas tan próximas que se solapen los márgenes de este ensayo.
@@ -79,7 +82,10 @@ plazo para el primer fotograma. No combinar con los otros modos, --tramo,
    flechas rojas, manteniendo evasión y 90° por odometría.
 6. **FRENAR_A / FIN:** confirma una meta nueva cerca del inicio odométrico,
    comprueba reposo y muestra la palabra completa en la terminal
-   `[RESULTADO EN A]`. La ventana ofrece una vista del mensaje.
+   `[RESULTADO EN A]` y en un **panel grande «Punto A alcanzado / Mensaje del QR»**.
+   El robot queda detenido. El panel conserva tildes/ñ y ajusta texto largo;
+   sigue visible aunque después deje de llegar vídeo. Estar cerca de A sin ver
+   su bandera no finaliza, y durante VUELTA aún no muestra el resultado final.
 
 La terminal `[MISION]` muestra fase, motivo, órdenes vx/wz, frente/disparo,
 confirmaciones de meta y distancia odométrica a A. `[QR]` distingue detectado,
@@ -100,13 +106,13 @@ detenida. No cambiar límites de frescura para forzar el arranque.
 
 ## Si reconoce el rostro pero no vuelve
 
-El ensayo físico del 21/11 llegó a BUSCAR_B y aceptó al objetivo. Logró una
+**Historial, ya superado por la confirmación de lectura con QR mayor:** el ensayo físico del 21/11 llegó a BUSCAR_B y aceptó al objetivo. Logró una
 lectura QR asociada **1/3**, después perdió lectura/rostro y terminó en FALLO
 al completar el barrido. Con el filtro anterior, una lectura aislada no guardaba
 la palabra ni habilitaba regreso. La revisión actual acepta el texto asociado al objetivo en una
 imagen nueva válida; aquel resultado corresponde al filtro anterior. La llegada a A aún no se probó en ese intento.
 
-Antes de repetir todo el recorrido, cerrar la misión y probar sin movimiento:
+Si reaparece el problema, cerrar la misión y aislar la lectura sin movimiento:
 
 ```bash
 bash "task 1/ejecutar_autonomo_robot.sh" \
@@ -120,7 +126,7 @@ ordena acercamiento del robot. Conservar borde blanco del QR, nitidez y parejas
 separadas. Esperar **«QR del objetivo confirmado y guardado» / 1/1**. Este modo
 guarda el resultado de prueba y permanece quieto; no regresa. No añadir --mover.
 
-Tras conseguir lectura estable, repetir --mision-guiada con el circuito real,
+El usuario ya confirmó lectura con el QR mayor. Repetir ahora --mision-guiada con el circuito real,
 incluidas flechas azules/rojas. Las flechas no se ensayaron en el intento del
 21/11; su reconocimiento previo no demuestra los giros de esta integración.
 El regreso se inicia después de guardar QR: orientar a entrada B +180° y
@@ -203,3 +209,6 @@ Se guarda solo JSON UTF-8 en `datos/sesiones/mision_guiada_*.json`, ignorado por
 nombre solicitado, identidad confirmada, palabra, poses/marcos A/B, fase y llegada.
 No guarda fotos, no recalibra la galería ni cambia Task 2. Los ensayos individuales
 de flechas y meta/rostro/QR siguen disponibles para aislar fallos.
+
+El panel final usa Pillow 13.0.0, ya presente en la .venv compartida y declarado
+en requirements. No necesita instalar paquetes de ROS en Ubuntu ni cambiar Docker.

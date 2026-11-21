@@ -100,6 +100,7 @@ class MisionTests(unittest.TestCase):
         self.assertNotAlmostEqual(normalizar(.6+pi), self.pose['yaw'])
         for i in range(1, 11):
             self.paso(x=max(.1, 1.-i*.1))
+        self.assertEqual(self.c.fase,'VUELTA')  # Estar cerca de A sin ver bandera no finaliza.
         self.paso(meta=META, sensor=lidar(.55))
         self.assertEqual(self.c.fase, 'FRENAR_A')
         for _ in range(5):
@@ -313,6 +314,36 @@ class MisionTests(unittest.TestCase):
 
 
 class PreparacionTests(unittest.TestCase):
+    def test_resultado_grande_solo_tras_meta_a_y_qr_incluso_sin_camara(self):
+        sistema=SistemaFacial(Mock(),Galeria([[1,0]],['Persona A']),Criterio(.5,.1))
+        _,cfg=cargar_ensayo()
+        v=app.VisionMision(sistema,cfg)
+        sesion=app.SesionInterfaz()
+        entrada=app.EntradaBusqueda(app.ConsultaEnVivo(sistema,'Persona A'),sesion)
+        sesion.iniciar('Persona A',1)
+        v.ensayo.sesion.palabra='ÁRBOL con ñ'
+        estado=dict(fase='VUELTA',estado='Seguir rojo',qr_confirmado=True)
+        with patch.object(app,'tarjeta_resultado',wraps=app.tarjeta_resultado) as tarjeta:
+            app.dibujar(None,'Sin imagen reciente',entrada,v,estado,True)
+            tarjeta.assert_not_called()
+            estado.update(fase='FIN',estado='Meta A y reposo confirmados')
+            panel=app.dibujar(None,'Sin imagen reciente',entrada,v,estado,True)
+            tarjeta.assert_called_once_with('ÁRBOL con ñ')
+            self.assertEqual(panel.shape,(708,960,3))
+            self.assertTrue(np.array_equal(panel[258:650,18:942],app.tarjeta_resultado('ÁRBOL con ñ')))
+            estado['qr_confirmado']=False
+            tarjeta.reset_mock()
+            app.dibujar(None,'Sin imagen reciente',entrada,v,estado,True)
+            tarjeta.assert_not_called()
+
+    def test_mensaje_largo_se_ajusta_sin_perder_caracteres_o_tildes(self):
+        palabra=('Árbol, pingüino y niño.  '*12)[:256]
+        fuente=app.fuente_resultado(28)
+        lineas=app.lineas_resultado(palabra,fuente,880)
+        self.assertEqual(''.join(lineas),palabra)
+        self.assertTrue(all(fuente.getlength(l)<=880 for l in lineas))
+        self.assertEqual(app.tarjeta_resultado(palabra).shape,(392,924,3))
+
     def test_cuadro_visual_meta_independiente_de_llegada_sin_reinferir_repetidos(self):
         sistema=SistemaFacial(Mock(),Galeria([[1,0]],['Persona A']),Criterio(.5,.1))
         _,cfg=cargar_ensayo()

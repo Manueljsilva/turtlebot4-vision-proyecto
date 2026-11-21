@@ -331,8 +331,11 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
 # Siguen pendientes coordinacion completa y caducidad de seis segundos; no bajar barreras.
 
 
-# 18) NUEVO ENSAYO INTEGRADO A-B-A (20/11, TODAVIA SIN VALIDACION FISICA)
+# 18) PRUEBA COMPLETA A-B-A (21/11: QR MAYOR YA FUNCIONA; RETORNO POR VALIDAR)
 # Bandera B en pared al fondo/frente al camino. Rojo debe guiar de B a A.
+# A tambien lleva bandera, mirando al robot que regresa; iniciar mirando al recorrido.
+# A/B pueden usar el mismo diseño: se distinguen por etapa y guardas odometricas.
+# Mantener el tamaño de QR legible que ya funciono, junto a la foto objetivo.
 # Mantener metas separadas: >=0.6 m desde origen y ausencia visual 1.5 s para rearmar.
 # Inicio A se registra por odometria; regreso exige bandera nueva cerca de ese A.
 # Cerrar TODOS los otros controles. Desde Ubuntu normal y raiz del proyecto.
@@ -347,6 +350,8 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
 # QR debe aceptarse 1/1 y guardarse antes de habilitar retorno. No vuelve sin QR.
 # Una bandera visible de lejos no basta: nueva/centrada, frente <=0.6 m y sensores validos.
 # A: ademas distancia odometrica <=0.6 m del inicio, tras separarse >=0.6 m de B.
+# Estar cerca de A sin ver su bandera no termina. Tras meta A y reposo: FIN,
+# robot detenido y panel grande con el mensaje QR en la interfaz/terminal.
 # [MISION] y [QR] explican cada parada. FALLO no se libera mostrando otro cartel.
 # Este modo renueva flecha pendiente SOLO con reconfirmacion en imagenes nuevas;
 # 6 s sin reconfirmacion o 30 s de aproximacion detienen. No modifica el ensayo 16/17.
@@ -369,7 +374,7 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
 # sensores validos y una imagen nueva admisible. No bajar barreras para forzarla.
 # Los nuevos PNG de señales/ sirven de referencias; PDF conservado, sin entrenamiento.
 
-# Resultado del ensayo integrado aportado el 21/11:
+# Historial anterior a ampliar el QR (21/11):
 # BUSCAR_B + objetivo reconocido; QR llego una vez a 1/3, nunca confirmado/guardado.
 # Al perder rostro/lectura completo barrido y termino FALLO; no inicio regreso.
 # Cerrar y usar bloque 13 SIN --mover para aislar lectura QR antes de repetir ruta.
@@ -384,3 +389,5 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
 # Primero lograr legibles=1 asociado al objetivo en imagen nueva para guardar.
 # Tres confirmaciones no son tres fases ni segundos; imagen repetida no cuenta.
 # La primera flecha valida ya se envia al controlador; no hay espera extra de tres votos.
+# Confirmacion posterior del usuario: el QR funciono al aumentar el tamaño.
+# Proxima prueba: bloque 18 completo, incluyendo azul/rojo y bandera de A.

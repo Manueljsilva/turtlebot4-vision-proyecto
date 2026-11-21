@@ -1,5 +1,14 @@
 # Task 1: búsqueda facial, evasión y giros por señales
 
+**Prueba actual (21/11):** el usuario confirmó lectura al aumentar el tamaño del
+QR. Ejecutar `--mision-guiada --mover` desde A para probar azul/evasión → meta B →
+rostro objetivo/QR propio → rojo/evasión → meta A. A también lleva bandera,
+mirando al robot cuando regrese. Al confirmar meta A y reposo, aparece un panel
+grande con la palabra y el robot queda detenido. El regreso completo aún no está
+validado físicamente. Guía vigente: [PRUEBA_MISION_GUIADA.md](PRUEBA_MISION_GUIADA.md),
+bloque 18 de [COMANDOS.txt](COMANDOS.txt); 209 tests locales. Las descripciones
+históricas de tres confirmaciones de abajo se sustituyen por una imagen nueva válida.
+
 Primera implementación facial local terminada el 28 de octubre de 2026. Usa la `.venv` global, OpenCV en CPU y modelos preentrenados YuNet/SFace; el notebook funciona sin ROS, Gazebo ni robot. El 13 de noviembre se incorporó una prueba separada de evasión LiDAR en hardware, con ROS en el Docker existente. Task 2 se conserva sin cambios.
 
 **Nuevo ensayo integrado del 20 de noviembre:** `--mision-guiada [--mover]` enlaza azul/evasión → meta B → frenado/barrido → rostro objetivo/QR propio → orientación de entrada B +180° → rojo/evasión → meta nueva cerca de A → palabra. Bandera B al fondo del camino, como confirmó el usuario. Guarda A en odometría, separa/rearma metas y conserva una sola salida de velocidad; no reproduce la ruta ni incorpora mapa. Sin --mover no publica. **207 pruebas locales de Task 1 pasan; el recorrido integrado y el retorno todavía no se validaron físicamente.** [Guía de colocación, comandos y límites](PRUEBA_MISION_GUIADA.md), bloque 18 de COMANDOS.txt. Los modos anteriores descritos debajo siguen disponibles y conservan sus límites individuales.

@@ -2,4 +2,5 @@
 # No instalar opencv-python junto a opencv-contrib-python.
 opencv-contrib-python==4.14.0.94
 numpy==2.5.4
+Pillow==13.0.0
 ipykernel==7.4.0

@@ -4,6 +4,7 @@ No reproduce los pasos de ida ni usa mapa. Sin --mover no crea publicador.
 """
 
 import argparse
+from functools import lru_cache
 import json
 import os
 from pathlib import Path
@@ -13,6 +14,8 @@ import time
 import uuid
 
 import cv2
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
 
 from busqueda_robot import EntradaBusqueda, PuenteBusqueda, preparar_movimiento
 from control_busqueda import CONFIRMACIONES_VISUALES, EDAD_CAMARA_NS, reciente
@@ -20,7 +23,7 @@ from control_mision import cargar_config_mision
 from ensayo_giros_companero import CONFIG, CONTROL, cargar_ensayo
 from evasion_lidar import cargar_config
 from interfaz_facial import BUSCAR, dibujar_interfaz, escribir
-from percepcion_meta_qr import DetectorMetaQR
+from percepcion_meta_qr import DetectorMetaQR, texto_valido
 from prueba_facial_robot import (TAREA, TOPICO, ConsultaEnVivo, cargar_sistema,
     cargar_transporte, ejecutar_comando, mensaje_rechazo, preparar_camara)
 from prueba_meta_robot import EnsayoB
@@ -132,7 +135,50 @@ class VisionMision:
         return anotada
 
 
+def lineas_resultado(texto, fuente, ancho):
+    """Ajuste por caracteres sin quitar tildes, espacios ni cortar el mensaje."""
+    lineas, actual = [], ''
+    for caracter in texto:
+        if actual and fuente.getlength(actual+caracter) > ancho:
+            lineas.append(actual)
+            actual = ''
+        actual += caracter
+    return lineas+[actual]
+
+
+def fuente_resultado(tamano):
+    try:
+        return ImageFont.truetype('DejaVuSans.ttf', tamano)
+    except OSError:
+        return ImageFont.load_default(size=tamano)
+
+
+@lru_cache(maxsize=1)
+def tarjeta_resultado(palabra):
+    """Solo texto en memoria; el resultado no depende de seguir recibiendo vídeo."""
+    if not texto_valido(palabra):
+        raise ValueError('No hay mensaje QR valido para mostrar')
+    tarjeta = Image.new('RGB', (924,392), (22,48,30))
+    dibujo = ImageDraw.Draw(tarjeta)
+    dibujo.rectangle((0,0,923,391),outline=(100,225,100),width=2)
+    dibujo.text((22,18),'Punto A alcanzado',font=fuente_resultado(30),fill=(100,225,100))
+    dibujo.text((22,65),'Mensaje del QR',font=fuente_resultado(22),fill=(220,230,220))
+    for tamano in (72,60,48,36,28,22,18):
+        fuente = fuente_resultado(tamano)
+        lineas = lineas_resultado(palabra,fuente,880)
+        alto = sum(fuente.getmetrics())+6
+        if len(lineas)*alto <= 213:
+            break
+    y = 112+(213-len(lineas)*alto)//2
+    for i,linea in enumerate(lineas):
+        dibujo.text((22,y+i*alto),linea,font=fuente,fill=(255,255,255),anchor='lt')
+    dibujo.text((22,350),'Misión terminada. Robot detenido.',font=fuente_resultado(21),fill=(180,215,185))
+    return cv2.cvtColor(np.asarray(tarjeta),cv2.COLOR_RGB2BGR)
+
+
 def dibujar(imagen, estado_camara, entrada, vision, estado, mover):
+    resultado_en_a = bool(estado and estado['fase']=='FIN' and estado.get('qr_confirmado')
+                          and texto_valido(vision.ensayo.sesion.palabra))
     if imagen is not None and estado and estado['fase'] == 'BUSCAR_B':
         imagen = imagen.copy()
         for c in vision.ensayo.caras:
@@ -150,7 +196,7 @@ def dibujar(imagen, estado_camara, entrada, vision, estado, mover):
     if entrada.sesion.inicio_ns is not None:
         cv2.rectangle(panel, (0, 99), (959, 245), (27, 27, 27), -1)
         cv2.rectangle(panel, BUSCAR[:2], BUSCAR[2:], (65, 65, 65), -1)
-        escribir(panel, 'En curso', 775, 76)
+        escribir(panel, 'Finalizado' if resultado_en_a else 'En curso', 775, 76)
         fase = estado['fase'] if estado else 'SIN TELEMETRIA: DETENIDO'
         escribir(panel, f'FASE: {fase}', 18, 121, (70, 190, 240))
         escribir(panel, estado['estado'] if estado else 'Esperando nodo ROS', 18, 145)
@@ -162,8 +208,8 @@ def dibujar(imagen, estado_camara, entrada, vision, estado, mover):
             escribir(panel, 'META: '+estado.get('motivo_meta','Esperando diagnostico'), 18, 193, (80,220,220))
         else:
             escribir(panel, f'Objetivo: {entrada.sesion.nombre} | Observados: {observados or "sin caras"}', 18, 193)
-        if estado and fase == 'FIN':
-            escribir(panel, 'MENSAJE DEL QR: '+str(vision.ensayo.sesion.palabra), 18, 219, (100, 225, 100))
+        if resultado_en_a:
+            escribir(panel, 'Resultado del QR disponible abajo', 18, 219, (100, 225, 100))
         else:
             escribir(panel, 'QR guardado para mostrar en A' if vision.ensayo.sesion.palabra is not None else
                      vision.ensayo.resumen_qr() if fase == 'BUSCAR_B' else
@@ -172,7 +218,12 @@ def dibujar(imagen, estado_camara, entrada, vision, estado, mover):
         dato = f'{edad:.2f}s desde recepcion ROS' if isinstance(edad, (int,float)) else 'sin marca reciente'
         escribir(panel, f'Camara: {estado_camara} | {dato}', 18, 240)
     cv2.rectangle(panel, (0, 669), (840, 707), (27, 27, 27), -1)
-    escribir(panel, ('MOVIMIENTO ACTIVADO' if mover else 'SIN MOVIMIENTO')+' | Ensayo A-B-A | Esc: salir', 18, 693)
+    if resultado_en_a:
+        panel[258:650,18:942] = tarjeta_resultado(vision.ensayo.sesion.palabra)
+        pie = 'MISION TERMINADA | Robot detenido | Esc: salir'
+    else:
+        pie = ('MOVIMIENTO ACTIVADO' if mover else 'SIN MOVIMIENTO')+' | Ensayo A-B-A | Esc: salir'
+    escribir(panel,pie,18,693)
     return panel
 
 
