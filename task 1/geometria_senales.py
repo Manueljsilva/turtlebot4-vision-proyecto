@@ -730,6 +730,15 @@ def detect(im, segments=None, allow_stop=True, stop_only=False):
                 if np.linalg.norm(end - bend) < .12 * radius:
                     continue
                 u, w = bend - end, tip['p'] - bend
+                # Estas señales tienen tallo ascendente y punta horizontal.
+                # En recortes pequeños/JPEG, un borde de la curva puede parecer
+                # una punta corta, o intercambiarse tallo y brazo y dar el giro
+                # contrario con puntuación alta. Exigir ambos brazos completos
+                # y sus ejes antes de comparar puntuaciones; no votar imágenes.
+                if (math.hypot(*u) < .5 * radius or math.hypot(*w) < .5 * radius
+                        or -u[1] < 1.2 * abs(u[0]) or u[1] >= 0
+                        or abs(w[0]) < 1.2 * abs(w[1])):
+                    continue
                 turn = np.degrees(np.arccos(np.clip(np.dot(unit(u), unit(w)), -1, 1)))
                 if not 35 <= turn <= 145:
                     continue

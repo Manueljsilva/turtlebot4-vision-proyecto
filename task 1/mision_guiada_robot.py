@@ -311,6 +311,7 @@ def main(argv=None):
         guardado = None
         reinicio_guardado = None
         estado_intento = None
+        ultima_flecha = None
         ultimo_log = 0
         print('ENSAYO INTEGRADO: azul > meta B > rostro/QR > orientacion entrada+180 > rojo > meta A. '
               'No reproduce ruta ni usa mapa. Sin --mover no publica. Cerrar otros controles.', flush=True)
@@ -336,6 +337,7 @@ def main(argv=None):
                     archivo = TAREA/'datos/sesiones'/f'mision_guiada_{uuid.uuid4().hex}.json'
                     guardado = None
                     estado_intento = None
+                    ultima_flecha = None
                     ultimo_log = 0
                     print('[REINICIO] Robot en reposo. Elegir persona y pulsar Buscar para registrar un nuevo A.', flush=True)
                 else:
@@ -369,6 +371,16 @@ def main(argv=None):
                         print(f'[RESULTADO EN A] {b.palabra}', flush=True)
             puente.actualizar(orden, ahora, marca, vision.meta, vision.senal,
                 b.ultima_marca if b.palabra is not None else None, CONFIRMACIONES_VISUALES if b.palabra is not None else 0)
+            visual=vision.resultado_senal
+            clave_flecha=(estado['fase'] if estado else None, visual['estado'] if visual else None,
+                          vision.senal['id'] if vision.senal else None,
+                          vision.senal['direccion'] if vision.senal else None)
+            if clave_flecha != ultima_flecha:
+                print('[FLECHA VISUAL] '+json.dumps(dict(
+                    estado=visual['estado'] if visual else 'Sin consulta del tramo activa/reciente',
+                    evento_propuesto=vision.senal,
+                    detecciones=visual['detecciones'] if visual else []),ensure_ascii=False),flush=True)
+                ultima_flecha=clave_flecha
             if ahora-ultimo_log >= 1_000_000_000:
                 print(f'[MISION] {estado or "Esperando control"} | [QR] {vision.ensayo.resumen_qr()}', flush=True)
                 if estado:

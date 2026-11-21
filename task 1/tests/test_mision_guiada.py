@@ -330,6 +330,19 @@ class MisionTests(unittest.TestCase):
         ev.update(direccion='IZQUIERDA', marca_ns=self.t+200_000_000)
         self.assertEqual(self.paso(senal=ev)[:2], (0., 0.))
         self.assertEqual(self.c.fase, 'FALLO')
+        self.assertIn('DERECHA -> IZQUIERDA',self.c.motivo)
+        marca=self.c.giros.pendiente['recibido_ns']
+        diagnostico=self.c.diagnostico_giro(self.t,lidar(.522))
+        self.assertEqual(diagnostico['conflicto']['esperada'],'DERECHA')
+        self.assertEqual(diagnostico['conflicto']['observada'],'IZQUIERDA')
+        self.assertEqual(diagnostico['pendiente']['id'],1)
+        self.assertEqual(diagnostico['frente_m'],.522)
+        self.assertEqual(diagnostico['disparo_m'],.48)
+        self.assertIsNone(diagnostico['activo'])
+        self.c.diagnostico_giro(self.t+900_000_000,None)
+        self.assertEqual(self.c.giros.pendiente['recibido_ns'],marca)  # Diagnosticar no revalida.
+        self.paso('REINICIAR',reinicio=self.t+200_000_000)
+        self.assertIsNone(self.c.conflicto_senal)
 
     def test_perdida_de_camara_gui_y_lidar_detiene(self):
         self.iniciar()
@@ -687,6 +700,9 @@ class NodoTests(unittest.TestCase):
                 self.assertTrue(estado['inicio_solicitado'])
                 self.assertEqual(estado['orden_control'],'INICIAR')
                 self.assertIn('motivo_meta',estado)
+                self.assertEqual(estado['giro']['color'],'azul')
+                self.assertIsNone(estado['giro']['pendiente'])
+                self.assertIsNone(estado['giro']['conflicto'])
             if mover:
                 cmd=nodo.pub_cmd.mensajes[-1].twist
                 self.assertEqual((cmd.linear.x,cmd.angular.z),(.1,0.))

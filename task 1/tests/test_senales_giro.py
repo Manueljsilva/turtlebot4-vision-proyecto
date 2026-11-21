@@ -67,6 +67,45 @@ class DetectorTests(unittest.TestCase):
         self.assertEqual(detector.detectar(np.repeat(tablero[:, :, None], 3, axis=2).astype('uint8')), [])
 
     @unittest.skipUnless(REFERENCIAS_DISPONIBLES, 'Requiere los recortes locales de las señales')
+    def test_preview_250_jpeg_no_invierte_flechas_pequenas_de_ambos_colores(self):
+        detector=DetectorGiros()
+        for color in ('azul','rojo'):
+            original=cv2.imread(str(TAREA/f'tests/fixtures/giro_{color}_derecha.png'))
+            for reflejo in (False,True):
+                im=cv2.flip(original,1) if reflejo else original
+                for lado in (65,80,100,125,155,190):
+                    r=cv2.resize(im,None,fx=lado/max(im.shape[:2]),fy=lado/max(im.shape[:2]),interpolation=cv2.INTER_AREA)
+                    frame=np.full((250,250,3),220,np.uint8)
+                    y,x=(250-r.shape[0])//2,(250-r.shape[1])//2
+                    frame[y:y+r.shape[0],x:x+r.shape[1]]=r
+                    for blur in (0,3):
+                        f=cv2.GaussianBlur(frame,(blur,blur),.8) if blur else frame
+                        for calidad in (45,80):
+                            with self.subTest(color=color,reflejo=reflejo,lado=lado,blur=blur,calidad=calidad):
+                                _,jpg=cv2.imencode('.jpg',f,[cv2.IMWRITE_JPEG_QUALITY,calidad])
+                                ds=detector.detectar(cv2.imdecode(jpg,cv2.IMREAD_COLOR))
+                                self.assertEqual([(d['color'],d['direccion']) for d in ds],
+                                    [(color,'IZQUIERDA' if reflejo else 'DERECHA')])
+
+    @unittest.skipUnless(REFERENCIAS_DISPONIBLES, 'Requiere los recortes locales de las señales')
+    def test_geometria_de_giro_admite_inclinacion_moderada_sin_espejo_de_camara(self):
+        detector=DetectorGiros()
+        for color in ('azul','rojo'):
+            original=cv2.imread(str(TAREA/f'tests/fixtures/giro_{color}_derecha.png'))
+            for reflejo in (False,True):
+                im=cv2.flip(original,1) if reflejo else original
+                r=cv2.resize(im,None,fx=155/max(im.shape[:2]),fy=155/max(im.shape[:2]),interpolation=cv2.INTER_AREA)
+                frame=np.full((250,250,3),220,np.uint8)
+                y,x=(250-r.shape[0])//2,(250-r.shape[1])//2
+                frame[y:y+r.shape[0],x:x+r.shape[1]]=r
+                for angulo in (-20,0,20):
+                    with self.subTest(color=color,reflejo=reflejo,angulo=angulo):
+                        rotada=cv2.warpAffine(frame,cv2.getRotationMatrix2D((125,125),angulo,1),
+                                             (250,250),borderValue=(220,220,220))
+                        self.assertEqual([(d['color'],d['direccion']) for d in detector.detectar(rotada)],
+                            [(color,'IZQUIERDA' if reflejo else 'DERECHA')])
+
+    @unittest.skipUnless(REFERENCIAS_DISPONIBLES, 'Requiere los recortes locales de las señales')
     def test_no_admite_cartel_cortado_ni_entrada_no_bgr(self):
         imagen = cv2.imread(str(TAREA/'tests/fixtures/giro_azul_derecha.png'))
         self.assertEqual(DetectorGiros().detectar(imagen[:, 80:]), [])

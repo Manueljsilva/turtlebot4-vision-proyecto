@@ -207,6 +207,22 @@ radios o reduciendo barreras sin revisar el registro.
 
 ## Flechas pendientes y paradas
 
+**Registro del 21/11:** el robot avanzó, pero quedó en FALLO por «Cambio de
+sentido del cartel pendiente». El usuario mostró una sola flecha azul a la
+izquierda. La primera muestra de fallo tenía frente ~0.522 m, todavía mayor
+que el disparo 0.48 m. Se reprodujeron inversiones visuales en referencias
+pequeñas/JPEG y se corrigió la validación del tallo y brazo antes de puntuar.
+217 tests locales pasan; falta repetir con cámara/robot. Mantener el cartel
+completo y vertical; las perspectivas fuertes siguen sin validar.
+
+Cerrar/relanzar el comando una vez carga el detector corregido. La terminal
+`[FLECHA VISUAL]` informa cada cambio, puntuación y evento propuesto. En
+`[MISION]`, `giro` muestra la dirección recibida, pendiente/activa, ID y
+frente/laterales/disparo. Si vuelve a contradecirse, el fallo incluye dirección
+esperada y observada; queda detenido y requiere Reiniciar explícito. No ignorar
+la contradicción ni cambiar distancia/velocidad para forzarlo a girar. Una
+puntuación alta del detector no es una probabilidad calibrada de acierto.
+
 Se conserva el controlador original verificado del compañero y el perfil local
 de 0.48 m. La coordinación añadida **solo en este modo**:
 

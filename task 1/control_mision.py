@@ -110,6 +110,7 @@ class ControlMision:
             raise ValueError('La mision requiere el controlador con espera de pared')
         self.meta_nueva = None
         self.diagnostico_meta = 'Esperando inicio en A'
+        self.conflicto_senal = None
 
     def cambiar(self, fase, ahora, motivo):
         self.fase, self.desde_ns, self.motivo = fase, ahora, motivo
@@ -203,6 +204,19 @@ class ControlMision:
     def libre(lidar, cfg):
         return (lidar is not None and lidar.observacion_valida and not lidar.proximidad_no_cuantificable
                 and min(lidar.dist_frente, lidar.dist_izquierda, lidar.dist_derecha) > cfg.distancia_parada_m)
+
+    def diagnostico_giro(self, ahora, lidar):
+        def distancia(campo):
+            valor=getattr(lidar,campo,None) if lidar and lidar.observacion_valida else None
+            return valor if valor is not None and isfinite(valor) else None
+        pendiente=self.giros.pendiente
+        activo=self.giros.activo
+        return dict(color=self.giros.color, recibido=dict(self.senal) if self.senal else None,
+            pendiente=dict(id=self.giros.ultimo_id,direccion=pendiente['direccion'],
+                edad_revalidacion_s=(ahora-pendiente['recibido_ns'])/1e9) if pendiente else None,
+            activo=activo['direccion'] if activo else None, conflicto=self.conflicto_senal,
+            frente_m=distancia('dist_frente'), izquierda_m=distancia('dist_izquierda'),
+            derecha_m=distancia('dist_derecha'), disparo_m=self.cfg_senales.esperar_pared_m)
 
     def decidir(self, ahora, pose, pose_ns, lidar, cfg, fin=False):
         def cero(motivo):
@@ -309,7 +323,11 @@ class ControlMision:
                     return cero(self.motivo)
                 if ev and ev['id'] == self.giros.ultimo_id and ev['color'] == self.giros.color:
                     if ev['direccion'] != self.giros.pendiente['direccion']:
-                        self.fallar('Cambio de sentido del cartel pendiente: detenido', ahora)
+                        self.conflicto_senal=dict(id=ev['id'],color=ev['color'],
+                            esperada=self.giros.pendiente['direccion'],observada=ev['direccion'],
+                            marca_ns=ev['marca_ns'])
+                        self.fallar(f"Cambio de sentido del cartel pendiente: {self.conflicto_senal['esperada']} "
+                                    f"-> {ev['direccion']} (id {ev['id']}): detenido", ahora)
                         return cero(self.motivo)
                     if self.revalidacion_ns is None or ev['marca_ns'] > self.revalidacion_ns:
                         self.giros.pendiente['recibido_ns'] = ev['marca_ns']

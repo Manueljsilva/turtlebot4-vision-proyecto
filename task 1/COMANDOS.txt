@@ -356,6 +356,10 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
 # Luego colocar en A, elegir otra persona y Buscar; registra un A nuevo, sin cerrar camara.
 # Esperar que se vacie el campo antes de Buscar. Cada intento conserva su JSON local.
 # Cerrar/relanzar una vez carga esta revision; despues repetir con el boton.
+# Detector de flechas corregido tras reproducir inversiones en imagen pequeña/JPEG.
+# Mostrar cartel completo y vertical. [FLECHA VISUAL] informa lectura/evento propuesto;
+# [MISION] > giro muestra recibido/pendiente/activo/conflicto y distancias.
+# Si cambia de sentido el mismo ID, queda detenido: no forzar giro ni bajar barreras.
 # [MISION] y [QR] explican cada parada. FALLO no se libera mostrando otro cartel;
 # revisar motivo y usar Reiniciar para otro intento explicito.
 # Este modo renueva flecha pendiente SOLO con reconfirmacion en imagenes nuevas;

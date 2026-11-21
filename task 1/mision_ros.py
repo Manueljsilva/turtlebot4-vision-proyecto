@@ -65,6 +65,7 @@ class MisionNode(EvasionLidarNode):
                 salida_visual=c.meta_nueva.salida_visual if c.meta_nueva else False,
                 frente_m=lidar.dist_frente if lidar and lidar.observacion_valida else None,
                 disparo_m=c.cfg_senales.esperar_pared_m,
+                giro=c.diagnostico_giro(ahora,lidar),
                 edad_odom_s=None if self.pose_ns is None else (ahora-self.pose_ns)/1e9)), flush=True)
             self.estado_ns = ahora
 
