@@ -1,6 +1,6 @@
 # Ensayo integrado A → B → A
 
-Actualizado el 21 de noviembre de 2026: el usuario confirma que **el QR funciona tras aumentar su tamaño**. La prueba inmediata pasa a ser el recorrido completo, incluidas ambas banderas y flechas azules/rojas. **Una imagen nueva válida basta para aceptar una detección**, por petición del usuario. Preparado inicialmente el 20 de noviembre. **209 pruebas locales pasan; todavía sin validación del recorrido completo en hardware.** Los modos anteriores se conservan.
+Actualizado el 21 de noviembre de 2026: el usuario confirma que **el QR funciona tras aumentar su tamaño**. La prueba inmediata pasa a ser el recorrido completo, incluidas ambas banderas y flechas azules/rojas. **Una imagen nueva válida basta para aceptar una detección**. Nuevo botón **Reiniciar** para repetir sin cerrar ventana/cámara. **215 pruebas locales pasan; todavía sin validación del recorrido completo ni del reinicio en hardware.** Los modos anteriores se conservan.
 Este ensayo sigue azul en la ida y rojo en la vuelta; no reproduce una trayectoria
 grabada ni incorpora SLAM/Nav2.
 
@@ -69,6 +69,24 @@ indica `mover=False`, no publica velocidades. Eso ocurrió en el registro del
 21/11: esperaba la meta sin movimiento habilitado. Cerrar con Ctrl+C y ejecutar
 el comando completo anterior con `--mision-guiada --mover`, sin mezclar modos.
 No se activa movimiento automáticamente al pulsar Buscar si falta --mover.
+
+## Repetir con otra persona sin cerrar
+
+1. Pulsar **Reiniciar**, abajo junto a Salir. El control ordena cero y el botón
+   pasa a «Reiniciando…». Buscar queda bloqueado hasta confirmar reposo con
+   odometría nueva durante al menos 0.7 s; no basta esperar una imagen.
+2. Cuando se vacíe el campo y se habilite la selección, colocar el robot en A
+   mirando hacia el recorrido. Sigue detenido: el reinicio no inicia otra misión.
+3. Escribir/elegir otra persona y pulsar **Buscar**. Ese intento vuelve a registrar
+   A con una pose posterior al inicio y usa azul. No hereda QR, flechas, puntos
+   A/B, orientación ni plazos del anterior.
+
+Cámara y galería permanecen abiertas; cada intento tiene su propio JSON textual
+local y conserva el registro anterior. Puede usarse también tras FIN o FALLO.
+Revisar el motivo de un fallo antes de repetir; las protecciones siguen activas.
+Si no hay odometría reciente, permanece «Reiniciando» y detenido; Salir/Esc siguen
+disponibles. Cerrar y relanzar el comando **una vez** para cargar esta versión;
+después ya no hace falta Ctrl+C entre intentos. Este botón está en --mision-guiada.
 
 ## Secuencia y qué observar
 
@@ -208,8 +226,9 @@ marca retrocedida y cambio de marco enclavan el movimiento; corte >2 s durante
 rotación también. Límite total de ensayo: 900 s. Son valores internos de ensayo,
 no reglas oficiales de competición.
 
-**FALLO:** queda detenido, conserva el QR ya guardado y exige cerrar/revisar para
-repetir. Esc/Salir/Ctrl+C intentan ceros y terminan; no usar Ctrl+Z. El vigilante
+**FALLO:** queda detenido y conserva el QR ya guardado en el registro. No reanuda
+automáticamente: revisar el motivo y pulsar Reiniciar para otro intento, o cerrar.
+Esc/Salir/Ctrl+C intentan ceros y terminan; no usar Ctrl+Z. El vigilante
 no garantiza entregar una parada si muere el propio nodo ROS o se corta la red.
 El vídeo retrasado, los choques diagonales y la huella de giro siguen pendientes
 de medir; esta integración no demuestra que estén resueltos.

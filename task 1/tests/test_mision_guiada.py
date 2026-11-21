@@ -42,14 +42,15 @@ class MisionTests(unittest.TestCase):
         self.pose = dict(frame_id='odom', child_frame_id='base_link', x=0., y=0., yaw=0.)
 
     def paso(self, orden='OBSERVAR', dt=.2, meta=None, sensor=None, marca=None, qr_ns=None, votos=0,
-             senal=None, **pose):
+             senal=None, reinicio=None, **pose):
         self.t += round(dt*1e9)
         self.pose.update(pose)
-        if marca is None:
+        if marca is None and orden != 'REINICIAR':
             marca = self.t
         self.c.recibir(json.dumps(dict(version=1, secuencia=self.seq, orden=orden,
             actividad_ns=self.t, camara_ns=marca, meta=meta, senal=senal,
-            qr_ns=qr_ns, qr_votos=votos)), self.t)
+            qr_ns=qr_ns, qr_votos=votos,
+            reinicio_ns=self.c.reinicio_ns if reinicio is None else reinicio)), self.t)
         self.seq += 1
         return self.c.decidir(self.t, self.pose, self.t, sensor or lidar(), self.cfg)
 
@@ -116,6 +117,81 @@ class MisionTests(unittest.TestCase):
         self.assertEqual(self.c.fase, 'IDA')
         self.assertEqual(self.c.meta_nueva.votos, 0)
         self.assertIn('falta ausencia previa',self.c.diagnostico_meta)
+
+    def test_reinicio_de_vuelta_borra_mision_y_espera_reposo_sin_reanudar(self):
+        self.qr_y_salida()
+        token=self.t+200_000_000
+        self.assertEqual(self.paso('REINICIAR',reinicio=token)[:2],(0.,0.))
+        self.assertEqual(self.c.fase,'REINICIAR')
+        self.assertIsNone(self.c.a)
+        self.assertIsNone(self.c.b)
+        self.assertIsNone(self.c.yaw_entrada_b)
+        self.assertIsNone(self.c.yaw_salida)
+        self.assertIsNone(self.c.meta_nueva)
+        self.assertFalse(self.c.qr_confirmado)
+        self.assertEqual(self.c.giros.color,'azul')
+        for _ in range(4):
+            self.assertEqual(self.paso('REINICIAR',reinicio=token)[:2],(0.,0.))
+        self.assertEqual(self.c.fase,'ESPERAR')
+        self.assertIsNone(self.c.solicitud_ns)
+        self.paso('REINICIAR',reinicio=token)  # Latido repetido no abre otro reinicio.
+        self.assertEqual(self.c.fase,'ESPERAR')
+        self.assertIsNone(self.c.a)
+        self.assertEqual(self.paso('ESPERAR',x=5.)[:2],(0.,0.))
+        self.assertEqual(self.c.fase,'ESPERAR')  # Recolocar quieto no hereda una ruta anterior.
+        self.paso('INICIAR',x=6.)
+        self.assertEqual(self.c.fase,'IDA')
+        self.assertAlmostEqual(self.c.a['x'],6.)
+
+    def test_reinicio_explicito_recupera_fin_y_fallo_sin_reusar_resultado(self):
+        for fase in ('FIN','FALLO'):
+            self.c.fase=fase
+            self.c.qr_confirmado=True
+            token=self.t+200_000_000
+            self.paso('REINICIAR',reinicio=token)
+            for _ in range(4):
+                self.paso('REINICIAR',reinicio=token)
+            self.assertEqual(self.c.fase,'ESPERAR')
+            self.assertFalse(self.c.qr_confirmado)
+            self.assertIsNone(self.c.a)
+
+    def test_reinicio_no_acepta_orden_anterior_inicio_prematuro_o_token_invalido(self):
+        self.iniciar()
+        for token in (0,self.t-1_000_000_000,self.t+2_000_000_000):
+            self.paso('REINICIAR',reinicio=token)
+            self.assertEqual(self.c.fase,'IDA')
+        token=self.t+200_000_000
+        self.paso('REINICIAR',reinicio=token)
+        self.paso('INICIAR')  # No se habilita Buscar antes del reposo/acuse.
+        self.assertEqual(self.c.fase,'REINICIAR')
+        self.assertIsNone(self.c.solicitud_ns)
+        for _ in range(5):
+            self.paso('REINICIAR',reinicio=token)
+        self.assertEqual(self.c.fase,'ESPERAR')
+        self.paso('QR_LISTO',reinicio=0,qr_ns=self.t+200_000_000,votos=1)
+        self.assertIsNone(self.c.actividad_ns)
+        self.assertIsNone(self.c.a)
+        self.assertFalse(self.c.qr_confirmado)
+        self.paso('INICIAR',reinicio=token+1)
+        self.assertIsNone(self.c.solicitud_ns)
+        self.c.recibir(json.dumps(dict(version=1,secuencia=self.seq,orden='PARAR',
+            actividad_ns=self.t,camara_ns=None)),self.t)
+        self.assertEqual(self.c.fase,'FALLO')  # Cierre compartido sin token también detiene.
+
+    def test_reinicio_no_confirma_reposo_con_robot_en_movimiento_o_pose_antigua(self):
+        self.iniciar()
+        token=self.t+200_000_000
+        self.paso('REINICIAR',reinicio=token)
+        for i in range(10):
+            self.assertEqual(self.paso('REINICIAR',reinicio=token,x=.01*i)[:2],(0.,0.))
+        self.assertEqual(self.c.fase,'REINICIAR')
+        self.t+=2_000_000_000
+        self.c.decidir(self.t,self.pose,token-1,lidar(),self.cfg)
+        self.assertEqual(self.c.fase,'REINICIAR')
+        self.assertEqual(self.c.reposo.muestras,0)
+        for _ in range(5):
+            self.paso('REINICIAR',reinicio=token)
+        self.assertEqual(self.c.fase,'ESPERAR')
 
     def test_inicio_solicitado_sin_camara_permanece_esperando_sin_registrar_a(self):
         vx,wz,motivo=self.paso('INICIAR',marca=0)
@@ -314,6 +390,40 @@ class MisionTests(unittest.TestCase):
 
 
 class PreparacionTests(unittest.TestCase):
+    def test_boton_reinicio_revoca_orden_bloquea_buscar_y_nuevo_intento_limpia_vision(self):
+        sistema=SistemaFacial(Mock(),Galeria([[1,0],[0,1]],['Persona A','Persona B']),Criterio(.5,.1))
+        _,cfg=cargar_ensayo()
+        puente=app.PuenteMision.__new__(app.PuenteMision)
+        puente.cerrojo=threading.Lock()
+        sesion,entrada,v=app.crear_intento(sistema,cfg,puente,'Persona A')
+        entrada.confirmar()
+        v.ensayo.sesion.palabra='Mensaje anterior'
+        v.tramo='vuelta'
+        v.senal=dict(id=9)
+        with patch.object(app.time,'monotonic_ns',return_value=100):
+            entrada.raton(app.cv2.EVENT_LBUTTONDOWN,700,685)
+            entrada.raton(app.cv2.EVENT_LBUTTONDOWN,700,685)
+        self.assertEqual(puente.datos['orden'],'REINICIAR')
+        self.assertIsNone(puente.datos['camara_ns'])
+        self.assertEqual(puente.datos['reinicio_ns'],100)
+        inicio=sesion.inicio_ns
+        entrada.texto='Persona B'
+        entrada.tecla(13)
+        self.assertEqual(sesion.nombre,'Persona A')
+        self.assertEqual(sesion.inicio_ns,inicio)
+        nueva,e2,v2=app.crear_intento(sistema,cfg,puente)
+        self.assertIsNone(nueva.inicio_ns)
+        self.assertEqual(e2.texto,'')
+        self.assertIsNone(v2.ensayo.sesion.palabra)
+        self.assertIsNone(v2.senal)
+        self.assertIsNone(v2.tramo)
+        self.assertIs(e2.consulta.sistema,sistema)
+        e2.texto='Persona B'
+        e2.confirmar()
+        self.assertEqual(nueva.nombre,'Persona B')
+        puente.actualizar('INICIAR',200,200)
+        self.assertEqual(puente.datos['reinicio_ns'],100)
+
     def test_resultado_grande_solo_tras_meta_a_y_qr_incluso_sin_camara(self):
         sistema=SistemaFacial(Mock(),Galeria([[1,0]],['Persona A']),Criterio(.5,.1))
         _,cfg=cargar_ensayo()
@@ -469,6 +579,71 @@ class PreparacionTests(unittest.TestCase):
         video.cerrar.assert_called_once()
         puente.cerrar.assert_called_once()
 
+    def test_ventana_reinicia_sin_recargar_camara_y_separa_intentos(self):
+        sistema=SistemaFacial(Mock(),Galeria([[1,0],[0,1]],['Persona A','Persona B']),Criterio(.5,.1))
+        video=NS(proceso=Mock(),fotograma=Mock(return_value=(None,'Esperando camara')),cerrar=Mock())
+        video.proceso.poll.return_value=None
+        puente=app.PuenteMision.__new__(app.PuenteMision)
+        puente.cerrojo=threading.Lock()
+        puente.datos={}
+        puente.comprobar=Mock()
+        puente.cerrar=Mock()
+        callbacks=[]
+        ticks=[]
+        sesion_anterior=[]
+        def estado(ahora):
+            token=puente.datos.get('reinicio_ns',0)
+            fase=('REINICIAR' if len(ticks)==2 else 'ESPERAR' if len(ticks)==3 else 'IDA') if token else ('IDA' if ticks else 'ESPERAR')
+            return dict(version=1,fase=fase,estado='Simulado',reinicio_ns=token,
+                        a=dict(x=1) if fase=='IDA' else None)
+        puente.ultimo_estado=estado
+        def tecla(_):
+            n=len(ticks)
+            ticks.append(n)
+            e=callbacks[-1].__self__
+            if n==0:
+                e.confirmar()
+                sesion_anterior.append(e.sesion)
+            elif n==1:
+                e.raton(app.cv2.EVENT_LBUTTONDOWN,700,685)
+            elif n==2:
+                e.texto='Persona B'
+                e.tecla(13)  # Bloqueado mientras ROS no confirma el reposo.
+                self.assertEqual(e.sesion.nombre,'Persona A')
+            elif n==3:
+                self.assertIsNone(e.sesion.inicio_ns)
+                self.assertEqual(e.texto,'')
+                e.texto='Persona B'
+                e.confirmar()
+                self.assertEqual(e.sesion.nombre,'Persona B')
+                self.assertIsNot(e.sesion,sesion_anterior[0])
+            else:
+                return 27
+            return -1
+        with patch.object(app,'cargar_sistema',return_value=sistema) as cargar, \
+                patch.object(app,'preparar_camara',return_value=['camara']) as camara, \
+                patch.object(app,'preparar_mision',return_value=['control']), \
+                patch.object(app,'cargar_transporte',return_value=lambda p:video), \
+                patch.object(app,'PuenteMision',return_value=puente) as crear_puente, \
+                patch.object(app.subprocess,'Popen'), patch.dict(app.os.environ,{'DISPLAY':':simulado'}), \
+                patch.object(app.cv2,'namedWindow') as ventana, patch.object(app.cv2,'resizeWindow'), \
+                patch.object(app.cv2,'setMouseCallback',side_effect=lambda v,c:callbacks.append(c)), \
+                patch.object(app.cv2,'imshow'), patch.object(app.cv2,'waitKeyEx',side_effect=tecla), \
+                patch.object(app.cv2,'getWindowProperty',return_value=1), \
+                patch.object(app.cv2,'destroyAllWindows'), patch.object(app,'guardar_estado') as guardar, \
+                patch('sys.stdout',new_callable=io.StringIO):
+            self.assertEqual(app.main(['--ip','10.87.179.100','--dominio','5','--nombre','Persona A']),0)
+        cargar.assert_called_once()
+        camara.assert_called_once()
+        crear_puente.assert_called_once()
+        ventana.assert_called_once()
+        video.cerrar.assert_called_once()
+        puente.cerrar.assert_called_once()
+        cancelados=[c for c in guardar.call_args_list if c.kwargs.get('interrumpida_por_reinicio')]
+        self.assertEqual(len(cancelados),1)
+        archivos={str(c.args[0]) for c in guardar.call_args_list}
+        self.assertEqual(len(archivos),2)
+
 
 class NodoTests(unittest.TestCase):
     def test_nodo_real_con_dobles_no_publica_por_defecto_y_publica_solo_una_salida(self):
@@ -518,6 +693,20 @@ class NodoTests(unittest.TestCase):
                 self.assertEqual(nodo.pub_cmd.topico,'/cmd_vel')
             else:
                 self.assertIsNone(nodo.pub_cmd)
+            token=ahora+300_000_000
+            for j in range(5):
+                ahora=token+j*200_000_000
+                entrada.linea=json.dumps(dict(version=1,secuencia=3+j,orden='REINICIAR',actividad_ns=ahora,
+                    camara_ns=None,meta=None,senal=None,qr_ns=None,qr_votos=0,reinicio_ns=token))
+                nodo.pose_ns=ahora
+                with patch.object(ros.time,'monotonic_ns',return_value=ahora), patch('sys.stdout',new_callable=io.StringIO) as out:
+                    nodo._ciclo()
+                estado=json.loads(out.getvalue())
+                self.assertEqual((estado['vx'],estado['wz']),(0.,0.))
+                self.assertEqual(estado['reinicio_ns'],token)
+            self.assertEqual(c.fase,'ESPERAR')
+            self.assertEqual(len(nodo.publicadores),int(mover))
+            self.assertIsNone(c.a)
 
 
 class LanzadorMisionTests(unittest.TestCase):

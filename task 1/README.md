@@ -6,7 +6,10 @@ rostro objetivo/QR propio → rojo/evasión → meta A. A también lleva bandera
 mirando al robot cuando regrese. Al confirmar meta A y reposo, aparece un panel
 grande con la palabra y el robot queda detenido. El regreso completo aún no está
 validado físicamente. Guía vigente: [PRUEBA_MISION_GUIADA.md](PRUEBA_MISION_GUIADA.md),
-bloque 18 de [COMANDOS.txt](COMANDOS.txt); 209 tests locales. Las descripciones
+bloque 18 de [COMANDOS.txt](COMANDOS.txt); 215 tests locales. **Reiniciar**, junto
+a Salir, detiene y espera reposo antes de permitir otra persona en la misma
+ventana; el nuevo Buscar vuelve a registrar A. Reinicio aún pendiente en hardware.
+Las descripciones
 históricas de tres confirmaciones de abajo se sustituyen por una imagen nueva válida.
 
 Primera implementación facial local terminada el 28 de octubre de 2026. Usa la `.venv` global, OpenCV en CPU y modelos preentrenados YuNet/SFace; el notebook funciona sin ROS, Gazebo ni robot. El 13 de noviembre se incorporó una prueba separada de evasión LiDAR en hardware, con ROS en el Docker existente. Task 2 se conserva sin cambios.

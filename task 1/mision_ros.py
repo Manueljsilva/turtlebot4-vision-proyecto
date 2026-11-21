@@ -53,6 +53,7 @@ class MisionNode(EvasionLidarNode):
                 fase=c.fase, fase_desde_ns=c.desde_ns, vx=vx, wz=wz, mover=self.pub_cmd is not None,
                 terminado=c.fase in ('FALLO', 'FIN'), a=c.a, b=c.b,
                 qr_confirmado=c.qr_confirmado, busqueda_desde_ns=c.busqueda_desde_ns,
+                reinicio_ns=c.reinicio_ns,
                 yaw_entrada_b=c.yaw_entrada_b,
                 barrido_deg=degrees(c.yaw_total-c.yaw_barrido) if c.yaw_barrido is not None else 0.,
                 distancia_a_m=hypot(self.pose['x']-c.a['x'], self.pose['y']-c.a['y']) if self.pose and c.a else None,

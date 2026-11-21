@@ -89,6 +89,7 @@ class ControlMision:
         self.fase, self.desde_ns = 'ESPERAR', None
         self.motivo = 'Elegir persona y pulsar Buscar'
         self.orden, self.secuencia = 'ESPERAR', -1
+        self.reinicio_ns = 0
         self.actividad_ns = self.camara_ns = self.solicitud_ns = None
         self.senal = self.meta = self.qr_ns = None
         self.qr_votos = 0
@@ -123,10 +124,10 @@ class ControlMision:
             d = json.loads(linea)
             base = {'version', 'secuencia', 'orden', 'actividad_ns', 'camara_ns'}
             extras = {'senal', 'meta', 'qr_ns', 'qr_votos'}
-            if (len(linea) > 2048 or not isinstance(d, dict) or set(d) not in (base, base|extras)
+            if (len(linea) > 2048 or not isinstance(d, dict) or set(d) not in (base, base|extras, base|extras|{'reinicio_ns'})
                     or type(d['version']) is not int or d['version'] != 1
                     or type(d['secuencia']) is not int or d['secuencia'] <= self.secuencia
-                    or d['orden'] not in ('ESPERAR', 'INICIAR', 'OBSERVAR', 'VERIFICAR', 'QR_LISTO', 'PARAR')
+                    or d['orden'] not in ('ESPERAR', 'INICIAR', 'OBSERVAR', 'VERIFICAR', 'QR_LISTO', 'PARAR', 'REINICIAR')
                     or not reciente(d['actividad_ns'], ahora, EDAD_ACTIVIDAD_NS)
                     or (d['camara_ns'] is not None and type(d['camara_ns']) is not int)
                     or not evento_valido(d.get('senal'), ahora)):
@@ -141,12 +142,34 @@ class ControlMision:
             if ((d.get('qr_ns') is not None and type(d['qr_ns']) is not int)
                     or type(d.get('qr_votos', 0)) is not int or not 0 <= d.get('qr_votos', 0) <= CONFIRMACIONES_VISUALES):
                 raise ValueError('Confirmacion QR invalida')
+            # PARAR también llega desde el cierre compartido sin identificador
+            # de intento. Siempre puede detener; nunca habilita movimiento.
+            reinicio = self.reinicio_ns if d['orden'] == 'PARAR' else d.get('reinicio_ns', 0)
+            if type(reinicio) is not int or reinicio < self.reinicio_ns:
+                raise ValueError('Intento anterior o reinicio invalido')
+            if d['orden'] == 'REINICIAR':
+                if (reinicio <= 0 or d['camara_ns'] is not None or meta is not None
+                        or d.get('senal') is not None or d.get('qr_ns') is not None or d.get('qr_votos', 0)):
+                    raise ValueError('Reinicio no puede incluir percepcion anterior')
+                if reinicio > self.reinicio_ns:
+                    if not reciente(reinicio, ahora, EDAD_ACTIVIDAD_NS):
+                        raise ValueError('Solicitud de reinicio caducada')
+                    # Solo un clic nuevo borra el intento. Repetir su latido no
+                    # reinicia el reposo, el secuenciador ni crea otro publicador.
+                    secuencia = self.secuencia
+                    self.__init__(self.cfg_senales, self.cfg, self.clase_giros)
+                    self.secuencia, self.reinicio_ns = secuencia, reinicio
+                    self.cambiar('REINICIAR', ahora, 'Reiniciando: detener y confirmar reposo')
+            elif reinicio != self.reinicio_ns or (self.fase == 'REINICIAR' and d['orden'] not in ('PARAR', 'ESPERAR')):
+                raise ValueError('Esperar confirmacion del reinicio')
             self.secuencia, self.orden = d['secuencia'], d['orden']
             self.actividad_ns, self.camara_ns = d['actividad_ns'], d['camara_ns']
             self.senal, self.meta = d.get('senal'), meta
             self.qr_ns, self.qr_votos = d.get('qr_ns'), d.get('qr_votos', 0)
             if self.orden == 'INICIAR' and self.solicitud_ns is None:
                 self.solicitud_ns = self.actividad_ns
+                if self.reinicio_ns and self.fase == 'ESPERAR':
+                    self.pose = self.pose_ns = None  # Puede haberse recolocado entre intentos.
             if self.orden == 'PARAR':
                 self.fallar('Detenido por interfaz', ahora)
         except (ValueError, TypeError, KeyError, OverflowError):
@@ -184,7 +207,23 @@ class ControlMision:
     def decidir(self, ahora, pose, pose_ns, lidar, cfg, fin=False):
         def cero(motivo):
             return 0., 0., motivo
+        if self.fase == 'REINICIAR':
+            if fin:
+                self.fallar('Control cerrado durante reinicio', ahora)
+            elif (not reciente(self.actividad_ns, ahora, EDAD_ACTIVIDAD_NS) or self.orden != 'REINICIAR'
+                    or pose_ns is None or pose_ns < self.reinicio_ns):
+                self.reposo = ReposoOdometria()
+                self.motivo = 'Reiniciando: esperar control y odometria nuevos; detenido'
+            elif self.reposo.actualizar(pose, pose_ns, ahora):
+                self.pose, self.pose_ns = dict(pose), pose_ns
+                self.cambiar('ESPERAR', ahora, 'Reinicio confirmado. Colocar en A, elegir persona y pulsar Buscar')
+                self.orden = 'ESPERAR'
+            return cero(self.motivo)
         self.diagnostico_meta = 'Meta solo se confirma durante ida o vuelta'
+        if self.reinicio_ns and self.fase == 'ESPERAR' and self.solicitud_ns is None:
+            # Sin intento activo no hay continuidad de ruta que conservar.
+            # Recolocar el robot no autoriza avanzar ni registra A por sí solo.
+            self.pose = self.pose_ns = None
         pose_ok = self.seguir_pose(ahora, pose, pose_ns)  # También durante pausa de cámara/GUI.
         if fin:
             self.fallar('Control cerrado', ahora)
@@ -205,7 +244,7 @@ class ControlMision:
             if self.meta_nueva:
                 self.meta_nueva.caducar()
             return cero('Sin actividad reciente: detenido')
-        if self.orden == 'ESPERAR':
+        if self.orden in ('ESPERAR', 'REINICIAR'):
             self.diagnostico_meta = 'Esperando Buscar'
             return cero('Esperando Buscar')
         if not reciente(self.camara_ns, ahora, EDAD_CAMARA_NS):

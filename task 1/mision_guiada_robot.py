@@ -22,12 +22,41 @@ from control_busqueda import CONFIRMACIONES_VISUALES, EDAD_CAMARA_NS, reciente
 from control_mision import cargar_config_mision
 from ensayo_giros_companero import CONFIG, CONTROL, cargar_ensayo
 from evasion_lidar import cargar_config
-from interfaz_facial import BUSCAR, dibujar_interfaz, escribir
+from interfaz_facial import BUSCAR, SALIR, dibujar_interfaz, dentro, escribir
 from percepcion_meta_qr import DetectorMetaQR, texto_valido
 from prueba_facial_robot import (TAREA, TOPICO, ConsultaEnVivo, cargar_sistema,
     cargar_transporte, ejecutar_comando, mensaje_rechazo, preparar_camara)
 from prueba_meta_robot import EnsayoB
 from senales_giro import ConsultaSenales, dibujar_detecciones
+
+
+REINICIAR = (678, 674, 830, 700)
+
+
+class EntradaMision(EntradaBusqueda):
+    def __init__(self, consulta, sesion, al_reiniciar):
+        super().__init__(consulta, sesion)
+        self.al_reiniciar = al_reiniciar
+        self.reinicio_ns = None
+
+    def confirmar(self):
+        if self.reinicio_ns is None:
+            super().confirmar()
+
+    def raton(self, evento, x, y, banderas=None, parametro=None):
+        if evento == cv2.EVENT_LBUTTONDOWN and dentro(REINICIAR, x, y):
+            if self.reinicio_ns is None:
+                self.reinicio_ns = time.monotonic_ns()
+                self.foco = False
+                self.al_reiniciar(self.reinicio_ns)
+            return
+        if self.reinicio_ns is None or dentro(SALIR, x, y):
+            super().raton(evento, x, y, banderas, parametro)
+
+    def tecla(self, codigo):
+        if self.reinicio_ns is not None and codigo not in (27, 65307, ord('q'), ord('Q')):
+            return self.cerrar
+        return super().tecla(codigo)
 
 
 class SesionInterfaz:
@@ -41,10 +70,14 @@ class SesionInterfaz:
 
 
 class PuenteMision(PuenteBusqueda):
-    def actualizar(self, orden, actividad_ns, camara_ns, meta=None, senal=None, qr_ns=None, qr_votos=0):
+    def actualizar(self, orden, actividad_ns, camara_ns, meta=None, senal=None, qr_ns=None, qr_votos=0,
+                   reinicio_ns=None):
         with self.cerrojo:
+            if reinicio_ns is not None:
+                self.reinicio_ns = reinicio_ns
             self.datos = dict(orden=orden, actividad_ns=actividad_ns, camara_ns=camara_ns,
-                              meta=meta, senal=senal, qr_ns=qr_ns, qr_votos=qr_votos)
+                              meta=meta, senal=senal, qr_ns=qr_ns, qr_votos=qr_votos,
+                              reinicio_ns=getattr(self, 'reinicio_ns', 0))
 
 
 def preparar_mision(comando_camara, contenedor, config, mover):
@@ -62,12 +95,12 @@ def preparar_mision(comando_camara, contenedor, config, mover):
     return comando
 
 
-def guardar_estado(archivo, sesion, estado, palabra):
+def guardar_estado(archivo, sesion, estado, palabra, interrumpida_por_reinicio=False):
     datos = dict(version=1, ensayo='mision_guiada_azul_meta_rostro_qr_rojo',
         nombre_solicitado=sesion.nombre, identidad_confirmada=sesion.nombre if palabra is not None else None,
         palabra_qr=palabra, a_odometria=estado.get('a'), b_odometria=estado.get('b'),
         fase=estado['fase'], motivo=estado['estado'], regreso_a_confirmado=estado['fase'] == 'FIN',
-        ruta_reproducida=False)
+        ruta_reproducida=False, interrumpida_por_reinicio=interrumpida_por_reinicio)
     archivo.parent.mkdir(parents=True, exist_ok=True)
     temporal = archivo.with_suffix('.tmp')
     temporal.write_text(json.dumps(datos, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
@@ -135,6 +168,14 @@ class VisionMision:
         return anotada
 
 
+def crear_intento(sistema, cfg, puente, nombre=None):
+    sesion = SesionInterfaz()
+    entrada = EntradaMision(ConsultaEnVivo(sistema, nombre), sesion,
+        lambda marca: puente.actualizar('REINICIAR', time.monotonic_ns(), None, reinicio_ns=marca))
+    entrada.aviso = 'Coloca el robot en A; elige persona y pulsa Buscar. Reiniciar detiene y prepara otro intento.'
+    return sesion, entrada, VisionMision(sistema, cfg)
+
+
 def lineas_resultado(texto, fuente, ancho):
     """Ajuste por caracteres sin quitar tildes, espacios ni cortar el mensaje."""
     lineas, actual = [], ''
@@ -177,7 +218,10 @@ def tarjeta_resultado(palabra):
 
 
 def dibujar(imagen, estado_camara, entrada, vision, estado, mover):
-    resultado_en_a = bool(estado and estado['fase']=='FIN' and estado.get('qr_confirmado')
+    reiniciando = getattr(entrada, 'reinicio_ns', None) is not None
+    if reiniciando:
+        estado = dict(estado or {}, fase='REINICIAR', estado='Deteniendo: esperar confirmacion de reposo', qr_confirmado=False)
+    resultado_en_a = bool(not reiniciando and estado and estado['fase']=='FIN' and estado.get('qr_confirmado')
                           and texto_valido(vision.ensayo.sesion.palabra))
     if imagen is not None and estado and estado['fase'] == 'BUSCAR_B':
         imagen = imagen.copy()
@@ -193,10 +237,10 @@ def dibujar(imagen, estado_camara, entrada, vision, estado, mover):
             cv2.rectangle(imagen, (x,y), (x+w,y+h), (200,180,60), 2)
             escribir(imagen, etiqueta, x, max(18,y-7), (200,180,60), limite=35)
     panel = dibujar_interfaz(imagen, mensaje_rechazo('Rostros solo tras meta B'), estado_camara, entrada)
-    if entrada.sesion.inicio_ns is not None:
+    if entrada.sesion.inicio_ns is not None or reiniciando:
         cv2.rectangle(panel, (0, 99), (959, 245), (27, 27, 27), -1)
         cv2.rectangle(panel, BUSCAR[:2], BUSCAR[2:], (65, 65, 65), -1)
-        escribir(panel, 'Finalizado' if resultado_en_a else 'En curso', 775, 76)
+        escribir(panel, 'Esperar' if reiniciando else 'Finalizado' if resultado_en_a else 'En curso', 775, 76)
         fase = estado['fase'] if estado else 'SIN TELEMETRIA: DETENIDO'
         escribir(panel, f'FASE: {fase}', 18, 121, (70, 190, 240))
         escribir(panel, estado['estado'] if estado else 'Esperando nodo ROS', 18, 145)
@@ -208,7 +252,9 @@ def dibujar(imagen, estado_camara, entrada, vision, estado, mover):
             escribir(panel, 'META: '+estado.get('motivo_meta','Esperando diagnostico'), 18, 193, (80,220,220))
         else:
             escribir(panel, f'Objetivo: {entrada.sesion.nombre} | Observados: {observados or "sin caras"}', 18, 193)
-        if resultado_en_a:
+        if reiniciando:
+            escribir(panel, 'Esperando reposo; luego podras elegir otra persona.', 18, 219, (70,190,240))
+        elif resultado_en_a:
             escribir(panel, 'Resultado del QR disponible abajo', 18, 219, (100, 225, 100))
         else:
             escribir(panel, 'QR guardado para mostrar en A' if vision.ensayo.sesion.palabra is not None else
@@ -218,12 +264,16 @@ def dibujar(imagen, estado_camara, entrada, vision, estado, mover):
         dato = f'{edad:.2f}s desde recepcion ROS' if isinstance(edad, (int,float)) else 'sin marca reciente'
         escribir(panel, f'Camara: {estado_camara} | {dato}', 18, 240)
     cv2.rectangle(panel, (0, 669), (840, 707), (27, 27, 27), -1)
-    if resultado_en_a:
+    if reiniciando:
+        pie = 'REINICIANDO | Orden de parada enviada | Esperando reposo'
+    elif resultado_en_a:
         panel[258:650,18:942] = tarjeta_resultado(vision.ensayo.sesion.palabra)
         pie = 'MISION TERMINADA | Robot detenido | Esc: salir'
     else:
         pie = ('MOVIMIENTO ACTIVADO' if mover else 'SIN MOVIMIENTO')+' | Ensayo A-B-A | Esc: salir'
-    escribir(panel,pie,18,693)
+    escribir(panel,pie,18,693,escala=.44,limite=74)
+    cv2.rectangle(panel, REINICIAR[:2], REINICIAR[2:], (65,65,65) if reiniciando else (105,90,30), -1)
+    escribir(panel, 'Reiniciando...' if reiniciando else 'Reiniciar', 688, 692, escala=.48)
     return panel
 
 
@@ -247,21 +297,20 @@ def main(argv=None):
         cargar_config_mision(TAREA/'config/mision_guiada.json')
         _, cfg_s = cargar_ensayo()
         sistema = cargar_sistema()
-        sesion = SesionInterfaz()
-        entrada = EntradaBusqueda(ConsultaEnVivo(sistema, args.nombre), sesion)
-        entrada.aviso = 'Ensayo integrado: bandera B al fondo; Buscar fija nombre y registra A.'
-        vision = VisionMision(sistema, cfg_s)
         cv2.setNumThreads(1)
         comando = preparar_camara(args.ip, args.dominio, args.contenedor, args.topico_camara)
         control = preparar_mision(comando, args.contenedor, args.config, args.mover)
         video = cargar_transporte()(subprocess.Popen(comando, stdin=subprocess.PIPE, stdout=subprocess.PIPE))
         puente = PuenteMision(control)
+        sesion, entrada, vision = crear_intento(sistema, cfg_s, puente, args.nombre)
         cv2.namedWindow(ventana, cv2.WINDOW_NORMAL | cv2.WINDOW_GUI_NORMAL)
         abierta = True
         cv2.resizeWindow(ventana, 960, 708)
         cv2.setMouseCallback(ventana, entrada.raton)
         archivo = TAREA/'datos/sesiones'/f'mision_guiada_{uuid.uuid4().hex}.json'
         guardado = None
+        reinicio_guardado = None
+        estado_intento = None
         ultimo_log = 0
         print('ENSAYO INTEGRADO: azul > meta B > rostro/QR > orientacion entrada+180 > rojo > meta A. '
               'No reproduce ruta ni usa mapa. Sin --mover no publica. Cerrar otros controles.', flush=True)
@@ -273,6 +322,32 @@ def main(argv=None):
             marca = video._decodificado['recibido_ns'] if imagen is not None else None
             ahora = time.monotonic_ns()
             estado = puente.ultimo_estado(ahora)
+            if entrada.reinicio_ns is not None:
+                token = entrada.reinicio_ns
+                if token != reinicio_guardado:
+                    if sesion.inicio_ns is not None and estado_intento and estado_intento.get('a'):
+                        guardar_estado(archivo, sesion, estado_intento, vision.ensayo.sesion.palabra,
+                                       interrumpida_por_reinicio=estado_intento['fase'] != 'FIN')
+                    reinicio_guardado = token
+                puente.actualizar('REINICIAR', ahora, None, reinicio_ns=token)
+                if estado and estado.get('reinicio_ns') == token and estado['fase'] == 'ESPERAR':
+                    sesion, entrada, vision = crear_intento(sistema, cfg_s, puente)
+                    cv2.setMouseCallback(ventana, entrada.raton)
+                    archivo = TAREA/'datos/sesiones'/f'mision_guiada_{uuid.uuid4().hex}.json'
+                    guardado = None
+                    estado_intento = None
+                    ultimo_log = 0
+                    print('[REINICIO] Robot en reposo. Elegir persona y pulsar Buscar para registrar un nuevo A.', flush=True)
+                else:
+                    if ahora-ultimo_log >= 1_000_000_000:
+                        print('[REINICIO] Esperando confirmacion del control y 0.7 s de odometria en reposo; detenido.', flush=True)
+                        ultimo_log = ahora
+                    cv2.imshow(ventana, dibujar(imagen, estado_camara, entrada, vision, estado, args.mover))
+                    if entrada.tecla(cv2.waitKeyEx(20)) or cv2.getWindowProperty(ventana, cv2.WND_PROP_VISIBLE) < 1:
+                        break
+                    continue
+            if estado is not None:
+                estado_intento = estado
             imagen = vision.actualizar(imagen, marca, ahora, estado, sesion,
                 lambda: puente.actualizar('VERIFICAR', time.monotonic_ns(), marca))
             ahora = time.monotonic_ns()
