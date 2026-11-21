@@ -33,10 +33,10 @@ class PreparacionBusquedaTests(unittest.TestCase):
             self.assertEqual('--mover' in orden,mover)
             self.assertIn('-i',orden)
             copias=[c.args[0] for c in cmd.call_args_list if 'cp' in c.args[0]]
-            self.assertEqual(len(copias),6)
+            self.assertEqual(len(copias),7)
             self.assertEqual({Path(c[-2]).name for c in copias},
                              {'evasion_lidar.py','seguridad_lidar.py','control_busqueda.py',
-                              'busqueda_lidar_ros.py','evasion_lidar.json','control_giros.py'})
+                              'busqueda_lidar_ros.py','evasion_lidar.json','control_giros.py','config_senales.py'})
 
     def test_no_arranca_control_con_cmd_vel_ausente_o_tipo_incorrecto(self):
         for respuesta in ('','/cmd_vel [geometry_msgs/msg/Twist]',

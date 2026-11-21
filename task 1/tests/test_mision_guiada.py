@@ -61,8 +61,7 @@ class MisionTests(unittest.TestCase):
         self.iniciar()
         for i in range(12):
             self.paso(x=min(1., i*.1))
-        for _ in range(3):
-            self.paso(meta=META, sensor=lidar(.55))
+        self.paso(meta=META, sensor=lidar(.55))
         self.assertEqual(self.c.fase, 'FRENAR_B')
         for _ in range(5):
             self.paso()
@@ -72,7 +71,7 @@ class MisionTests(unittest.TestCase):
         self.llegar_b()
         for yaw in (.2, .4, .6):
             self.paso(yaw=yaw)
-        self.paso('QR_LISTO', qr_ns=self.t+200_000_000, votos=3)
+        self.paso('QR_LISTO', qr_ns=self.t+200_000_000, votos=1)
         self.assertEqual(self.c.fase, 'FRENAR_QR')
         for _ in range(5):
             self.paso()
@@ -101,8 +100,7 @@ class MisionTests(unittest.TestCase):
         self.assertNotAlmostEqual(normalizar(.6+pi), self.pose['yaw'])
         for i in range(1, 11):
             self.paso(x=max(.1, 1.-i*.1))
-        for _ in range(3):
-            self.paso(meta=META, sensor=lidar(.55))
+        self.paso(meta=META, sensor=lidar(.55))
         self.assertEqual(self.c.fase, 'FRENAR_A')
         for _ in range(5):
             self.paso()
@@ -141,17 +139,21 @@ class MisionTests(unittest.TestCase):
         self.assertEqual(self.c.fase, 'IDA')
         self.assertIn('centrarla',self.c.diagnostico_meta)
 
-    def test_repetir_paquete_no_confirma_meta_y_caducidad_reinicia(self):
+    def test_repetir_paquete_inadmisible_no_declara_llegada_y_nuevo_valido_si(self):
         self.iniciar()
         for i in range(12):
             self.paso(x=min(1., i*.1))
-        self.paso(meta=META, sensor=lidar(.55))
+        self.paso(meta=META, sensor=lidar(1.8))
         marca = self.t
         for _ in range(3):
             self.paso(meta=META, sensor=lidar(.55), marca=marca)
-        self.assertEqual(self.c.meta_nueva.votos, 1)
+        self.assertEqual(self.c.meta_nueva.votos, 0)
+        self.assertEqual(self.c.fase,'IDA')
         self.paso(meta=META, marca=0)
         self.assertEqual(self.c.meta_nueva.votos, 0)
+        self.paso(meta=META,sensor=lidar(.55))
+        self.assertEqual(self.c.fase,'FRENAR_B')
+        self.assertEqual(self.c.meta_nueva.votos,1)
 
     def test_b_no_puede_convertirse_en_a_durante_la_salida(self):
         self.qr_y_salida()
@@ -172,15 +174,47 @@ class MisionTests(unittest.TestCase):
 
     def test_qr_antes_de_b_incompleto_o_caducado_no_habilita_regreso(self):
         self.iniciar()
-        self.paso('QR_LISTO', qr_ns=self.t+200_000_000, votos=3)
+        self.paso('QR_LISTO', qr_ns=self.t+200_000_000, votos=1)
         self.assertEqual(self.c.fase, 'IDA')
         self.setUp()
         self.llegar_b()
-        for marca, votos in ((0,3), (self.t+200_000_000,2)):
+        for marca, votos in ((0,1), (self.t+200_000_000,0)):
             self.assertEqual(self.paso('QR_LISTO', qr_ns=marca, votos=votos)[:2], (0., 0.))
             self.assertEqual(self.c.fase, 'BUSCAR_B')
         self.assertFalse(self.c.qr_confirmado)
         self.assertEqual(self.paso('VERIFICAR')[:2], (0., 0.))
+
+    def test_protocolo_qr_rechaza_recuentos_fuera_del_nuevo_contrato(self):
+        for votos in (2,True,1.):
+            with self.subTest(votos=votos):
+                self.setUp()
+                self.llegar_b()
+                orden_anterior=self.c.orden
+                self.assertEqual(self.paso('QR_LISTO',qr_ns=self.t+200_000_000,votos=votos)[:2],(0.,0.))
+                self.assertEqual(self.c.fase,'BUSCAR_B')
+                self.assertEqual(self.c.orden,orden_anterior)
+                self.assertIsNone(self.c.actividad_ns)
+                self.assertFalse(self.c.qr_confirmado)
+
+    def test_primera_imagen_de_flecha_impide_elegir_giro_evasivo_contrario(self):
+        self.iniciar()
+        sistema=SistemaFacial(Mock(),Galeria([[1,0]],['Persona A']),Criterio(.5,.1))
+        v=app.VisionMision(sistema,self.cfg_s)
+        s=app.SesionInterfaz()
+        s.iniciar('Persona A',self.t)
+        marca=self.t+200_000_000
+        d=dict(color='azul',direccion='IZQUIERDA',confianza=.9,caja=[60,40,100,100])
+        with patch.object(app.time,'monotonic_ns',return_value=marca), \
+                patch.object(v.detector_meta,'detectar',return_value=dict(meta=None,codigos=[])), \
+                patch('senales_giro.DetectorGiros.detectar',return_value=[d]):
+            v.actualizar(np.zeros((240,320,3),np.uint8),marca,marca,
+                         dict(fase='IDA',fase_desde_ns=self.c.desde_ns),s,Mock())
+        self.assertEqual(v.resultado_senal['confirmaciones'],1)
+        self.assertEqual(v.senal['direccion'],'IZQUIERDA')
+        # Menos espacio a izquierda: evasión elegiría derecha, señal pide izquierda.
+        vx,wz,_=self.paso(senal=v.senal,sensor=lidar(.44,izquierda=.8,derecha=1.8))
+        self.assertEqual(vx,0.)
+        self.assertGreater(wz,0.)
 
     def test_giro_azul_espera_48cm_y_detiene_antes_de_invertir_por_evasion(self):
         self.iniciar()
@@ -351,7 +385,7 @@ class PreparacionTests(unittest.TestCase):
             self.assertTrue(json.loads(p.read_text())['regreso_a_confirmado'])
             self.assertEqual(len(list(Path(tmp).iterdir())),1)
 
-    def test_vision_b_rechaza_otra_identidad_y_exige_tres_qr_propios_nuevos(self):
+    def test_vision_b_rechaza_otra_identidad_y_acepta_primer_qr_propio_nuevo(self):
         sistema = SistemaFacial(Mock(), Galeria([[1,0]], ['Persona A']), Criterio(.5,.1))
         _, cfg = cargar_ensayo()
         v = app.VisionMision(sistema,cfg)
@@ -376,10 +410,10 @@ class PreparacionTests(unittest.TestCase):
                 ahora=t+(i+1)*100_000_000
                 with patch.object(app.time,'monotonic_ns',return_value=ahora):
                     v.actualizar(im,ahora,ahora,estado,sesion,pausa)
-                self.assertEqual(v.ensayo.sesion.confirmaciones,i+1)
+                self.assertEqual(v.ensayo.sesion.confirmaciones,1)
             self.assertEqual(v.ensayo.sesion.palabra,'árbol')
             self.assertEqual(v.ensayo.sesion.orden,'QR_LISTO')
-            self.assertEqual(pausa.call_count,3)
+            self.assertEqual(pausa.call_count,1)
 
     def test_ventana_espera_camara_y_cierra_sin_iniciar(self):
         sistema = SistemaFacial(Mock(), Galeria([[1,0]], ['Persona A']), Criterio(.5,.1))

@@ -1,5 +1,8 @@
 # TASK 1 - RECONOCIMIENTO LOCAL Y PRUEBA LIDAR EN ROBOT
 # Copiar un bloque cada vez desde una terminal normal de Ubuntu.
+# ACTUALIZACION 21/11: una deteccion visual valida basta (1/1), sin esperar tres.
+# Los 3/3 de registros historicos describen versiones anteriores.
+# Relanzar el comando tras cerrar la sesion anterior para copiar cambios a Docker.
 # Los bloques 1-3 no necesitan ROS ni robot. Usar siempre la .venv global.
 
 # 1) ABRIR EL NOTEBOOK
@@ -130,7 +133,7 @@ export TB4_DOMINIO=5
 bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO" --evasion-reconocimiento
 # Escribir nombre y pulsar Buscar: lo fija para la ejecucion y solicita registrar A.
 # Espera una lectura de odometria posterior al inicio, sin inventar una posicion.
-# Ver A guardado y la camara; mostrar UNA foto del objetivo para comprobar 3/3.
+# Ver A guardado y la camara; mostrar UNA foto del objetivo para comprobar 1/1.
 # Sin --mover no crea publicador de velocidad. Esc/Salir/Ctrl+C terminan.
 
 
@@ -140,7 +143,7 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
 bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO" --evasion-reconocimiento --mover
 # No se mueve al abrir: Buscar activa la prueba cuando hay sensores y A validos.
 # A = posicion de inicio de esta busqueda, guardada en datos/sesiones/ (ignorada en Git).
-# Mantener una foto a la vez. Con el primer acierto pausa; 3 imagenes nuevas confirman.
+# Mantener una foto a la vez. El primer acierto valido en imagen nueva finaliza y detiene.
 # Al encontrar al objetivo queda detenido. AUN NO REGRESA A A ni lee QR.
 # Este bloque no habilita señales; para añadir giros visuales usar los bloques 11/12.
 # Camara/vision/odometria/LiDAR caducados detienen. La edad de imagen es local, no del sensor.
@@ -153,7 +156,7 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
 # Usar los datos actuales del bloque 9 o de COMANDOS_LAB.txt.
 bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO" --solo-senales --tramo ida
 # Ida = azul. Para probar las rojas, cerrar y repetir con --tramo vuelta.
-# Debe dibujar IZQUIERDA/DERECHA y confirmar 3 imagenes nuevas; otro color se ignora.
+# Debe dibujar IZQUIERDA/DERECHA y aceptar una imagen nueva valida; otro color se ignora.
 # Circulos sin flecha, meta, prohibicion y QR no ordenan giros.
 # Espera la camara el tiempo que necesite; q/Esc/Ctrl+C cierran. --mover no se admite aqui.
 
@@ -184,9 +187,9 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
 # Cada QR al costado de su foto, a altura similar; separar las parejas.
 bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO" --prueba-meta-b
 # Escribir persona y pulsar Buscar. --nombre solo precarga, no inicia.
-# Espera 3 imagenes nuevas de la bandera. Antes no analiza rostros.
+# Acepta una imagen nueva valida de la bandera. Antes no analiza rostros.
 # Mostrar fotos/QR a la camara (sin mover robot). Comprueba nombres y QR del objetivo.
-# Pausa desde el primer acierto; 3 imagenes nuevas del mismo rostro/palabra confirman.
+# Acepta el primer rostro objetivo con su QR legible/asociado en imagen nueva.
 # No completa con otro QR, asociacion ambigua, dos fotos del objetivo ni QR ilegible.
 # Resultado textual en datos/sesiones/prueba_b_*.json local ignorado, sin fotos.
 
@@ -195,7 +198,7 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
 # Cerrar el bloque 13 y los controles de gestos/teclado/Nav2/otras evasiones.
 # Colocar el robot cerca de B con espacio para girar; primero ver la bandera.
 bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO" --prueba-meta-b --mover
-# Nombre + Buscar -> bandera 3/3 -> cero y reposo odometrico 0.7 s -> giro hasta 0.25 rad/s.
+# Nombre + Buscar -> bandera 1/1 -> cero y reposo odometrico 0.7 s -> giro hasta 0.25 rad/s.
 # Sin --avanzar-hasta-meta el avance es SIEMPRE 0.
 # Limites: una vuelta medida por odometria o 90 s desde el comienzo del barrido.
 # Camara/interfaz/odometria/LiDAR/TF caducados o espacio insuficiente: cero.
@@ -216,9 +219,9 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
   --prueba-meta-b --avanzar-hasta-meta --mover
 # Escribir nombre y pulsar Buscar. Espera camara y sensores frescos antes de avanzar.
 # NAVEGAR = evasion existente (config actual: 0.10 m/s, giro evasivo 0.40 rad/s).
-# Meta 3/3 = enclava fin de avance, publica cero y espera reposo odometrico 0.7 s.
+# Meta 1/1 = enclava fin de avance, publica cero y espera reposo odometrico 0.7 s.
 # Solo despues y con imagen nueva busca rostros girando (<=0.25 rad/s, max. 1 vuelta/90 s).
-# Objetivo aceptado = pausa giro, lee solo su QR y confirma 3 imagenes nuevas.
+# Objetivo aceptado = pausa giro, lee solo su QR y acepta la primera lectura valida.
 # QR listo = JSON local sin fotos y detenido; no registra A ni regresa.
 # Ver CONTROL: para el motivo real de una parada, CAMARA: para el estado del video.
 # Pausa de camara/GUI detiene; recuperar datos no inventa un salto de odometria.
@@ -258,7 +261,7 @@ export TB4_DOMINIO=5
 bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO" \
   --evasion-reconocimiento --senales --tramo ida --ensayo-giro-companero
 # Nombre + Buscar como antes; no mostrar el rostro objetivo durante el ensayo de giros.
-# Sin --mover no hay publicador. Esperar camara; confirmar flecha azul en 3 imagenes.
+# Sin --mover no hay publicador. Esperar camara; aceptar flecha azul en una imagen nueva valida.
 # [GIRO ENSAYO] muestra fase, direccion, frente_m, pendiente_s y velocidades propuestas.
 # ESPERA_PARED = flecha guardada, frente todavia >0.48 m. La evasion conserva su propuesta.
 # GIRANDO = umbral alcanzado; vx_propuesto=0, wz negativa derecha / positiva izquierda.
@@ -341,7 +344,7 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
 # IDA azul (giro a 0.48 m) > FRENAR_B > BUSCAR_B (rostro/QR propio) >
 # FRENAR_QR > ORIENTAR_SALIDA (entrada B +180) > FRENAR_SALIDA > VUELTA roja > FRENAR_A > FIN.
 # Buscar solo fija nombre/inicia; no se capturan fotos ni se reconoce durante la ida.
-# QR debe confirmarse 3/3 y guardarse antes de habilitar retorno. No vuelve sin QR.
+# QR debe aceptarse 1/1 y guardarse antes de habilitar retorno. No vuelve sin QR.
 # Una bandera visible de lejos no basta: nueva/centrada, frente <=0.6 m y sensores validos.
 # A: ademas distancia odometrica <=0.6 m del inicio, tras separarse >=0.6 m de B.
 # [MISION] y [QR] explican cada parada. FALLO no se libera mostrando otro cartel.
@@ -363,7 +366,7 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
 # Luego cerrar y repetir bloque 18: nombre + Buscar, esperar IDA y A registrado.
 # En IDA/VUELTA: cuadro META VISTA = detector; [META] = condicion de llegada pendiente.
 # Llegada conserva ausencia >=1.5 s, separacion >=0.6 m, centrado, frente <=0.6 m,
-# sensores validos y tres imagenes nuevas. No bajar barreras para forzarla.
+# sensores validos y una imagen nueva admisible. No bajar barreras para forzarla.
 # Los nuevos PNG de señales/ sirven de referencias; PDF conservado, sin entrenamiento.
 
 # Resultado del ensayo integrado aportado el 21/11:
@@ -371,13 +374,13 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
 # Al perder rostro/lectura completo barrido y termino FALLO; no inicio regreso.
 # Cerrar y usar bloque 13 SIN --mover para aislar lectura QR antes de repetir ruta.
 # Mostrar meta, esperar reposo, luego foto objetivo + QR nitido/completo/borde blanco.
-# Solo "QR del objetivo confirmado y guardado" / 3/3 confirma exito de lectura.
+# Solo "QR del objetivo confirmado y guardado" / 1/1 confirma exito de lectura.
 # Despues repetir bloque 18 incluyendo flechas azules/rojas: no se probaron esta vez.
 
 # Nueva prueba B (21/11): legibles=0 siempre; el problema precede a las confirmaciones.
 # Repetir bloque 13 sin --mover. [QR] ahora incluye imagen=320x240px | QR_px=28x31
 # (ejemplo, no medidas del usuario): dimensiones nativas, antes de ampliar el recorte.
 # Mostrar QR mas grande/nitido/completo con borde blanco junto al rostro objetivo.
-# Primero lograr legibles=1; luego tres imagenes nuevas consistentes para guardar.
+# Primero lograr legibles=1 asociado al objetivo en imagen nueva para guardar.
 # Tres confirmaciones no son tres fases ni segundos; imagen repetida no cuenta.
-# Flecha: antes del 3/3 aun puede actuar evasion. Pausa desde candidata pendiente de implementar.
+# La primera flecha valida ya se envia al controlador; no hay espera extra de tres votos.

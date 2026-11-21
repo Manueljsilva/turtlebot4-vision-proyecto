@@ -53,7 +53,7 @@ class DetectorGiros:
 
 
 class ConsultaSenales:
-    """Tres paquetes nuevos de un único cartel del tramo; sin votos predictivos."""
+    """Acepta un único cartel del tramo en una imagen nueva; quorum configurable."""
 
     def __init__(self, tramo='ida', cfg=None, detector=None):
         self.cfg = cfg or ConfigSenales()

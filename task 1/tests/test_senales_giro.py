@@ -86,12 +86,12 @@ class ConfirmacionTests(unittest.TestCase):
             self.detector.detectar.return_value = ds
         return self.q.actualizar(self.im, ns, ns)
 
-    def test_tres_imagenes_nuevas_y_sin_votos_por_repetir(self):
-        self.assertIsNone(self.paso(AHORA)['evento'])
+    def test_primera_imagen_valida_emite_evento_sin_recontar_repeticiones(self):
+        self.assertEqual(self.paso(AHORA)['evento'],evento())
         for _ in range(6):
             self.assertEqual(self.paso(AHORA)['confirmaciones'], 1)
         self.assertEqual(self.detector.detectar.call_count, 1)
-        self.assertIsNone(self.paso(AHORA+100_000_000)['evento'])
+        self.assertEqual(self.paso(AHORA+100_000_000)['evento']['id'],1)
         self.assertEqual(self.paso(AHORA+200_000_000)['evento'], evento(marca=AHORA+200_000_000))
         self.assertEqual(self.paso(AHORA+300_000_000)['evento']['id'], 1)
 
@@ -111,7 +111,7 @@ class ConfirmacionTests(unittest.TestCase):
     def test_caducidad_cambio_de_direccion_y_otro_cartel_reinician(self):
         self.paso(AHORA)
         self.paso(AHORA+1)
-        self.assertIsNone(self.paso(AHORA+2, [deteccion('IZQUIERDA')])['evento'])
+        self.assertEqual(self.paso(AHORA+2, [deteccion('IZQUIERDA')])['evento']['direccion'],'IZQUIERDA')
         self.assertEqual(self.paso(AHORA+3, [deteccion(caja=[400, 10, 100, 100])])['confirmaciones'], 1)
         r = self.q.actualizar(self.im, AHORA+3, AHORA+1_000_000_004)
         self.assertIsNone(r['evento'])
@@ -216,7 +216,8 @@ class GiroTests(unittest.TestCase):
 
     def test_configuracion_real_y_limites(self):
         self.assertEqual(cargar_config_senales(TAREA/'config/senales_giro.json').angulo_giro_deg, 90)
-        for d in (dict(confirmaciones=1), dict(angulo_giro_deg=360), dict(ancho=True),
+        self.assertEqual(cargar_config_senales(TAREA/'config/senales_giro.json').confirmaciones,1)
+        for d in (dict(confirmaciones=0), dict(confirmaciones=True), dict(angulo_giro_deg=360), dict(ancho=True),
                   dict(tiempo_maximo_giro_s=float('nan'))):
             with self.assertRaises(ValueError):
                 ConfigSenales(**d)

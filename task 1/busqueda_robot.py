@@ -12,7 +12,7 @@ import uuid
 
 import cv2
 
-from control_busqueda import EDAD_CAMARA_NS, SesionBusqueda, reciente
+from control_busqueda import CONFIRMACIONES_VISUALES, EDAD_CAMARA_NS, SesionBusqueda, reciente
 from control_giros import cargar_config_senales
 from evasion_lidar import cargar_config
 from interfaz_facial import BUSCAR, SALIR, EntradaObjetivo, dibujar_interfaz, dentro, escribir
@@ -42,7 +42,7 @@ def preparar_movimiento(comando_camara, contenedor, config, mover, config_senale
         raise ValueError('No se descubrió /cmd_vel stamped; comprobar conexión/controladores')
     ejecutar_comando([*shell, 'source /opt/ros/jazzy/setup.bash && '
                      'python3 -c "import rclpy, tf2_ros, nav_msgs.msg, sensor_msgs.msg, geometry_msgs.msg"'])
-    for archivo in ('evasion_lidar.py', 'seguridad_lidar.py', 'control_giros.py',
+    for archivo in ('evasion_lidar.py', 'seguridad_lidar.py', 'control_giros.py', 'config_senales.py',
                     'control_busqueda.py', 'busqueda_lidar_ros.py'):
         origen = control_giros_origen if archivo == 'control_giros.py' and control_giros_origen else TAREA / archivo
         ejecutar_comando(['sudo', '-n', 'docker', 'cp', str(origen), f'{contenedor}:{remoto}/{archivo}'])
@@ -196,7 +196,7 @@ def dibujar_busqueda(imagen, resultado, estado_camara, entrada, estado_ros, move
         texto_a = (f"A guardado: x={a['x']:.2f} m, y={a['y']:.2f} m ({a['frame_id']})"
                    if a else 'A pendiente: esperando odometria valida; robot detenido')
         escribir(panel, texto_a, 18, 148)
-        escribir(panel, f'Confirmacion del rostro: {entrada.sesion.confirmaciones}/3 imagenes nuevas', 18, 172)
+        escribir(panel, f'Rostro aceptado: {entrada.sesion.confirmaciones}/{CONFIRMACIONES_VISUALES} imagen nueva valida', 18, 172)
         cv2.rectangle(panel, BUSCAR[:2], BUSCAR[2:], (65, 65, 65), -1)
         escribir(panel, 'En curso', 775, 76)
     cv2.rectangle(panel, (0, 669), (840, 707), (27, 27, 27), -1)
@@ -305,8 +305,10 @@ def main(argv=None):
                 print(f'Punto A registrado en {archivo_a}', flush=True)
             sesion.actualizar(resultado, marca, ahora, bool(a))
             # La GUI/inferencia debe renovar su actividad; el hilo de latido no la inventa.
-            puente.actualizar(sesion.orden, ahora, marca,
-                              resultado_senales['evento'] if resultado_senales else None)
+            evento_senal = resultado_senales['evento'] if resultado_senales else None
+            if evento_senal and (sesion.inicio_ns is None or evento_senal['marca_ns'] <= sesion.inicio_ns):
+                evento_senal = None  # La vista previa no inicia ni anticipa una maniobra.
+            puente.actualizar(sesion.orden, ahora, marca, evento_senal)
             if ahora - ultimo_log >= 1_000_000_000:
                 print(f"[BUSQUEDA] {sesion.orden} | {resultado['nombre']} | "
                       f"{estado_ros['estado'] if estado_ros else 'Esperando nodo ROS'}", flush=True)

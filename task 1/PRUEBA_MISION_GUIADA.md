@@ -1,6 +1,6 @@
 # Ensayo integrado A → B → A
 
-Preparado el 20 de noviembre de 2026. **Implementado y comprobado localmente;
+Actualizado el 21 de noviembre de 2026: **una imagen nueva válida basta para aceptar una detección**, por petición del usuario. Preparado inicialmente el 20 de noviembre. **Implementado y comprobado localmente;
 todavía sin validación del recorrido en hardware.** Los modos anteriores se conservan.
 Este ensayo sigue azul en la ida y rojo en la vuelta; no reproduce una trayectoria
 grabada ni incorpora SLAM/Nav2.
@@ -60,16 +60,16 @@ plazo para el primer fotograma. No combinar con los otros modos, --tramo,
 
 ## Secuencia y qué observar
 
-1. **IDA:** registra A, navega con evasión y confirma flechas azules en tres
-   imágenes nuevas. Disparo local a frente <=0.48 m; giro de 90° por odometría,
+1. **IDA:** registra A, navega con evasión y acepta flechas azules en la primera
+   imagen nueva válida. Disparo local a frente <=0.48 m; giro de 90° por odometría,
    siempre con avance cero. El bloqueo de giro a <=0.32 m frente/laterales sigue
    activo, además de los permisos por sensores/TF.
 2. **FRENAR_B:** confirma una meta nueva y frena. Exige >=3 poses nuevas durante
    0.7 s de reposo antes de guardar la orientación de entrada y habilitar rostros.
 3. **BUSCAR_B:** barrido sobre el sitio, hasta 0.25 rad/s, una vuelta o 90 s.
    Otra persona no termina la búsqueda. El primer objetivo aceptado pausa el giro.
-   Lee solo su QR no ambiguo y exige tres imágenes nuevas con el mismo texto y
-   rostro consistente, conservando el criterio facial calibrado.
+   Lee solo su QR no ambiguo y acepta una imagen nueva con texto legible y
+   rostro objetivo reconocido, conservando el criterio facial calibrado.
 4. **FRENAR_QR / ORIENTAR_SALIDA:** guarda la palabra en la laptop antes de
    autorizar retorno. Tras reposo se orienta a **orientación de entrada B +180°**.
    El giro necesario depende de dónde quedó mirando la foto; no suma 180° a
@@ -87,7 +87,7 @@ legible, asociado y confirmado. Las órdenes calculadas no miden velocidad real.
 
 Durante IDA/VUELTA, **META VISTA** significa detección visual. `[META]` explica
 si aún falta ausencia previa de la bandera, separación del origen, centrado,
-frontal cercano o completar un giro; solo 3/3 admisibles confirman llegada.
+frontal cercano o completar un giro; una imagen nueva admisible confirma llegada.
 Antes de Buscar/registrar A, la misión permanece en ESPERAR y no analiza la
 bandera. Para verificarla en ese momento, usar --solo-meta por separado.
 
@@ -102,9 +102,9 @@ detenida. No cambiar límites de frescura para forzar el arranque.
 
 El ensayo físico del 21/11 llegó a BUSCAR_B y aceptó al objetivo. Logró una
 lectura QR asociada **1/3**, después perdió lectura/rostro y terminó en FALLO
-al completar el barrido. Una lectura aislada no guarda la palabra ni habilita
-regreso. La confirmación requiere el mismo texto asociado al objetivo en tres
-imágenes nuevas consecutivas. La llegada a A aún no se probó en ese intento.
+al completar el barrido. Con el filtro anterior, una lectura aislada no guardaba
+la palabra ni habilitaba regreso. La revisión actual acepta el texto asociado al objetivo en una
+imagen nueva válida; aquel resultado corresponde al filtro anterior. La llegada a A aún no se probó en ese intento.
 
 Antes de repetir todo el recorrido, cerrar la misión y probar sin movimiento:
 
@@ -117,7 +117,7 @@ Elegir nombre/Buscar, mostrar primero la meta hasta confirmar y esperar reposo.
 Después mostrar foto objetivo y su QR completos en la misma imagen. En esta
 prueba estacionaria puede acercarse el papel para comprobar legibilidad; no se
 ordena acercamiento del robot. Conservar borde blanco del QR, nitidez y parejas
-separadas. Esperar **«QR del objetivo confirmado y guardado» / 3/3**. Este modo
+separadas. Esperar **«QR del objetivo confirmado y guardado» / 1/1**. Este modo
 guarda el resultado de prueba y permanece quieto; no regresa. No añadir --mover.
 
 Tras conseguir lectura estable, repetir --mision-guiada con el circuito real,
@@ -126,28 +126,30 @@ incluidas flechas azules/rojas. Las flechas no se ensayaron en el intento del
 El regreso se inicia después de guardar QR: orientar a entrada B +180° y
 avanzar siguiendo rojo, no conducir marcha atrás ni reproducir la ruta de ida.
 
-## Qué significa confirmar tres veces
+## Aceptación con una imagen nueva
 
-Son tres **imágenes nuevas consecutivas consistentes**, no tres fases ni tres
-segundos. Flecha, meta y rostro/QR tienen cuentas distintas. Con 5 FPS estables
-serían aproximadamente 0.4 s desde la primera hasta la tercera evidencia; esa
-tasa no está garantizada y no incluye toda la latencia. Una imagen repetida
-no suma. Si se pierde evidencia o caduca la imagen se reinicia la cuenta.
+Por petición del usuario, ya no se esperan tres confirmaciones visuales. Una
+imagen nueva y reciente basta para flecha del color correcto, meta admisible o
+rostro objetivo con su QR legible y asociado sin ambigüedad. La cuenta de la
+interfaz es 0/1 o 1/1; repetir un paquete no produce una detección nueva. Antes
+de Buscar la vista previa no envía una maniobra al controlador.
 
-El último registro del ensayo B mantiene **legibles=0**: localiza un QR, pero
-no obtiene su texto. Reducir el número de confirmaciones no permite votar una
-palabra que todavía no se ha leído. `[QR]` muestra ahora la resolución recibida
-y el tamaño de las cajas, por ejemplo `imagen=320x240px | QR_px=28x31`.
-Estos píxeles son de la imagen recibida, antes de ampliación del recorte; no
-miden centímetros ni fijan un mínimo universal de lectura. Probar primero QR
-más grande/nítido/completo con borde blanco y el rostro objetivo en la misma
-imagen, manteniendo --prueba-meta-b sin --mover.
+La primera flecha válida se memoriza inmediatamente. El giro sigue esperando
+frente <=0.48 m y espacio/sensores válidos; completa 90° sobre el sitio. Si no
+hay imagen reciente o hay señales ambiguas, no se inventa una dirección. La
+nueva aceptación no exige una pausa adicional para acumular votos.
 
-En navegación, **antes de confirmar la flecha puede intervenir la evasión**.
-La prioridad de la dirección visual empieza tras 3/3. Queda pendiente una
-pausa ante candidata fresca cercana a pared mientras se confirma; no está
-implementada por este ajuste de diagnóstico. No asumir protección desde 1/3
-ni reducir la barrera de seguridad para compensar imágenes lentas.
+El QR sigue necesitando texto: detectados=1 y legibles=0 significa localizar
+sin decodificar. Mantener rostro y QR completos/nítidos, con borde blanco del
+QR. El diagnóstico muestra resolución recibida y cajas QR en píxeles nativos,
+por ejemplo imagen=320x240px | QR_px=28x31; no es una distancia física ni un
+mínimo universal. No se cambia resolución ni velocidad automáticamente.
+
+Las guardas de llegada A/B, frescura y seguridad se conservan. Después de la
+meta sigue siendo necesario frenar y confirmar reposo odométrico durante
+0.7 s con al menos tres poses nuevas: es comprobación de frenado, distinta de
+las confirmaciones visuales eliminadas. La velocidad continúa en 0.10 m/s y
+0.40 rad/s para evasión; barrido y orientación, hasta 0.25 rad/s.
 
 ## Cómo evita confundir las banderas
 
@@ -155,12 +157,12 @@ Valores iniciales de ensayo en [config/mision_guiada.json](config/mision_guiada.
 sin calibración física todavía:
 
 - Antes de aceptar B: ausencia de meta durante >=1.5 s en imágenes nuevas y
-  separación odométrica >=0.6 m de A. La meta debe reaparecer centrada, en tres
-  imágenes nuevas, con retorno frontal <=0.6 m y espacio suficiente. No se acepta
+  separación odométrica >=0.6 m de A. La meta debe reaparecer centrada, en una
+  imagen nueva válida, con retorno frontal <=0.6 m y espacio suficiente. No se acepta
   una meta mientras hay un giro por flecha activo.
 - Antes de aceptar A: nueva ausencia visual tras comenzar la vuelta, separación
   >=0.6 m de B y distancia odométrica a A <=0.6 m, además de meta centrada,
-  frontal <=0.6 m y tres confirmaciones nuevas.
+  frontal <=0.6 m y una imagen nueva válida.
 - Las repeticiones del mismo paquete no suman votos ni tiempo de ausencia.
   Cámara/pose caducadas reinician la confirmación de meta.
 

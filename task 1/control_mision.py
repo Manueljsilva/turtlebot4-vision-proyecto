@@ -9,7 +9,7 @@ import json
 from math import atan2, cos, hypot, isfinite, pi, sin
 from pathlib import Path
 
-from control_busqueda import EDAD_ACTIVIDAD_NS, EDAD_CAMARA_NS, EDAD_POSE_NS, reciente
+from control_busqueda import CONFIRMACIONES_VISUALES, EDAD_ACTIVIDAD_NS, EDAD_CAMARA_NS, EDAD_POSE_NS, reciente
 from control_giros import ControlGiro, evento_valido
 from control_meta import ReposoOdometria, misma_caja
 from evasion_lidar import calcular_velocidad_evasion
@@ -73,9 +73,10 @@ class MetaNueva:
                   and abs(caja[0]+caja[2]/2-.5) <= .2)
         # misma_caja trabaja en píxeles; conservar la escala normalizada en transporte.
         actual = [v*1000 for v in caja] if valida else None
-        self.votos = (self.votos+1 if misma_caja(actual, self.caja) else 1) if valida else 0
+        self.votos = (min(CONFIRMACIONES_VISUALES, self.votos+1)
+                      if misma_caja(actual, self.caja) else 1) if valida else 0
         self.caja = actual
-        return self.votos >= 3
+        return self.votos >= CONFIRMACIONES_VISUALES
 
 
 class ControlMision:
@@ -138,7 +139,7 @@ class ControlMision:
                     or min(meta[2:]) <= 0 or meta[0]+meta[2] > 1.001 or meta[1]+meta[3] > 1.001):
                 raise ValueError('Meta invalida')
             if ((d.get('qr_ns') is not None and type(d['qr_ns']) is not int)
-                    or type(d.get('qr_votos', 0)) is not int or not 0 <= d.get('qr_votos', 0) <= 3):
+                    or type(d.get('qr_votos', 0)) is not int or not 0 <= d.get('qr_votos', 0) <= CONFIRMACIONES_VISUALES):
                 raise ValueError('Confirmacion QR invalida')
             self.secuencia, self.orden = d['secuencia'], d['orden']
             self.actividad_ns, self.camara_ns = d['actividad_ns'], d['camara_ns']
@@ -248,9 +249,9 @@ class ControlMision:
             elif lidar.dist_frente > self.cfg.frente_meta_m:
                 self.diagnostico_meta = f'Bandera vista; frente {lidar.dist_frente:.2f}m > {self.cfg.frente_meta_m:.2f}m'
             else:
-                self.diagnostico_meta = f'Bandera candidata: {self.meta_nueva.votos}/3 imagenes nuevas'
+                self.diagnostico_meta = f'Bandera candidata: {self.meta_nueva.votos}/{CONFIRMACIONES_VISUALES} imagen nueva valida'
             if confirmada:
-                self.diagnostico_meta = 'Meta confirmada: 3/3 imagenes nuevas'
+                self.diagnostico_meta = 'Meta confirmada en una imagen nueva valida'
                 if self.fase == 'IDA':
                     self.b = dict(pose)
                     self.cambiar('FRENAR_B', ahora, 'Meta B confirmada; frenar antes de buscar')
@@ -301,7 +302,7 @@ class ControlMision:
             return cero(self.motivo)
         if self.fase == 'BUSCAR_B':
             if self.orden == 'QR_LISTO':
-                if (self.qr_votos == 3 and reciente(self.qr_ns, ahora, EDAD_CAMARA_NS)
+                if (self.qr_votos == CONFIRMACIONES_VISUALES and reciente(self.qr_ns, ahora, EDAD_CAMARA_NS)
                         and self.qr_ns > self.busqueda_desde_ns):
                     self.qr_confirmado = True
                     self.cambiar('FRENAR_QR', ahora, 'QR confirmado; preparar salida sin avance')

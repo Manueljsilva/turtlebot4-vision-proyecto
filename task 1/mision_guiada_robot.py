@@ -15,7 +15,7 @@ import uuid
 import cv2
 
 from busqueda_robot import EntradaBusqueda, PuenteBusqueda, preparar_movimiento
-from control_busqueda import EDAD_CAMARA_NS, reciente
+from control_busqueda import CONFIRMACIONES_VISUALES, EDAD_CAMARA_NS, reciente
 from control_mision import cargar_config_mision
 from ensayo_giros_companero import CONFIG, CONTROL, cargar_ensayo
 from evasion_lidar import cargar_config
@@ -242,7 +242,7 @@ def main(argv=None):
                     if estado['fase'] == 'FIN':
                         print(f'[RESULTADO EN A] {b.palabra}', flush=True)
             puente.actualizar(orden, ahora, marca, vision.meta, vision.senal,
-                b.ultima_marca if b.palabra is not None else None, 3 if b.palabra is not None else 0)
+                b.ultima_marca if b.palabra is not None else None, CONFIRMACIONES_VISUALES if b.palabra is not None else 0)
             if ahora-ultimo_log >= 1_000_000_000:
                 print(f'[MISION] {estado or "Esperando control"} | [QR] {vision.ensayo.resumen_qr()}', flush=True)
                 if estado:

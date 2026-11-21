@@ -14,6 +14,7 @@ from control_giros import evento_valido
 EDAD_ACTIVIDAD_NS = 500_000_000
 EDAD_CAMARA_NS = 1_000_000_000
 EDAD_POSE_NS = 600_000_000
+CONFIRMACIONES_VISUALES = 1
 MAX_LINEA = 2048
 ORDENES = {'ESPERAR', 'BUSCAR', 'VERIFICAR', 'ENCONTRADO', 'PARAR'}
 
@@ -104,7 +105,7 @@ class PuertaBusqueda:
 
 
 class SesionBusqueda:
-    """Confirmar tres paquetes nuevos consecutivos, deteniéndose desde el primero."""
+    """Aceptar la primera imagen nueva válida del objetivo, sin votos repetidos."""
 
     def __init__(self):
         self.nombre = None
@@ -132,9 +133,9 @@ class SesionBusqueda:
             return  # Un fotograma repetido o anterior no añade votos.
         self.ultima_marca = marca_ns
         if resultado['aceptado'] and resultado['nombre'] == self.nombre:
-            self.confirmaciones += 1
+            self.confirmaciones = min(CONFIRMACIONES_VISUALES, self.confirmaciones+1)
             self.orden = 'VERIFICAR'
-            if self.confirmaciones >= 3:
+            if self.confirmaciones >= CONFIRMACIONES_VISUALES:
                 self.encontrado, self.orden = True, 'ENCONTRADO'
         else:
             self.confirmaciones, self.orden = 0, 'BUSCAR'

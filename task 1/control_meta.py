@@ -3,7 +3,7 @@
 import json
 from math import atan2, cos, degrees, hypot, isfinite, pi, sin
 
-from control_busqueda import (EDAD_ACTIVIDAD_NS, EDAD_CAMARA_NS, EDAD_POSE_NS,
+from control_busqueda import (CONFIRMACIONES_VISUALES, EDAD_ACTIVIDAD_NS, EDAD_CAMARA_NS, EDAD_POSE_NS,
                               MAX_LINEA, reciente)
 from evasion_lidar import calcular_velocidad_evasion
 
@@ -70,7 +70,7 @@ class SesionPruebaB:
         self.nombre, self.inicio_ns = nombre, ahora_ns
         self.orden = 'NAVEGAR' if self.avanzar else 'ESPERAR_META'
         self.motivo = ('Evasion hasta ver la meta; reconocimiento facial despues de frenar' if self.avanzar
-                       else 'Esperando la bandera de meta (3 imagenes nuevas)')
+                       else 'Esperando una imagen nueva valida de la bandera de meta')
 
     def habilitar_busqueda(self, marca_ns):
         if (self.meta_confirmada and self.busqueda_desde_ns is None and type(marca_ns) is int
@@ -92,11 +92,12 @@ class SesionPruebaB:
         if not self.meta_confirmada:
             meta = percepcion.get('meta')
             caja = meta['caja'] if meta else None
-            self.votos_meta = (self.votos_meta+1 if misma_caja(caja, self.caja_meta) else 1) if meta else 0
+            self.votos_meta = (min(CONFIRMACIONES_VISUALES, self.votos_meta+1)
+                               if misma_caja(caja, self.caja_meta) else 1) if meta else 0
             self.caja_meta = caja
-            self.motivo = f'Meta: {self.votos_meta}/3 imagenes nuevas; ' + (
+            self.motivo = f'Meta: {self.votos_meta}/{CONFIRMACIONES_VISUALES} imagen nueva valida; ' + (
                 'avance con evasion' if self.avanzar else 'robot detenido')
-            if self.votos_meta >= 3:
+            if self.votos_meta >= CONFIRMACIONES_VISUALES:
                 self.meta_confirmada, self.orden = True, 'BARRER'
                 self.motivo = 'Meta confirmada. Frenando antes de buscar rostros'
             return  # No reconocer rostros ni votar QR en la imagen que confirma la meta.
@@ -113,10 +114,11 @@ class SesionPruebaB:
         caja = objetivos[0]['caja']
         palabra = asociacion['texto'] if asociacion else None
         consistente = palabra is not None and palabra == self.candidato_qr and misma_caja(caja, self.caja_cara)
-        self.confirmaciones = (self.confirmaciones+1 if consistente else 1) if palabra is not None else 0
+        self.confirmaciones = (min(CONFIRMACIONES_VISUALES, self.confirmaciones+1)
+                               if consistente else 1) if palabra is not None else 0
         self.candidato_qr, self.caja_cara = palabra, caja
-        self.motivo = f'Persona buscada reconocida. {motivo_qr}; QR {self.confirmaciones}/3'
-        if self.confirmaciones >= 3:
+        self.motivo = f'Persona buscada reconocida. {motivo_qr}; QR {self.confirmaciones}/{CONFIRMACIONES_VISUALES}'
+        if self.confirmaciones >= CONFIRMACIONES_VISUALES:
             self.palabra, self.orden = palabra, 'QR_LISTO'
             self.motivo = 'Rostro y QR confirmados. Ensayo B terminado; robot detenido'
 

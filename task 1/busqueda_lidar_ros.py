@@ -16,7 +16,8 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy
 from rclpy.signals import SignalHandlerOptions
 
 from control_busqueda import MAX_LINEA, PuertaBusqueda, pose_odometria
-from control_giros import ControlGiro, cargar_config_senales
+from control_giros import ControlGiro
+from config_senales import cargar_config_senales
 from evasion_lidar import cargar_config, decidir_scan
 from seguridad_lidar import EvasionLidarNode
 

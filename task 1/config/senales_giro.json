@@ -1,7 +1,7 @@
 {
   "ancho": 640,
   "diametro_minimo_px": 55,
-  "confirmaciones": 3,
+  "confirmaciones": 1,
   "ausencia_rearme_s": 1.5,
   "angulo_giro_deg": 90.0,
   "tolerancia_deg": 5.0,

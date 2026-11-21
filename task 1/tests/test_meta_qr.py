@@ -189,32 +189,31 @@ class SesionTests(unittest.TestCase):
         self.s.actualizar(meta, caras, dict(texto=texto) if texto else None, 'QR', marca, self.t)
 
     def confirmar_meta(self):
-        for _ in range(3):
-            self.frame()
+        self.frame()
         self.s.habilitar_busqueda(self.t)
 
-    def test_meta_necesita_tres_nuevas_y_rostro_previo_no_finaliza(self):
+    def test_meta_se_acepta_en_primera_imagen_sin_aceptar_qr_antes_de_reposo(self):
         self.frame(caras=[cara()], texto='ANTES')
         self.frame(caras=[cara()], texto='ANTES', marca=self.t)
         self.assertEqual(self.s.votos_meta, 1)
-        self.assertEqual(self.s.orden, 'ESPERAR_META')
+        self.assertEqual(self.s.orden, 'BARRER')
         self.frame(caras=[cara()], texto='ANTES')
         self.frame(caras=[cara()], texto='ANTES')
         self.assertTrue(self.s.meta_confirmada)
         self.assertIsNone(self.s.palabra)
         self.assertEqual(self.s.orden, 'BARRER')
 
-    def test_ausencia_cambio_y_caducidad_reinician_meta(self):
-        self.frame()
+    def test_meta_ausente_o_caducada_no_se_acepta(self):
         self.frame(dict(meta=None))
         self.assertEqual(self.s.votos_meta, 0)
-        self.frame()
-        self.frame(dict(meta=dict(caja=[500, 20, 100, 180])))
-        self.assertEqual(self.s.votos_meta, 1)
         self.frame(marca=0)
         self.assertEqual(self.s.votos_meta, 0)
+        self.assertFalse(self.s.meta_confirmada)
+        self.frame()
+        self.assertEqual(self.s.votos_meta,1)
+        self.assertTrue(self.s.meta_confirmada)
 
-    def test_pausa_en_primer_rostro_sin_qr_y_confirma_mismo_texto_tres_veces(self):
+    def test_pausa_sin_qr_y_guarda_primera_lectura_valida_sin_sobrescribirla(self):
         self.confirmar_meta()
         self.frame(caras=[cara()])
         self.assertEqual(self.s.orden, 'VERIFICAR')
@@ -223,14 +222,18 @@ class SesionTests(unittest.TestCase):
         self.assertEqual(self.s.confirmaciones, 1)
         self.frame(caras=[cara()], texto='DOS')
         self.frame(caras=[cara()], texto='DOS')
-        self.assertEqual((self.s.orden, self.s.palabra), ('QR_LISTO', 'DOS'))
+        self.assertEqual((self.s.orden, self.s.palabra), ('QR_LISTO', 'UNO'))
         self.frame(caras=[cara('Persona B')], texto='OTRO')
-        self.assertEqual(self.s.palabra, 'DOS')
+        self.assertEqual(self.s.palabra, 'UNO')
 
     def test_otro_rostro_repeticion_o_cambio_de_foto_no_suman_votos(self):
         self.confirmar_meta()
         self.frame(caras=[cara('Persona B')], texto='OTRO')
         self.assertEqual(self.s.orden, 'BARRER')
+        self.frame(caras=[cara()])
+        marca=self.t
+        self.frame(caras=[cara()],texto='PREVIO',marca=marca)
+        self.assertIsNone(self.s.palabra)
         self.frame(caras=[cara()], texto='UNO')
         self.frame(caras=[cara()], texto='UNO', marca=self.t)
         self.assertEqual(self.s.confirmaciones, 1)
@@ -652,7 +655,7 @@ class IntegracionTests(unittest.TestCase):
         resumen = ensayo.resumen_qr()
         self.assertIn('detectados=2, legibles=1', resumen)
         self.assertIn('QR sin asociar', resumen)
-        self.assertIn('confirmacion=0/3', resumen)
+        self.assertIn('confirmacion=0/1', resumen)
 
 
 if __name__ == '__main__':

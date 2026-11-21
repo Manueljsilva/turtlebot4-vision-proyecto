@@ -17,7 +17,7 @@ from rclpy.signals import SignalHandlerOptions
 
 from busqueda_lidar_ros import EntradaControl
 from control_busqueda import pose_odometria
-from control_giros import cargar_config_senales
+from config_senales import cargar_config_senales
 from control_mision import ControlMision, cargar_config_mision
 from evasion_lidar import cargar_config, decidir_scan
 from seguridad_lidar import EvasionLidarNode

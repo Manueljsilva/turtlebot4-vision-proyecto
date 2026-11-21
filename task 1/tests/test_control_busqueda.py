@@ -109,12 +109,12 @@ class ConfirmacionBusquedaTests(unittest.TestCase):
         with self.assertRaises(ValueError): self.s.iniciar('Persona B', AHORA)
         self.assertEqual(self.s.nombre,'Persona A')
 
-    def test_tres_frames_nuevos_pausan_desde_el_primero_y_finalizan(self):
+    def test_primer_frame_nuevo_finaliza_y_no_cambia_resultado_despues(self):
         self.s.iniciar('Persona A', AHORA)
         for i in (1,2,3):
             self.s.actualizar(self.objetivo,AHORA+i,AHORA+i,True)
-            self.assertEqual(self.s.confirmaciones,i)
-            self.assertEqual(self.s.orden,'VERIFICAR' if i<3 else 'ENCONTRADO')
+            self.assertEqual(self.s.confirmaciones,1)
+            self.assertEqual(self.s.orden,'ENCONTRADO')
         self.s.actualizar(dict(aceptado=False,nombre='NO_CONCLUYENTE'),None,AHORA+4,True)
         self.assertEqual(self.s.orden,'ENCONTRADO')
 
@@ -128,16 +128,16 @@ class ConfirmacionBusquedaTests(unittest.TestCase):
         for _ in range(10): self.s.actualizar(self.objetivo,AHORA+2,AHORA+2,True)
         self.assertEqual(self.s.confirmaciones,1)
 
-    def test_otra_persona_rechazo_y_camara_caducada_rompen_consecutividad(self):
+    def test_otra_persona_rechazo_y_camara_caducada_no_se_aceptan(self):
         for fallo,marca in ((dict(aceptado=True,nombre='Persona B'),AHORA+2),
                             (dict(aceptado=False,nombre='NO_CONCLUYENTE'),AHORA+2),
                             (self.objetivo,None)):
             s = SesionBusqueda()
             s.iniciar('Persona A',AHORA)
-            s.actualizar(self.objetivo,AHORA+1,AHORA+1,True)
             s.actualizar(fallo,marca,AHORA+2,True)
             self.assertEqual(s.confirmaciones,0)
             self.assertEqual(s.orden,'BUSCAR')
+            self.assertFalse(s.encontrado)
 
 
 if __name__ == '__main__':

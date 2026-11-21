@@ -89,7 +89,7 @@ class VentanasSenalesTests(unittest.TestCase):
                 resultado = app.main(['--ip', '10.87.179.100', '--dominio', '5', '--senales', '--nombre', 'Persona A'])
             self.assertEqual(len(list((temporal/'datos/sesiones').glob('*.json'))), 1)
         self.assertEqual(resultado, 0)
-        self.assertEqual([bool(c.args[3]) for c in puente.actualizar.call_args_list], [False, False, False, True, True])
+        self.assertEqual([bool(c.args[3]) for c in puente.actualizar.call_args_list], [False, True, True, True, True])
         self.assertEqual(sistema.extractor.analizar_imagen.call_count, 5)
         self.assertTrue(np.all(imagen == 0), 'Las anotaciones no deben cambiar la imagen de inferencia')
         video.cerrar.assert_called_once()

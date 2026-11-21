@@ -74,7 +74,7 @@ llegar retrasado; la edad local no mide la captura. No se guardan imágenes.
 Si gira sin flecha pendiente, comprobar primero sin movimiento. El primer registro
 físico aportado mantuvo ID consumido 0 y giró por evasión a unos 44 cm; no demuestra
 giro guiado por la flecha. Antes de Buscar la ventana indica **VISTA PREVIA**.
-Después del inicio se reinicia la cuenta y se necesitan tres imágenes nuevas.
+Después del inicio se reinicia la percepción y basta una imagen nueva válida. El controlador y JSON originales se conservan; la configuración activa admite una detección mediante config_senales.py.
 `[SENALES ENSAYO]` muestra confirmaciones, ID y si la imagen es posterior a Buscar,
 además del último ID escrito en la tubería. `[GIRO ENSAYO]` muestra recibido y
 consumido. Copiar ambos junto al motivo de `[BUSQUEDA]` para distinguir percepción,

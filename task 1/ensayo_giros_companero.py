@@ -5,6 +5,8 @@ import importlib.util
 from pathlib import Path
 import sys
 
+from config_senales import cargar_config_senales
+
 
 SNAPSHOT = 'e78c3b52d07be0add80103365bb2ad5fc068e91b'
 CARPETA = Path(__file__).resolve().parent / 'experimentos/mejora_competicion'
@@ -43,7 +45,7 @@ def cargar_ensayo(carpeta=CARPETA):
     sys.modules[nombre_modulo] = modulo  # dataclass necesita resolver su módulo.
     try:
         spec.loader.exec_module(modulo)
-        cfg = modulo.cargar_config_senales(CONFIG)
+        cfg = cargar_config_senales(CONFIG)
     except Exception:
         sys.modules.pop(nombre_modulo, None)
         raise

@@ -15,7 +15,7 @@ import uuid
 import cv2
 
 from busqueda_robot import EntradaBusqueda, PuenteBusqueda, preparar_movimiento
-from control_busqueda import EDAD_CAMARA_NS, reciente
+from control_busqueda import CONFIRMACIONES_VISUALES, EDAD_CAMARA_NS, reciente
 from control_meta import SesionPruebaB
 from evasion_lidar import cargar_config
 from interfaz_facial import BUSCAR, dibujar_interfaz, escribir
@@ -121,11 +121,11 @@ class EnsayoB:
 
     def resumen_qr(self):
         if self.sesion.palabra is not None:
-            return f'QR del objetivo confirmado y guardado: {self.sesion.palabra} | confirmacion=3/3'
+            return f'QR del objetivo confirmado y guardado: {self.sesion.palabra} | confirmacion={CONFIRMACIONES_VISUALES}/{CONFIRMACIONES_VISUALES}'
         codigos = self.percepcion['codigos']
         legibles = sum(texto_valido(q['texto']) for q in codigos)
         return (f'{self.estado_qr} | detectados={len(codigos)}, legibles={legibles} | '
-                f'confirmacion={self.sesion.confirmaciones}/3 | {self.detalle_imagen_qr()}')
+                f'confirmacion={self.sesion.confirmaciones}/{CONFIRMACIONES_VISUALES} | {self.detalle_imagen_qr()}')
 
     def detalle_imagen_qr(self):
         imagen = ('x'.join(str(v) for v in self.tamano_imagen)+'px' if self.tamano_imagen else
@@ -203,7 +203,7 @@ def dibujar_prueba(imagen, estado_camara, entrada, ensayo, estado_ros, mover):
         else:
             codigos = ensayo.percepcion['codigos']
             legibles = sum(texto_valido(q['texto']) for q in codigos)
-            escribir(panel, f'QR: {len(codigos)} vistos / {legibles} legibles | {s.confirmaciones}/3 | '+
+            escribir(panel, f'QR: {len(codigos)} vistos / {legibles} legibles | {s.confirmaciones}/{CONFIRMACIONES_VISUALES} | '+
                      ensayo.detalle_imagen_qr(), 18, 217, limite=112)
             escribir(panel, ensayo.estado_qr, 18, 239, (70, 190, 240), limite=105)
     cv2.rectangle(panel, (0, 669), (840, 707), (27, 27, 27), -1)

@@ -6,6 +6,7 @@ from dataclasses import asdict
 from math import pi
 from pathlib import Path
 import shutil
+import subprocess
 import tempfile
 import threading
 import time
@@ -37,13 +38,34 @@ def scan(frente=1.8):
 
 
 class SnapshotTests(unittest.TestCase):
+    def test_config_una_deteccion_funciona_con_control_original_en_copia_ros(self):
+        # Reproduce el directorio de módulos que se copia a Docker, sin importar ROS.
+        with tempfile.TemporaryDirectory() as tmp:
+            destino=Path(tmp)
+            for nombre in ('config_senales.py','control_busqueda.py','control_meta.py',
+                           'control_mision.py','evasion_lidar.py'):
+                shutil.copyfile(app.TAREA/nombre,destino/nombre)
+            shutil.copyfile(CONTROL,destino/'control_giros.py')
+            shutil.copyfile(CONFIG,destino/'senales.json')
+            r=subprocess.run([sys.executable,'-c',
+                'from config_senales import cargar_config_senales; '
+                'from control_mision import ControlMision; '
+                'cfg=cargar_config_senales("senales.json"); '
+                'c=ControlMision(cfg); '
+                'assert cfg.confirmaciones==1 and cfg.esperar_pared_m==0.48; '
+                'assert c.giros.cfg is cfg and c.giros.pendiente is None'],
+                cwd=tmp,capture_output=True,text=True,timeout=10)
+            self.assertEqual(r.returncode,0,r.stderr)
+
     def test_copias_verificadas_y_cambio_rechazado(self):
         mod, cfg = cargar_ensayo()
         self.assertEqual(cfg.esperar_pared_m, .48)
         original = mod.cargar_config_senales(CARPETA/'senales_giro.json')
         self.assertEqual(original.esperar_pared_m, .52)
         self.assertEqual({k for k, v in asdict(cfg).items() if v != asdict(original)[k]},
-                         {'esperar_pared_m'})
+                         {'esperar_pared_m','confirmaciones'})
+        self.assertEqual(cfg.confirmaciones,1)
+        self.assertEqual(original.confirmaciones,3)
         self.assertEqual(cfg.tiempo_espera_pared_s, 6.)
         self.assertEqual(Path(mod.__file__).resolve(), CONTROL)
         with tempfile.TemporaryDirectory() as tmp:
@@ -160,7 +182,7 @@ class SnapshotTests(unittest.TestCase):
 
     def test_diagnostico_distingue_confirmacion_previa_y_posterior_a_buscar(self):
         ev = evento()
-        resultado = dict(estado='DERECHA azul: 3/3 confirmada', confirmaciones=3,
+        resultado = dict(estado='DERECHA azul: 1/1 confirmada', confirmaciones=1,
                          evento=ev, detecciones=[])
         previo = diagnostico_senales(resultado, None, AHORA+100_000_000)
         self.assertFalse(previo['iniciada'])
