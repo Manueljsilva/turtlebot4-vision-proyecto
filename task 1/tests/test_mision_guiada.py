@@ -810,6 +810,74 @@ class MisionTests(unittest.TestCase):
         self.assertEqual(self.c.decidir(self.t, self.pose, self.t, lidar(), self.cfg, fin=True)[:2], (0., 0.))
         self.assertEqual(self.c.fase, 'FALLO')
 
+    def test_evasion_detiene_ante_postes_diagonales_simetricos_en_avance(self):
+        from evasion_lidar import analizar_lidar
+        from holgura_giro import analizar_holgura
+        self.iniciar()
+        for dist_poste in (.227, .219):
+            with self.subTest(dist_poste=dist_poste):
+                scan720 = NS(ranges=[2.5]*720, angle_min=-pi, angle_increment=2*pi/720,
+                             range_min=.05, range_max=12.)
+                for i in range(720):
+                    deg = (-pi+i*scan720.angle_increment)*180/pi
+                    if 38 <= abs(deg) <= 44:
+                        scan720.ranges[i] = dist_poste
+                estado = analizar_lidar(scan720.ranges, scan720.angle_min, scan720.angle_increment,
+                                        scan720.range_min, scan720.range_max, cfg=self.cfg)
+                holg = analizar_holgura(scan720, (0., 0., 0.), .05, self.cfg)
+                vx, wz, _ = self.paso(sensor=estado, holgura=holg)
+                self.assertEqual((vx, wz), (0., 0.))
+        # Un obstáculo únicamente detrás no bloquea avanzar hacia adelante cuando frente está libre.
+        holg_trasera = HolguraGiro(True, .24, 'Trasera', .05, (), 1.8)
+        self.assertEqual(self.paso(sensor=lidar(1.8), holgura=holg_trasera)[:2], (.1, 0.))
+
+    def test_qr_confirmado_sobrevive_corte_odometrico_y_reposo_sin_bloquearse(self):
+        self.llegar_b()
+        qr_marca = self.t + 200_000_000
+        # Recibe QR fresco al mismo instante de un corte odométrico de 0.8 s.
+        self.assertEqual(self.paso('QR_LISTO', dt=.8, qr_ns=qr_marca, votos=1)[:2], (0., 0.))
+        self.assertTrue(self.c.recuperando)
+        self.assertIsNotNone(self.c.qr_pendiente)
+        self.assertEqual(self.c.fase, 'BUSCAR_B')
+        # Tras recuperar odometría (0.7 s de reposo), qr_ns ya supera 1 s pero fue recibido fresco.
+        for _ in range(5):
+            self.paso('QR_LISTO', dt=.2, qr_ns=qr_marca, votos=1)
+        self.assertTrue(self.c.qr_confirmado)
+        self.assertEqual(self.c.fase, 'FRENAR_QR')
+        for _ in range(4):
+            self.paso()
+        self.assertEqual(self.c.fase, 'ORIENTAR_SALIDA')
+
+    def test_rearme_cercano_distingue_rechazo_y_no_consume_id_para_siguiente_flecha(self):
+        self.iniciar()
+        ev1 = dict(id=1, direccion='IZQUIERDA', color='azul', marca_ns=self.t+200_000_000)
+        self.paso(senal=ev1, sensor=lidar(.30))
+        for _ in range(4):
+            self.paso(sensor=lidar(.30))
+        for i in range(1, 7):
+            self.paso(sensor=lidar(.30), yaw=min(pi/2, i*.3))
+        self.assertIsNone(self.c.giros.activo)
+        # Avanza 0.30 m (< 0.40 m de rearme) en pasos odométricos válidos y aparece nueva flecha DERECHA (id=2).
+        self.paso(x=0., y=.15, sensor=lidar(.9))
+        ev2 = lambda: dict(id=2, direccion='DERECHA', color='azul', marca_ns=self.t+200_000_000)
+        self.assertEqual(self.paso(x=0., y=.30, senal=ev2(), sensor=lidar(.8))[:2], (.1, 0.))
+        d = self.c.diagnostico_giro(self.t, lidar(.8), self.cfg)
+        self.assertIsNone(d['pendiente'])
+        self.assertIsNotNone(d['rearme'])
+        self.assertEqual(d['rearme']['direccion'], 'DERECHA')
+        self.assertEqual(self.c.giros.ultimo_id, 1)  # No quemó id=2.
+        # Al superar 0.40 m, la misma señal id=2 se admite y al llegar a ~0.305 m (float32) gira a DERECHA.
+        self.paso(x=0., y=.45, senal=ev2(), sensor=lidar(.6))
+        d2 = self.c.diagnostico_giro(self.t, lidar(.6), self.cfg)
+        self.assertIsNone(d2['rearme'])
+        self.assertEqual(d2['pendiente']['direccion'], 'DERECHA')
+        self.assertEqual(self.paso(sensor=lidar(.3050000071525574))[:2], (0., 0.))
+        for _ in range(4):
+            self.paso(sensor=lidar(.3050000071525574))
+        vx, wz, _ = self.paso(sensor=lidar(.3050000071525574))
+        self.assertEqual(vx, 0.)
+        self.assertLess(wz, 0.)
+
 
 class PreparacionTests(unittest.TestCase):
     def puente_sin_proceso(self):
@@ -859,6 +927,26 @@ class PreparacionTests(unittest.TestCase):
                 p.estado=dict(recibido_ns=t+30_000_000,reinicio_ns=token,giro=dict(recibido=acuse))
                 p.actualizar('OBSERVAR',t+40_000_000,t+40_000_000)
                 self.assertEqual(p.datos['senal'],ev)
+
+    def test_puente_reenvia_nuevo_fotograma_mismo_id_y_reintento_qr_limpia_expirado(self):
+        p=self.puente_sin_proceso()
+        t=2_000_000_000
+        ev1=dict(id=2,direccion='DERECHA',color='azul',marca_ns=t)
+        p.estado=dict(version=1,recibido_ns=t+20_000_000,reinicio_ns=0,giro=dict(recibido=ev1))
+        ev2=dict(id=2,direccion='DERECHA',color='azul',marca_ns=t+100_000_000)
+        p.actualizar('OBSERVAR',t+100_000_000,t+100_000_000,senal=ev2)
+        self.assertEqual(p.datos['senal'],ev2)
+        # Reintento de QR si caducó en GUI sin acuse/pendiente del controlador.
+        from prueba_meta_robot import EnsayoB
+        ensayo=EnsayoB(SistemaFacial(Mock(),Galeria([[1,0]],['Persona A']),Criterio(.5,.1)))
+        ensayo.sesion.iniciar('Persona A',t)
+        ensayo.sesion.meta_confirmada=True
+        ensayo.sesion.busqueda_desde_ns=t+100_000_000
+        ensayo.sesion.orden='QR_LISTO'
+        ensayo.sesion.palabra='sol'
+        ensayo.reintentar_qr()
+        self.assertIsNone(ensayo.sesion.palabra)
+        self.assertEqual(ensayo.sesion.orden,'BARRER')
 
     def test_perfil_mision_30cm_separa_ensayo_48cm_y_valida_aproximacion(self):
         _,actual=cargar_ensayo(config=app.CONFIG_SENALES_MISION)
@@ -1216,6 +1304,65 @@ class NodoTests(unittest.TestCase):
             self.assertEqual(c.fase,'ESPERAR')
             self.assertEqual(len(nodo.publicadores),int(mover))
             self.assertIsNone(c.a)
+
+    def test_telemetria_no_bloquea_lazo_de_control_si_salida_bloquea(self):
+        import os
+        base = cargar_ros_simulado()
+        def modulo(**valores):
+            m = ModuleType('simulado'); m.__dict__.update(valores); return m
+        reemplazos = {'rclpy':base.rclpy,
+            'busqueda_lidar_ros':base,
+            'seguridad_lidar':modulo(EvasionLidarNode=base.EvasionLidarNode),
+            'nav_msgs.msg':modulo(Odometry=object),
+            'rclpy.executors':modulo(ExternalShutdownException=RuntimeError),
+            'rclpy.qos':modulo(QoSProfile=lambda **kw:None,ReliabilityPolicy=NS(BEST_EFFORT=1)),
+            'tf2_ros':modulo(TransformException=LookupError),
+            'rclpy.signals':modulo(SignalHandlerOptions=NS(NO=0))}
+        with patch.dict(sys.modules,reemplazos):
+            spec = importlib.util.spec_from_file_location('mision_ros_simulada_nb',app.TAREA/'mision_ros.py')
+            ros = importlib.util.module_from_spec(spec); spec.loader.exec_module(ros)
+        _,cfg_s = cargar_ensayo(config=app.CONFIG_SENALES_MISION)
+        c = ControlMision(cfg_s)
+        entrada = NS(fin=threading.Event(),tomar=lambda:None)
+        nodo = ros.MisionNode(True,ConfigEvasion(),entrada,c)
+        ahora=20_000_000_000
+        c.recibir(json.dumps(dict(version=1,secuencia=0,orden='INICIAR',actividad_ns=ahora,
+            camara_ns=ahora,meta=None,senal=None,qr_ns=None,qr_votos=0)),ahora)
+        nodo.pose=dict(frame_id='odom',child_frame_id='base_link',x=0.,y=0.,yaw=0.)
+        nodo.pose_ns=ahora
+        scan=NS(header=NS(frame_id='base_link'),ranges=[1.8]*360,angle_min=-pi,
+            angle_increment=2*pi/360,range_min=.05,range_max=12.)
+        class SalidaBloqueada:
+            def write(self, _): raise BlockingIOError('pipe lleno')
+            def flush(self): pass
+        with patch.object(ros.time,'monotonic_ns',return_value=ahora), patch('sys.stdout',SalidaBloqueada()):
+            nodo._scan_cb(scan); nodo._ciclo()
+            self.assertEqual((nodo.pub_cmd.mensajes[-1].twist.linear.x,
+                              nodo.pub_cmd.mensajes[-1].twist.angular.z),(.1,0.))
+            nodo._terminar=True
+            nodo._scan_cb(scan); nodo._ciclo()
+            self.assertEqual((nodo.pub_cmd.mensajes[-1].twist.linear.x,
+                              nodo.pub_cmd.mensajes[-1].twist.angular.z),(0.,0.))
+        if os.name == 'posix':
+            r_fd, w_fd = os.pipe()
+            try:
+                os.set_blocking(w_fd, False)
+                while True:
+                    try:
+                        os.write(w_fd, b'x'*4096)
+                    except BlockingIOError:
+                        break
+                nodo2 = ros.MisionNode(True,ConfigEvasion(),entrada,ControlMision(cfg_s))
+                nodo2.pose, nodo2.pose_ns = nodo.pose, ahora
+                with os.fdopen(w_fd, 'w', closefd=False) as w_file, \
+                        patch.object(ros.time,'monotonic_ns',return_value=ahora+300_000_000), \
+                        patch('sys.stdout', w_file):
+                    nodo2._terminar = True
+                    nodo2._scan_cb(scan); nodo2._ciclo()
+                self.assertEqual((nodo2.pub_cmd.mensajes[-1].twist.linear.x,
+                                  nodo2.pub_cmd.mensajes[-1].twist.angular.z),(0.,0.))
+            finally:
+                os.close(r_fd); os.close(w_fd)
 
 
 class LanzadorMisionTests(unittest.TestCase):

@@ -159,10 +159,17 @@ def calcular_velocidad_evasion(estado, cfg=None):
         return 0.0, sentido * vw
     if estado.precaucion:
         return 0.0, sentido * vw * 0.75
-    if estado.dist_izquierda < cfg.distancia_lateral_m and estado.dist_derecha > estado.dist_izquierda + 0.08:
+    izq_cerca = estado.dist_izquierda < cfg.distancia_lateral_m
+    der_cerca = estado.dist_derecha < cfg.distancia_lateral_m
+    if izq_cerca and der_cerca:
+        return 0.0, 0.0
+    if izq_cerca and estado.dist_derecha > estado.dist_izquierda + 0.08:
         return 0.0, -0.35 * vw
-    if estado.dist_derecha < cfg.distancia_lateral_m and estado.dist_izquierda > estado.dist_derecha + 0.08:
+    if der_cerca and estado.dist_izquierda > estado.dist_derecha + 0.08:
         return 0.0, 0.35 * vw
+    if ((izq_cerca and estado.dist_derecha <= cfg.distancia_parada_m)
+            or (der_cerca and estado.dist_izquierda <= cfg.distancia_parada_m)):
+        return 0.0, 0.0
     return vx, 0.0
 
 

@@ -119,6 +119,12 @@ class EnsayoB:
             self.estado_qr = 'QR del objetivo confirmado y guardado'
         return imagen
 
+    def reintentar_qr(self):
+        self.sesion.reiniciar_lectura_qr()
+        self.caras, self.percepcion = [], dict(meta=None, codigos=[])
+        self.qr_asociado = None
+        self.estado_qr = 'Confirmacion QR caducada antes de acuse; esperando imagen nueva'
+
     def resumen_qr(self):
         if self.sesion.palabra is not None:
             return f'QR del objetivo confirmado y guardado: {self.sesion.palabra} | confirmacion={CONFIRMACIONES_VISUALES}/{CONFIRMACIONES_VISUALES}'

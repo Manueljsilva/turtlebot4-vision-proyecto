@@ -81,3 +81,19 @@ class HolguraTests(unittest.TestCase):
             self.assertIsNone(transformacion_plana(t,q))
         t.x=float('inf')
         self.assertIsNone(transformacion_plana(t,NS(x=0.,y=0.,z=0.,w=1.)))
+
+    def test_distancia_avance_cubre_diagonales_y_omite_solo_trasero(self):
+        s=scan(1.8)
+        s.ranges[0]=.20
+        h=self.analizar(s)
+        self.assertTrue(h.valida)
+        self.assertAlmostEqual(h.distancia_minima_m,.20)
+        self.assertAlmostEqual(h.distancia_avance_m,1.8)
+        s2=NS(ranges=[2.5]*720,angle_min=-pi,angle_increment=2*pi/720,range_min=.05,range_max=12.)
+        for i in range(720):
+            deg=(-pi+i*s2.angle_increment)*180/pi
+            if 38<=abs(deg)<=44:s2.ranges[i]=.219
+        h2=self.analizar(s2)
+        self.assertTrue(h2.valida)
+        self.assertAlmostEqual(h2.distancia_minima_m,.219)
+        self.assertAlmostEqual(h2.distancia_avance_m,.219)

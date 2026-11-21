@@ -236,6 +236,19 @@ class EvasionLidarTests(unittest.TestCase):
         self.scan.ranges = [2.5]*360
         self.assertEqual(decidir_scan(self.scan, 0., .1, self.cfg)[:2], (.1, 0.))
 
+    def test_ambos_laterales_cercanos_detienen_sin_avanzar_en_diagonales(self):
+        for izq, der in ((0.227, 0.227), (0.219, 0.219), (0.15, 0.26), (0.22, 0.285)):
+            with self.subTest(izq=izq, der=der):
+                estado = replace(self.analizar(), dist_frente=1.8,
+                                 dist_izquierda=izq, dist_derecha=der,
+                                 peligro_parada=False, precaucion=False)
+                self.assertEqual(calcular_velocidad_evasion(estado, self.cfg), (0.0, 0.0))
+        self.scan.ranges = [2.5] * 720
+        self.scan.angle_increment = math.tau / 720
+        self.sector(-45, -38, 0.227)
+        self.sector(38, 45, 0.227)
+        self.assertEqual(calcular_velocidad_evasion(self.analizar(), self.cfg), (0.0, 0.0))
+
 
 if __name__ == '__main__':
     unittest.main()

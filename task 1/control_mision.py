@@ -4,7 +4,7 @@ La odometría es local. Rojo guía el regreso; no se reproduce una ruta ni hay S
 La bandera B se coloca al fondo, frente al sentido de entrada (ensayo acordado).
 """
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, is_dataclass, replace
 import json
 from math import atan2, cos, hypot, isfinite, pi, sin
 from pathlib import Path
@@ -102,6 +102,7 @@ class ControlMision:
         self.senal = self.meta = self.qr_ns = None
         self.senal_por_procesar = self.ultima_senal_recibida = None
         self.qr_votos = 0
+        self.qr_pendiente = None
         self.a = self.b = self.yaw_entrada_b = None
         self.qr_confirmado = False
         self.pose = self.pose_ns = None
@@ -135,10 +136,13 @@ class ControlMision:
         self.holgura = None
         self.freno_flecha = None
         self.bloqueo_aproximacion = None
+        self.rearme_bloqueo = None
 
     def cambiar(self, fase, ahora, motivo):
         self.fase, self.desde_ns, self.motivo = fase, ahora, motivo
         self.reposo = ReposoOdometria()
+        if fase != 'BUSCAR_B':
+            self.qr_pendiente = None
         if fase not in ('IDA', 'FALLO'):
             self.evasion = None
         if fase not in ('IDA','VUELTA','FALLO'):
@@ -146,6 +150,7 @@ class ControlMision:
             self.aproximacion_meta_ns = None
             self.senal_por_procesar = None
             self.aproximacion_ns = self.revalidacion_ns = None
+            self.rearme_bloqueo = None
 
     def fallar(self, motivo, ahora):
         if self.fase not in ('FALLO', 'FIN'):
@@ -198,6 +203,13 @@ class ControlMision:
             self.actividad_ns, self.camara_ns = d['actividad_ns'], d['camara_ns']
             self.senal, self.meta = d.get('senal'), meta
             self.qr_ns, self.qr_votos = d.get('qr_ns'), d.get('qr_votos', 0)
+            if (self.fase == 'BUSCAR_B' and self.orden == 'QR_LISTO'
+                    and self.busqueda_desde_ns is not None
+                    and self.qr_votos == CONFIRMACIONES_VISUALES
+                    and self.qr_ns is not None
+                    and reciente(self.qr_ns, ahora, EDAD_CAMARA_NS)
+                    and self.qr_ns > self.busqueda_desde_ns):
+                self.qr_pendiente = self.qr_ns
             if self.orden == 'INICIAR' and self.solicitud_ns is None:
                 self.solicitud_ns = self.actividad_ns
                 if self.reinicio_ns and self.fase == 'ESPERAR':
@@ -277,6 +289,30 @@ class ControlMision:
             return f'distancia al centro={h.distancia_minima_m:.3f}m <= radio+margen={limite:.3f}m'
         return None
 
+    def bloqueo_avance(self, lidar, cfg):
+        """Protección frontal y lateral en base_link para el avance recto."""
+        if not self.observado(lidar):
+            return 'LiDAR/TF insuficientes'
+        h = self.holgura
+        if h is None:
+            return 'Sin contorno 360 grados y TF completo para avanzar'
+        if not h.valida:
+            return h.motivo
+        dist = h.distancia_avance_m if h.distancia_avance_m is not None else h.distancia_minima_m
+        if (h.edad_s is None or not isfinite(h.edad_s) or not 0 <= h.edad_s <= cfg.edad_maxima_s
+                or dist is None or not isfinite(dist)):
+            return 'Contorno de avance invalido o caducado'
+        limite = self.cfg.radio_giro_m + self.cfg.margen_giro_m
+        if dist <= limite:
+            return f'distancia frontal/lateral al centro={dist:.3f}m <= radio+margen={limite:.3f}m'
+        return None
+
+    def rearme_insuficiente(self, pose):
+        if pose is None or self.giros.ultima_posicion is None:
+            return False
+        return hypot(pose['x'] - self.giros.ultima_posicion[0],
+                     pose['y'] - self.giros.ultima_posicion[1]) < self.giros.cfg.desplazamiento_rearme_m
+
     def diagnostico_giro(self, ahora, lidar, cfg=None):
         def distancia(campo):
             valor=getattr(lidar,campo,None) if lidar and lidar.observacion_valida else None
@@ -286,6 +322,7 @@ class ControlMision:
         return dict(color=self.giros.color,
             recibido=dict(self.ultima_senal_recibida) if self.ultima_senal_recibida else None,
             por_procesar=dict(self.senal_por_procesar) if self.senal_por_procesar else None,
+            rearme=dict(self.rearme_bloqueo) if self.rearme_bloqueo else None,
             pendiente=dict(id=self.giros.ultimo_id,direccion=pendiente['direccion'],
                 edad_memoria_s=(ahora-self.aproximacion_ns)/1e9,
                 edad_ultima_deteccion_s=(ahora-self.revalidacion_ns)/1e9
@@ -334,7 +371,14 @@ class ControlMision:
         if self.evasion is None:
             if wz and not self.libre(lidar,cfg):
                 return 0.,0.,'Correccion lateral bloqueada: '+self.bloqueo_giro(lidar,cfg)
-            return vx, wz, 'Correccion lateral sobre el sitio' if wz else 'Avance recto con evasion'
+            if vx > 0:
+                bloqueo = self.bloqueo_avance(lidar, cfg)
+                if bloqueo:
+                    return 0., 0., 'Avance bloqueado por obstaculo cercano: ' + bloqueo
+                return vx, 0., 'Avance recto con evasion'
+            if wz:
+                return 0., wz, 'Correccion lateral sobre el sitio'
+            return 0., 0., 'Evasion detenida: ambos laterales cercanos'
         e=self.evasion
         avance=e['sentido']*(self.yaw_total-e['yaw'])
         agotado = ahora-e['inicio_ns'] > self.cfg_senales.tiempo_maximo_giro_s*1e9
@@ -507,8 +551,29 @@ class ControlMision:
             # El controlador original conserva evento, disparo radial y 90°.
             # Su veto antiguo por rangos sin traslación se sustituye aquí por
             # la comprobación circular completa de abajo; no editar el snapshot.
+            # No consumir el ID del controlador antes de cumplir desplazamiento_rearme_m.
+            ev_giro = ev
+            if (self.giros.activo is None and self.giros.pendiente is None and ev is not None
+                    and ev['color'] == self.giros.color and ev['id'] > self.giros.ultimo_id
+                    and self.giros.ultima_posicion is not None and self.rearme_insuficiente(pose)):
+                dist_rearme = hypot(pose['x'] - self.giros.ultima_posicion[0],
+                                    pose['y'] - self.giros.ultima_posicion[1])
+                self.rearme_bloqueo = dict(
+                    id=ev['id'], direccion=ev['direccion'], color=ev['color'],
+                    distancia_m=dist_rearme, requerido_m=self.giros.cfg.desplazamiento_rearme_m,
+                    marca_ns=ev['marca_ns'],
+                )
+                ev_giro = None
+            elif self.giros.pendiente is not None or self.giros.activo is not None or not self.rearme_insuficiente(pose):
+                self.rearme_bloqueo = None
+            lidar_giro = lidar
+            esperar = self.giros.cfg.esperar_pared_m
+            if (lidar is not None and lidar.observacion_valida
+                    and esperar < lidar.dist_frente <= esperar + 1e-4):
+                lidar_giro = (replace(lidar, dist_frente=esperar) if is_dataclass(lidar)
+                              else SimpleNamespace(**{**vars(lidar), 'dist_frente': esperar}))
             cfg_giro=SimpleNamespace(velocidad_giro=cfg.velocidad_giro,distancia_parada_m=0.)
-            giro = self.giros.decidir(ev,pose,ahora,not preparando,lidar,cfg_giro)
+            giro = self.giros.decidir(ev_giro,pose,ahora,not preparando,lidar_giro,cfg_giro)
             self.senal_por_procesar = None
             if self.giros.pendiente and not tenia_pendiente:
                 if self.aproximacion_ns is None:
@@ -579,11 +644,18 @@ class ControlMision:
                 self.cambiar('BUSCAR_B', ahora, 'Frenado confirmado; buscar persona y su QR')
             return cero(self.motivo)
         if self.fase == 'BUSCAR_B':
+            qr_fresco = (self.orden == 'QR_LISTO' and self.qr_votos == CONFIRMACIONES_VISUALES
+                         and reciente(self.qr_ns, ahora, EDAD_CAMARA_NS)
+                         and self.qr_ns > self.busqueda_desde_ns)
+            qr_retenido = (self.qr_pendiente is not None
+                           and self.qr_pendiente > self.busqueda_desde_ns
+                           and reciente(self.qr_pendiente, ahora, 5_000_000_000))
+            if qr_fresco or qr_retenido:
+                self.qr_confirmado = True
+                self.qr_pendiente = None
+                self.cambiar('FRENAR_QR', ahora, 'QR confirmado; preparar salida sin avance')
+                return cero(self.motivo)
             if self.orden == 'QR_LISTO':
-                if (self.qr_votos == CONFIRMACIONES_VISUALES and reciente(self.qr_ns, ahora, EDAD_CAMARA_NS)
-                        and self.qr_ns > self.busqueda_desde_ns):
-                    self.qr_confirmado = True
-                    self.cambiar('FRENAR_QR', ahora, 'QR confirmado; preparar salida sin avance')
                 return cero(self.motivo)
             barrido = self.yaw_total-self.yaw_barrido
             if barrido < -.08 or barrido >= 2*pi-.025:

@@ -126,6 +126,16 @@ class SesionPruebaB:
         if self.orden not in ('QR_LISTO', 'PARAR'):
             self.orden, self.motivo = 'PARAR', motivo
 
+    def reiniciar_lectura_qr(self):
+        """Reabre lectura QR si caducó antes de ser confirmada por el controlador."""
+        if self.meta_confirmada and self.orden == 'QR_LISTO':
+            self.palabra = None
+            self.confirmaciones = 0
+            self.caja_cara = None
+            self.candidato_qr = None
+            self.orden = 'BARRER'
+            self.motivo = 'Confirmacion QR caducada antes de acuse; reintentando lectura'
+
 
 class ControlBarrido:
     """Evasión opcional hasta meta; después frenado y giro <=360°, sin avance."""

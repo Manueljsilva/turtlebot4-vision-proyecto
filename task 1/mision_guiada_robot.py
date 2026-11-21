@@ -93,7 +93,7 @@ class PuenteMision(PuenteBusqueda):
                     acuse = (estado.get('giro', {}).get('recibido') if estado
                         and estado.get('reinicio_ns', 0) == token
                         and reciente(estado.get('recibido_ns'), actividad_ns, EDAD_CAMARA_NS) else None)
-                    if acuse and all(acuse.get(k) == pendiente[k] for k in ('id','direccion','color')):
+                    if acuse and all(acuse.get(k) == pendiente[k] for k in ('id','direccion','color','marca_ns')):
                         pendiente = None
             self.senal_sin_acuse = pendiente
             self.datos = dict(orden=orden, actividad_ns=actividad_ns, camara_ns=camara_ns,
@@ -274,6 +274,10 @@ def dibujar(imagen, estado_camara, entrada, vision, estado, mover):
             elif giro.get('pendiente'):
                 senal = (f"Flecha guardada: {giro['pendiente']['direccion']} {giro.get('color','')}; "
                          f"esperar frente <= {giro.get('disparo_efectivo_m',.305):.3f} m")
+            elif giro.get('rearme'):
+                r = giro['rearme']
+                senal = (f"Flecha rechazada por rearme ({r['distancia_m']:.2f}/{r['requerido_m']:.2f} m): "
+                         f"{r['direccion']}")
             elif giro.get('por_procesar'):
                 senal = f"Flecha recibida: {giro['por_procesar']['direccion']}; esperando sensores recientes"
         escribir(panel, senal, 18, 169)
@@ -396,6 +400,10 @@ def main(argv=None):
                 if estado_camara == 'Camara del robot':
                     estado_camara = 'Sin imagen reciente'
             b = vision.ensayo.sesion
+            if (estado and estado['fase'] == 'BUSCAR_B'
+                    and not estado.get('qr_confirmado') and not estado.get('qr_pendiente')
+                    and b.palabra is not None and not reciente(b.ultima_marca, ahora, EDAD_CAMARA_NS)):
+                vision.ensayo.reintentar_qr()
             orden = 'ESPERAR' if sesion.inicio_ns is None or estado is None else (
                 'INICIAR' if estado['fase'] == 'ESPERAR' else 'OBSERVAR')
             if estado and estado['fase'] == 'BUSCAR_B':

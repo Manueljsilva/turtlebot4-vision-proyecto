@@ -17,6 +17,7 @@ class HolguraGiro:
     motivo: str
     edad_s: float | None = None
     sectores: tuple[CoberturaSector, ...] = ()
+    distancia_avance_m: float | None = None
 
 
 def transformacion_plana(traslacion, rotacion):
@@ -54,7 +55,9 @@ def analizar_holgura(scan, tf_plano, edad_s, cfg):
     tx, ty, yaw = tf_plano
     total, utiles, infs, nans, fuera = ([0]*4 for _ in range(5))
     distancias = []
+    distancias_avance = []
     proximidad = False
+    cono_avance = radians(105)
     for i, r in enumerate(scan.ranges):
         ang = scan.angle_min+i*paso+yaw
         j = int(((ang+pi/4) % (2*pi))/(pi/2)) % 4
@@ -64,7 +67,11 @@ def analizar_holgura(scan, tf_plano, edad_s, cfg):
             if r < scan.range_min or r == 0:
                 proximidad = True
             else:
-                distancias.append(hypot(tx+r*cos(ang),ty+r*sin(ang)))
+                px, py = tx+r*cos(ang), ty+r*sin(ang)
+                dist = hypot(px, py)
+                distancias.append(dist)
+                if abs(atan2(py, px)) <= cono_avance:
+                    distancias_avance.append(dist)
         elif r == float('inf'):
             infs[j] += 1
         elif isnan(r):
@@ -80,4 +87,5 @@ def analizar_holgura(scan, tf_plano, edad_s, cfg):
     insuficientes = [s.nombre for s in sectores if not s.suficiente]
     if insuficientes:
         return desconocida('Cobertura de giro insuficiente: '+', '.join(insuficientes),sectores)
-    return HolguraGiro(True,min(distancias),'Contorno observado en base_link',edad_s,sectores)
+    dist_avance = min(distancias_avance) if distancias_avance else min(distancias)
+    return HolguraGiro(True,min(distancias),'Contorno observado en base_link',edad_s,sectores,dist_avance)
