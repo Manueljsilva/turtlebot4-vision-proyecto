@@ -87,7 +87,7 @@ def preparar_mision(comando_camara, contenedor, config, mover):
                                   CONFIG_SENALES_MISION, 'ida', control_giros_origen=CONTROL)
     indice = next(i for i, v in enumerate(comando) if v.endswith('/busqueda_lidar_ros.py'))
     remoto = str(Path(comando[indice]).parent)
-    for archivo in ('control_meta.py', 'control_mision.py', 'mision_ros.py'):
+    for archivo in ('control_meta.py', 'control_mision.py', 'holgura_giro.py', 'mision_ros.py'):
         ejecutar_comando(['sudo', '-n', 'docker', 'cp', str(TAREA/archivo), f'{contenedor}:{remoto}/{archivo}'])
     ejecutar_comando(['sudo', '-n', 'docker', 'cp', str(TAREA/'config/mision_guiada.json'),
                      f'{contenedor}:{remoto}/mision.json'])
@@ -318,7 +318,9 @@ def main(argv=None):
               'No reproduce ruta ni usa mapa. Sin --mover no publica. Cerrar otros controles.', flush=True)
         print(f'[PERFIL MISION] Flecha: frente LiDAR <= {cfg_s.esperar_pared_m:.2f} m; '
               f'aproximacion en precaucion <= {cfg_m.velocidad_aproximacion_m_s:.2f} m/s; '
-              'giro sobre el sitio. Evasion frontal mantiene sentido hasta salir con margen.', flush=True)
+              f'giro sobre el sitio: radio {cfg_m.radio_giro_m:.2f}m + margen {cfg_m.margen_giro_m:.2f}m '
+              '(base_link, TF completo y contorno 360 grados). '
+              'Evasion frontal mantiene sentido hasta salir con margen.', flush=True)
         while True:
             puente.comprobar()
             if video.proceso.poll() is not None:

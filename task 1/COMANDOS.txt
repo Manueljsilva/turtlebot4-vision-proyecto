@@ -361,10 +361,17 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
 # [MISION] > giro muestra recibido/pendiente/activo/conflicto y distancias.
 # Si cambia de sentido el mismo ID, queda detenido: no forzar giro ni bajar barreras.
 # Perfil de MISION separado: config/senales_mision.json. Ensayo aislado 16/17 sigue a 0.48 m.
-# [PERFIL MISION] anuncia 0.40 m y aproximacion lenta 0.05 m/s en la franja 0.45..0.40 m.
-# Flecha pendiente: recto hasta disparo con frente/laterales >0.32 m y sensores validos.
-# Sin flecha: evasion desde 0.45 m, conserva sentido hasta frente >0.49 m; sin salida
-# tras 90 grados/12 s se detiene. No es centrado de pasillo ni garantiza huella libre.
+# [PERFIL MISION] anuncia disparo 0.30 m, radio 0.22 m + margen de giro 0.03 m.
+# Radio aproximado indicado por el usuario; validar fisicamente. Giro necesita contorno
+# LiDAR 360 grados y TF x/y/yaw hasta base_link, incluidos obstaculos detras.
+# Minimo al centro >0.25 m permite giro; general parada de avance sigue en 0.32 m.
+# Flecha pendiente: recto hasta disparo, <=0.05 m/s en 0.45..0.30 m, con contorno libre
+# y margen extra 0.02 m + velocidad*(edad_scan+0.1s). Puede bloquear antes si no cabe.
+# Meta admisible frena aunque falte permiso de giro; tras reposo hay vision estacionaria.
+# giro.distancia_centro_m / limite_giro_m / bloqueo_giro explican la holgura.
+# Sin flecha: evasion desde 0.45 m, conserva sentido hasta frente >0.49 m;
+# sin salida tras 90 grados/12 s se detiene. Motivo distingue plazo/angulo/contrario.
+# Ensayos aislados y Task 2 conservan sus configuraciones; no es huella validada.
 # [MISION] y [QR] explican cada parada. FALLO no se libera mostrando otro cartel;
 # revisar motivo y usar Reiniciar para otro intento explicito.
 # Este modo renueva flecha pendiente SOLO con reconfirmacion en imagenes nuevas;

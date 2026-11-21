@@ -1,6 +1,6 @@
 # Ensayo integrado A → B → A
 
-Actualizado el 21 de noviembre de 2026: el usuario confirma que **el QR funciona tras aumentar su tamaño**. La prueba inmediata pasa a ser el recorrido completo, incluidas ambas banderas y flechas azules/rojas. **Una imagen nueva válida basta para aceptar una detección**. Nuevo botón **Reiniciar** para repetir sin cerrar ventana/cámara. **223 pruebas locales pasan; todavía sin validación del recorrido completo ni del reinicio en hardware.** Los modos anteriores se conservan.
+Actualizado el 21 de noviembre de 2026: el usuario confirma que **el QR funciona tras aumentar su tamaño**. La prueba inmediata pasa a ser el recorrido completo, incluidas ambas banderas y flechas azules/rojas. **Una imagen nueva válida basta para aceptar una detección**. Botón **Reiniciar** para repetir sin cerrar ventana/cámara. Meta y frenado ya no exigen permiso de giro: si el barrido se bloquea, la visión estacionaria sigue activa. **239 pruebas locales pasan; todavía sin validación del recorrido completo ni del reinicio en hardware.** Disparo activo 0.30 m y radio aproximado 0.22 m aportado por el usuario, con margen 0.03 m. Los modos anteriores se conservan.
 Este ensayo sigue azul en la ida y rojo en la vuelta; no reproduce una trayectoria
 grabada ni incorpora SLAM/Nav2.
 
@@ -91,9 +91,9 @@ después ya no hace falta Ctrl+C entre intentos. Este botón está en --mision-g
 ## Secuencia y qué observar
 
 1. **IDA:** registra A, navega con evasión y acepta flechas azules en la primera
-   imagen nueva válida. Disparo local a frente <=0.40 m; giro de 90° por odometría,
-   siempre con avance cero. El bloqueo de giro a <=0.32 m frente/laterales sigue
-   activo, además de los permisos por sensores/TF.
+   imagen nueva válida. Disparo local a frente <=0.30 m; giro de 90° por odometría,
+   siempre con avance cero. Exige contorno 360° y distancia al centro >0.25 m
+   (radio 0.22 + margen 0.03 m), además de sensores/TF frescos.
 2. **FRENAR_B:** confirma una meta nueva y frena. Exige >=3 poses nuevas durante
    0.7 s de reposo antes de guardar la orientación de entrada y habilitar rostros.
 3. **BUSCAR_B:** barrido sobre el sitio, hasta 0.25 rad/s, una vuelta o 90 s.
@@ -168,7 +168,7 @@ interfaz es 0/1 o 1/1; repetir un paquete no produce una detección nueva. Antes
 de Buscar la vista previa no envía una maniobra al controlador.
 
 La primera flecha válida se memoriza inmediatamente. El giro sigue esperando
-frente <=0.40 m y espacio/sensores válidos; completa 90° sobre el sitio. Si no
+frente <=0.30 m y espacio/sensores válidos; completa 90° sobre el sitio. Si no
 hay imagen reciente o hay señales ambiguas, no se inventa una dirección. La
 nueva aceptación no exige una pausa adicional para acumular votos.
 
@@ -191,7 +191,7 @@ sin calibración física todavía:
 
 - Antes de aceptar B: ausencia de meta durante >=1.5 s en imágenes nuevas y
   separación odométrica >=0.6 m de A. La meta debe reaparecer centrada, en una
-  imagen nueva válida, con retorno frontal <=0.6 m y espacio suficiente. No se acepta
+  imagen nueva válida, con retorno frontal <=0.6 m y LiDAR/TF válidos. No se acepta
   una meta mientras hay un giro por flecha activo.
 - Antes de aceptar A: nueva ausencia visual tras comenzar la vuelta, separación
   >=0.6 m de B y distancia odométrica a A <=0.6 m, además de meta centrada,
@@ -204,6 +204,16 @@ distancia al cartel**. La odometría puede derivar y la meta tiene igual aparien
 en A/B. Estos filtros reducen confusiones en este montaje, sin identificar el
 lugar de forma global ni garantizar llegada exacta. No forzar la llegada ampliando
 radios o reduciendo barreras sin revisar el registro.
+
+Confirmar la bandera ordena **parar**: no requiere permiso para girar. El barrido
+comprueba sus distancias después del reposo. Si muestra «Barrido bloqueado»,
+mantiene cero y permite seguir reconociendo el rostro y QR que estén a la vista.
+El mensaje indica, por ejemplo, `distancia al centro=0.240m <= radio+margen=0.250m`, y
+`giro.bloqueo_giro` detalla el mínimo al centro y su límite, o el cuadrante sin
+cobertura. El radio del cuerpo sigue siendo una estimación del usuario; tampoco
+se cancelan las guardas de llegada.
+Si el QR se guarda con salida bloqueada, permanece detenido conservando la palabra.
+En A no hace falta espacio para otro giro: meta admisible y reposo pueden finalizar.
 
 ## Flechas pendientes y paradas
 
@@ -224,14 +234,15 @@ la contradicción ni cambiar distancia/velocidad para forzarlo a girar. Una
 puntuación alta del detector no es una probabilidad calibrada de acierto.
 
 Se conserva el controlador original verificado del compañero y el perfil local
-de misión [config/senales_mision.json](config/senales_mision.json), ahora **0.40 m**.
+de misión [config/senales_mision.json](config/senales_mision.json), ahora **0.30 m**.
 El ensayo aislado de bloques 16/17 conserva su perfil de 0.48 m. La coordinación
 añadida **solo en la misión guiada**:
 
 - Una flecha pendiente aproxima recto: a 0.10 m/s fuera de precaución y como
-  máximo 0.05 m/s entre 0.45 y 0.40 m. A <=0.40 m pide el giro sobre el sitio.
+  máximo 0.05 m/s entre 0.45 y 0.30 m. A <=0.30 m pide el giro sobre el sitio.
   No deja que evasión gire antes en esa franja ni invierte la flecha. Exige
-  frente/laterales >0.32 m y sensores válidos; si falta espacio se detiene.
+  contorno completo libre en base_link y sensores válidos. Para aproximar exige
+  margen extra de 0.02 m + velocidad × (edad del scan + 0.1 s); si no cabe, se detiene.
 - Una imagen nueva que vuelve a confirmar el mismo cartel/sentido renueva la
   espera. Un latido o paquete repetido no la renueva. Sin reconfirmación durante
   seis segundos, detiene el ensayo; aproximación limitada a 30 s incluso si el
@@ -242,16 +253,39 @@ añadida **solo en la misión guiada**:
 **Sin flecha:** la evasión empieza desde 0.45 m y conserva el lado elegido
 durante el giro frontal; diferencias pequeñas entre lados ya no lo invierten
 cada ciclo. Espera frente >0.49 m para terminar, publica un ciclo cero y luego
-puede avanzar. Si el lado elegido queda a <=0.32 m, se detiene sin cambiar de
-sentido. Sin salida tras 90°/12 s queda en FALLO; no gira indefinidamente.
+puede avanzar. Si el contorno invade radio+margen (0.25 m), se detiene sin
+cambiar de sentido. Incluye obstáculos detrás y correcciones laterales. Sin salida tras 90°/12 s queda en FALLO; no gira indefinidamente.
 Esto corrige un vaivén reproducido con los mínimos del registro, sin asegurar
 alineación paralela a una pared ni resolver cualquier laberinto. `giro.evasion`
 en [MISION] muestra esa memoria. Las correcciones laterales y las guardas de
 seguridad se conservan; geometría/frenado y choques diagonales aún por medir.
 
-Al relanzar, `[PERFIL MISION]` debe anunciar 0.40 m y 0.05 m/s. Son valores de
-ensayo: la diferencia de 8 cm respecto a parada no prueba holgura/frenado real,
+Al relanzar, `[PERFIL MISION]` debe anunciar 0.30 m y 0.05 m/s. Son valores de
+ensayo: el radio de 0.22 m fue estimado por el usuario, sin verificación independiente,
 y el retorno frontal LiDAR no mide necesariamente distancia al cartel.
+
+**Holgura de giro de misión:** [config/mision_guiada.json](config/mision_guiada.json)
+usa radio **0.22 m indicado por el usuario**, más **0.03 m de margen**, alrededor
+de base_link. No se asume que el LiDAR esté centrado: cada retorno se transforma
+con x/y/yaw del TF. Se comprueba el contorno completo, también detrás. Requiere
+scan 360°, cobertura de al menos 30 % y tres retornos por cuadrante, errores
+NaN/fuera <=10 %, TF plano válido y edad <=0.6 s. Sectores desconocidos,
+-inf/bajo rango o TF ausente detienen; +inf no es espacio libre. Una inclinación
+TF mayor de 5° se rechaza. `giro.distancia_centro_m` es el mínimo transformado;
+`frente_m`/laterales siguen siendo rangos desde el sensor. La rotación exige
+mínimo al centro >0.25 m. Los márgenes y el radio deben comprobarse físicamente.
+
+La parada **general de avance sigue en 0.32 m**. Solo la aproximación coordinada
+a una flecha puede cruzar esa distancia con el control lento y los márgenes
+anteriores; puede detenerse antes de 0.30 m si no queda holgura. No se fuerza un
+giro en ese caso. El controlador original del compañero conserva sus bytes;
+su veto por rangos crudos se sustituye por este control circular en la misión.
+Los ensayos aislados siguen usando sus barreras anteriores.
+En el fragmento nuevo, el robot estaba en IDA con laterales ~0.31 m, sin meta B
+confirmada. Se bloqueó y agotó el plazo evasivo de 12 s. El nuevo motivo distingue
+ese plazo de superar el ángulo o girar al contrario y conserva el último bloqueo.
+Tras FALLO, revisar y usar Reiniciar; no reanuda por mostrar otra señal. Cerrar y
+relanzar una vez carga la corrección de meta y estos diagnósticos.
 
 Actividad de GUI >0.5 s, cámara >1 s, pose/LiDAR >0.6 s, TF/cobertura insuficientes
 o espacio reducido detienen según la fase. Corte odométrico coherente exige

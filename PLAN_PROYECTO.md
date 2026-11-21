@@ -2,9 +2,22 @@
 
 Actualizado el 21 de noviembre de 2026. Fuente base: las cinco páginas de [Computer_vision_proyectos.pdf](Computer_vision_proyectos.pdf), revisadas completas. Las indicaciones del usuario del 13 y 17 de noviembre **prevalecen para Task 1**. Se distinguen los requisitos confirmados, las decisiones propuestas y los componentes realmente implementados en [ESTADO_PROYECTO.md](ESTADO_PROYECTO.md).
 
-**Prioridad actual (21/11): prueba completa A → B → A.** El usuario confirma que el QR ya funciona al aumentar su tamaño. Preparar A con bandera visible al regresar, flechas azules en ida/rojas en vuelta, B con bandera al fondo y fotografías/QR legibles. Ejecutar --mision-guiada --mover, nombre/Buscar desde A. Verificar giros, llegada B, reposo/barrido, objetivo/QR propio, orientación de entrada B +180°, vuelta y nueva meta A. La interfaz muestra ahora una tarjeta grande con la palabra solo tras FIN/QR confirmado. Pasan 224 tests locales; no hay retorno físico confirmado todavía. Publicar cada cambio terminado y verificar main, con exclusiones vigentes.
+**Prioridad actual (21/11): prueba completa A → B → A.** El usuario confirma que el QR ya funciona al aumentar su tamaño. Preparar A con bandera visible al regresar, flechas azules en ida/rojas en vuelta, B con bandera al fondo y fotografías/QR legibles. Ejecutar --mision-guiada --mover, nombre/Buscar desde A. Verificar giros, llegada B, reposo/barrido, objetivo/QR propio, orientación de entrada B +180°, vuelta y nueva meta A. La interfaz muestra ahora una tarjeta grande con la palabra solo tras FIN/QR confirmado. Pasan 239 tests locales; no hay retorno físico confirmado todavía. Publicar cada cambio terminado y verificar main, con exclusiones vigentes.
 
-**Comprobación inmediata:** el usuario confirma detección azul y pide reducir
+**Bloqueo nuevo (21/11):** el usuario pide pasar a 0.30 m y reporta bloqueo en meta.
+El fragmento muestra evasión en IDA, izquierda ~0.311 m contra límite 0.32 m y
+plazo agotado, sin B registrado. Se separó confirmar/frenar en meta de poder
+girar: después del reposo se permite visión estacionaria aunque el barrido esté
+bloqueado, con diagnóstico de lado/distancia/límite y causa exacta del fallo.
+El usuario estima radio desde centro de **0.22 m** y pide usarlo con disparo
+**0.30 m**: ambos activos en misión, con margen de giro de 0.03 m. Comprobar
+contorno 360° trasladado por TF a base_link; círculo >0.25 m permite rotación,
+incluyendo protección trasera. Parada general 0.32 m conservada; aproximación
+especial a flecha <=0.05 m/s con margen adicional/edad del scan. Datos desconocidos
+detienen. **239 tests locales pasan**; validar radio aproximado, holgura/frenado y
+recorrido en hardware. Publicar y verificar main.
+
+**Historial sustituido por el ajuste de 0.30 m anterior:** el usuario confirma detección azul y pide reducir
 la distancia de giro. Solo --mision-guiada pasa a **0.40 m**, con perfil separado
 senales_mision.json y aproximación a 0.05 m/s en precaución; ensayo aislado 16/17
 conserva 0.48 m. También se añade memoria del giro evasivo frontal para evitar

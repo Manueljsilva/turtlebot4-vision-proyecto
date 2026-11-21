@@ -7,5 +7,8 @@
   "tiempo_orientacion_s": 45.0,
   "tiempo_aproximacion_s": 30.0,
   "velocidad_aproximacion_m_s": 0.05,
-  "margen_salida_evasion_m": 0.04
+  "margen_salida_evasion_m": 0.04,
+  "radio_giro_m": 0.22,
+  "margen_giro_m": 0.03,
+  "margen_aproximacion_m": 0.02
 }

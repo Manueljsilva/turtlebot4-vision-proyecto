@@ -14,12 +14,14 @@ from nav_msgs.msg import Odometry
 from rclpy.executors import ExternalShutdownException
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from rclpy.signals import SignalHandlerOptions
+from tf2_ros import TransformException
 
 from busqueda_lidar_ros import EntradaControl
 from control_busqueda import pose_odometria
 from config_senales import cargar_config_senales
 from control_mision import ControlMision, cargar_config_mision
 from evasion_lidar import cargar_config, decidir_scan
+from holgura_giro import analizar_holgura, transformacion_plana
 from seguridad_lidar import EvasionLidarNode
 
 
@@ -35,6 +37,18 @@ class MisionNode(EvasionLidarNode):
     def odometria(self, msg):
         self.pose, self.pose_ns = pose_odometria(msg), time.monotonic_ns()
 
+    def _tf_lidar_plano(self, frame):
+        frame=frame.lstrip('/')
+        if frame == 'base_link':
+            return 0.,0.,0.
+        if not frame:
+            return None
+        try:
+            tf=self.tf_buffer.lookup_transform('base_link',frame,rclpy.time.Time()).transform
+        except TransformException:
+            return None
+        return transformacion_plana(tf.translation,tf.rotation)
+
     def _ciclo(self):
         ahora = time.monotonic_ns()
         linea = self.entrada.tomar()
@@ -42,10 +56,12 @@ class MisionNode(EvasionLidarNode):
             self.control.recibir(linea, ahora)
         scan = self._scan
         edad = None if self._recibido_ns is None else (ahora-self._recibido_ns)/1e9
-        yaw = self._yaw_lidar(scan.header.frame_id) if scan is not None else None
+        tf_plano = self._tf_lidar_plano(scan.header.frame_id) if scan is not None else None
+        yaw = tf_plano[2] if tf_plano is not None else None
         _, _, lidar, _ = decidir_scan(scan, yaw, edad, self.cfg)
+        holgura = analizar_holgura(scan,tf_plano,edad,self.cfg)
         vx, wz, motivo = self.control.decidir(ahora, self.pose, self.pose_ns, lidar, self.cfg,
-                                              self.entrada.fin.is_set() or self._terminar)
+                                              self.entrada.fin.is_set() or self._terminar,holgura=holgura)
         EvasionLidarNode.publicar_velocidad(self, vx, wz)
         if ahora-self.estado_ns >= 200_000_000:
             c = self.control
@@ -65,7 +81,7 @@ class MisionNode(EvasionLidarNode):
                 salida_visual=c.meta_nueva.salida_visual if c.meta_nueva else False,
                 frente_m=lidar.dist_frente if lidar and lidar.observacion_valida else None,
                 disparo_m=c.cfg_senales.esperar_pared_m,
-                giro=c.diagnostico_giro(ahora,lidar),
+                giro=c.diagnostico_giro(ahora,lidar,self.cfg),
                 edad_odom_s=None if self.pose_ns is None else (ahora-self.pose_ns)/1e9)), flush=True)
             self.estado_ns = ahora
 
