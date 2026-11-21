@@ -380,6 +380,10 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
 # Mision: memoriza la primera flecha hasta el umbral, aunque deje de verse.
 # Plazo TOTAL de aproximacion 30 s; nuevos IDs/imagenes/latidos no lo renuevan.
 # La interfaz muestra Flecha guardada; camara/GUI/odom/LiDAR deben seguir recientes.
+# Confirmada en GUI no equivale a recibida: el puente espera acuse sin cambiar marca.
+# giro.recibido conserva recepcion; por_procesar espera sensores; pendiente aproxima.
+# Flecha recibida puede esperar recuperacion de odometria; el plazo no se reinicia.
+# PARAR/Reiniciar cancelan el envio. No se mueve con camara/GUI/odom/LiDAR caducados.
 # Misma memoria y disparo efectivo <=0.305 m en ida azul y vuelta roja.
 # Meta centrada con guardas validas: aproxima <=0.05 m/s hasta frente <=0.40 m.
 # Si la pierde, espera detenido; no inicia evasion a 0.45 m durante aproximacion.

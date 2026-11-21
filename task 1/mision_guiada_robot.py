@@ -74,11 +74,31 @@ class PuenteMision(PuenteBusqueda):
     def actualizar(self, orden, actividad_ns, camara_ns, meta=None, senal=None, qr_ns=None, qr_votos=0,
                    reinicio_ns=None):
         with self.cerrojo:
+            anterior = getattr(self, 'reinicio_ns', 0)
             if reinicio_ns is not None:
                 self.reinicio_ns = reinicio_ns
+            token = getattr(self, 'reinicio_ns', 0)
+            pendiente = getattr(self, 'senal_sin_acuse', None)
+            if orden != 'OBSERVAR' or token != anterior:
+                pendiente = None
+            elif senal is not None:
+                pendiente = dict(senal)
+            if pendiente is not None:
+                # Conservar el instante de la imagen original, nunca renovar
+                # detección/actividad/cámara desde el hilo periódico.
+                if not reciente(pendiente['marca_ns'], actividad_ns, EDAD_CAMARA_NS):
+                    pendiente = None
+                else:
+                    estado = getattr(self, 'estado', None)
+                    acuse = (estado.get('giro', {}).get('recibido') if estado
+                        and estado.get('reinicio_ns', 0) == token
+                        and reciente(estado.get('recibido_ns'), actividad_ns, EDAD_CAMARA_NS) else None)
+                    if acuse and all(acuse.get(k) == pendiente[k] for k in ('id','direccion','color')):
+                        pendiente = None
+            self.senal_sin_acuse = pendiente
             self.datos = dict(orden=orden, actividad_ns=actividad_ns, camara_ns=camara_ns,
-                              meta=meta, senal=senal, qr_ns=qr_ns, qr_votos=qr_votos,
-                              reinicio_ns=getattr(self, 'reinicio_ns', 0))
+                              meta=meta, senal=pendiente, qr_ns=qr_ns, qr_votos=qr_votos,
+                              reinicio_ns=token)
 
 
 def preparar_mision(comando_camara, contenedor, config, mover):
@@ -254,6 +274,8 @@ def dibujar(imagen, estado_camara, entrada, vision, estado, mover):
             elif giro.get('pendiente'):
                 senal = (f"Flecha guardada: {giro['pendiente']['direccion']} {giro.get('color','')}; "
                          f"esperar frente <= {giro.get('disparo_efectivo_m',.305):.3f} m")
+            elif giro.get('por_procesar'):
+                senal = f"Flecha recibida: {giro['por_procesar']['direccion']}; esperando sensores recientes"
         escribir(panel, senal, 18, 169)
         observados = ', '.join(c['nombre'] for c in vision.ensayo.caras) if fase == 'BUSCAR_B' else 'en espera'
         if fase in ('IDA', 'VUELTA'):

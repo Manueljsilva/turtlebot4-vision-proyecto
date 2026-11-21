@@ -1,6 +1,6 @@
 # Ensayo integrado A → B → A
 
-Actualizado el 21 de noviembre de 2026: el usuario confirma que **el QR funciona tras aumentar su tamaño**. La prueba inmediata pasa a ser el recorrido completo, incluidas ambas banderas y flechas azules/rojas. **Una imagen nueva válida basta para aceptar una detección**. Botón **Reiniciar** para repetir sin cerrar ventana/cámara. Meta y frenado ya no exigen permiso de giro: si el barrido se bloquea, la visión estacionaria sigue activa. **253 pruebas locales pasan; todavía sin validación del recorrido completo ni del reinicio en hardware.** Disparo activo 0.30 m y radio aproximado 0.22 m aportado por el usuario, con margen 0.03 m. Los modos anteriores se conservan.
+Actualizado el 21 de noviembre de 2026: el usuario confirma que **el QR funciona tras aumentar su tamaño**. La prueba inmediata pasa a ser el recorrido completo, incluidas ambas banderas y flechas azules/rojas. **Una imagen nueva válida basta para aceptar una detección**. Botón **Reiniciar** para repetir sin cerrar ventana/cámara. Meta y frenado ya no exigen permiso de giro: si el barrido se bloquea, la visión estacionaria sigue activa. **260 pruebas locales pasan; todavía sin validación del recorrido completo ni del reinicio en hardware.** Disparo activo 0.30 m y radio aproximado 0.22 m aportado por el usuario, con margen 0.03 m. Los modos anteriores se conservan.
 Este ensayo sigue azul en la ida y rojo en la vuelta; no reproduce una trayectoria
 grabada ni incorpora SLAM/Nav2.
 
@@ -262,6 +262,16 @@ añadida **solo en la misión guiada**:
   muestra **Flecha guardada** y el sentido, separados de la detección visual.
   Cámara/odometría/LiDAR/GUI recientes y holgura siguen siendo obligatorios;
   recordar el cartel no autoriza avanzar sin sensores.
+- La confirmación visual y la recepción del controlador son pasos distintos.
+  El envío conserva un evento breve hasta recibir acuse del mismo intento,
+  limitado a la vigencia original de 1 s, sin cambiar su marca de imagen.
+  El nodo conserva la intención recibida incluso si espera recuperar odometría:
+  **Flecha recibida: esperando sensores recientes**. Al procesarla muestra
+  **Flecha guardada**. El plazo total de 30 s comienza al recibirla; recuperar
+  sensores no lo reinicia. Un fotograma sin flecha no borra esa intención.
+  PARAR/Reiniciar cancelan el envío; otro intento/fase/color o una detección
+  caducada no pueden aportar una maniobra. `giro.recibido` conserva el acuse,
+  `giro.por_procesar` indica espera y `giro.pendiente` la aproximación preparada.
 - Al bloquearse conserva cero; timeout de giro por flecha sigue siendo 12 s.
   Ese plazo incluye el frenado previo y no se renueva por bloqueos. No intenta
   pasar por una dirección bloqueada ni resuelve automáticamente el atasco.

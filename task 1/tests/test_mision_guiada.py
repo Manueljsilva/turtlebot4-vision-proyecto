@@ -705,6 +705,52 @@ class MisionTests(unittest.TestCase):
         self.assertIn('Aproximacion a flecha agotada',self.c.motivo)
         self.assertEqual(self.paso(sensor=lidar(.304))[:2],(0.,0.))
 
+    def test_flecha_en_pausa_odom_se_recibe_y_conserva_hasta_recuperar_sensores(self):
+        self.iniciar()
+        ev=dict(id=1,direccion='IZQUIERDA',color='azul',marca_ns=self.t+800_000_000)
+        self.assertEqual(self.paso(dt=.8,senal=ev,sensor=lidar(.5))[:2],(0.,0.))
+        self.assertTrue(self.c.recuperando)
+        self.assertEqual(self.c.diagnostico_giro(self.t,lidar())['recibido'],ev)
+        # El siguiente fotograma no contiene flecha, antes de recuperar el reposo.
+        for _ in range(9):r=self.paso(sensor=lidar(.38))
+        self.assertEqual(self.c.fase,'IDA')
+        self.assertFalse(self.c.recuperando)
+        self.assertEqual(self.c.giros.pendiente['direccion'],'IZQUIERDA')
+        self.assertEqual(r[:2],(.05,0.))
+
+    def test_evento_recibido_sin_sensores_no_renueva_30s_y_reinicio_lo_borra(self):
+        self.iniciar()
+        ev=dict(id=1,direccion='DERECHA',color='azul',marca_ns=self.t+800_000_000)
+        self.paso(dt=.8,senal=ev)
+        for _ in range(152):self.paso(marca=0)
+        self.assertEqual(self.c.fase,'FALLO')
+        self.assertIn('Aproximacion a flecha agotada',self.c.motivo)
+        self.paso('REINICIAR',reinicio=self.t+200_000_000)
+        self.assertIsNone(self.c.diagnostico_giro(self.t,lidar())['recibido'])
+
+    def test_evento_fresco_recibido_con_camara_ausente_no_mueve_y_espera_imagen(self):
+        self.iniciar()
+        ev=dict(id=1,direccion='IZQUIERDA',color='azul',marca_ns=self.t+200_000_000)
+        self.assertEqual(self.paso(senal=ev,marca=0,sensor=lidar(.38))[:2],(0.,0.))
+        self.assertEqual(self.c.diagnostico_giro(self.t,lidar())['por_procesar'],ev)
+        for _ in range(7):self.assertEqual(self.paso(marca=0)[:2],(0.,0.))
+        self.assertEqual(self.paso(sensor=lidar(.38))[:2],(.05,0.))
+        self.assertEqual(self.c.giros.pendiente['direccion'],'IZQUIERDA')
+
+    def test_recepcion_no_guarda_flecha_de_otra_fase_color_o_imagen_previa(self):
+        ev=dict(id=1,direccion='IZQUIERDA',color='azul',marca_ns=self.t+200_000_000)
+        self.paso('ESPERAR',senal=ev)
+        self.assertIsNone(self.c.ultima_senal_recibida)
+        self.iniciar()
+        for cambios in ({'color':'rojo'},{'marca_ns':self.c.desde_ns},
+                        {'marca_ns':self.t-2_000_000_000}):
+            ev=dict(id=1,direccion='IZQUIERDA',color='azul',marca_ns=self.t+200_000_000)
+            ev.update(cambios)
+            self.paso(senal=ev)
+            self.assertIsNone(self.c.ultima_senal_recibida)
+            self.assertIsNone(self.c.senal_por_procesar)
+            self.assertIsNone(self.c.giros.pendiente)
+
     def test_perdida_de_camara_gui_y_lidar_detiene(self):
         self.iniciar()
         self.assertEqual(self.paso(marca=0)[:2], (0., 0.))
@@ -766,6 +812,54 @@ class MisionTests(unittest.TestCase):
 
 
 class PreparacionTests(unittest.TestCase):
+    def puente_sin_proceso(self):
+        p=app.PuenteMision.__new__(app.PuenteMision)
+        p.cerrojo=threading.Lock()
+        p.estado=None
+        return p
+
+    def test_confirmacion_breve_no_desaparece_antes_del_envio_y_acuse(self):
+        p=self.puente_sin_proceso()
+        t=2_000_000_000
+        ev=dict(id=1,direccion='IZQUIERDA',color='azul',marca_ns=t)
+        p.actualizar('OBSERVAR',t,t,senal=ev)
+        p.actualizar('OBSERVAR',t+20_000_000,t+20_000_000)  # GUI más rápida que emisor.
+        self.assertEqual(p.datos['senal'],ev)
+        lineas=[]
+        p.proceso=NS(stdin=Mock(write=lineas.append))
+        p.fin=Mock(is_set=Mock(side_effect=[False,True]))
+        p.enviar()
+        self.assertEqual(json.loads(lineas[0])['senal'],ev)
+        self.assertEqual(json.loads(lineas[-1])['orden'],'PARAR')
+        p.estado=dict(version=1,recibido_ns=t+30_000_000,reinicio_ns=0,
+                      giro=dict(recibido=ev))
+        p.actualizar('OBSERVAR',t+40_000_000,t+40_000_000)
+        self.assertIsNone(p.datos['senal'])
+
+    def test_reenvio_no_rejuvenece_imagen_y_caducidad_parada_o_reinicio_cancelan(self):
+        t=2_000_000_000
+        ev=dict(id=1,direccion='IZQUIERDA',color='azul',marca_ns=t)
+        for orden,delta in (('OBSERVAR',1_000_000_001),('PARAR',20_000_000),
+                            ('ESPERAR',20_000_000),('REINICIAR',20_000_000)):
+            with self.subTest(orden=orden):
+                p=self.puente_sin_proceso()
+                p.actualizar('OBSERVAR',t,t,senal=ev)
+                p.actualizar(orden,t+delta,None,reinicio_ns=t if orden=='REINICIAR' else None)
+                self.assertIsNone(p.datos['senal'])
+                self.assertEqual(p.datos['orden'],orden)
+                self.assertIsNone(p.datos['camara_ns'])
+
+    def test_acuse_otro_intento_o_evento_no_descarta_flecha_sin_recibir(self):
+        t=2_000_000_000
+        ev=dict(id=1,direccion='IZQUIERDA',color='azul',marca_ns=t)
+        for acuse,token in ((dict(ev,id=2),0),(ev,123)):
+            with self.subTest(acuse=acuse,token=token):
+                p=self.puente_sin_proceso()
+                p.actualizar('OBSERVAR',t,t,senal=ev)
+                p.estado=dict(recibido_ns=t+30_000_000,reinicio_ns=token,giro=dict(recibido=acuse))
+                p.actualizar('OBSERVAR',t+40_000_000,t+40_000_000)
+                self.assertEqual(p.datos['senal'],ev)
+
     def test_perfil_mision_30cm_separa_ensayo_48cm_y_valida_aproximacion(self):
         _,actual=cargar_ensayo(config=app.CONFIG_SENALES_MISION)
         _,aislado=cargar_ensayo()

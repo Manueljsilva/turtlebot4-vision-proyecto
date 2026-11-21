@@ -100,6 +100,7 @@ class ControlMision:
         self.reinicio_ns = 0
         self.actividad_ns = self.camara_ns = self.solicitud_ns = None
         self.senal = self.meta = self.qr_ns = None
+        self.senal_por_procesar = self.ultima_senal_recibida = None
         self.qr_votos = 0
         self.a = self.b = self.yaw_entrada_b = None
         self.qr_confirmado = False
@@ -143,6 +144,8 @@ class ControlMision:
         if fase not in ('IDA','VUELTA','FALLO'):
             self.freno_flecha = self.bloqueo_aproximacion = None
             self.aproximacion_meta_ns = None
+            self.senal_por_procesar = None
+            self.aproximacion_ns = self.revalidacion_ns = None
 
     def fallar(self, motivo, ahora):
         if self.fase not in ('FALLO', 'FIN'):
@@ -201,6 +204,25 @@ class ControlMision:
                     self.pose = self.pose_ns = None  # Puede haberse recolocado entre intentos.
             if self.orden == 'PARAR':
                 self.fallar('Detenido por interfaz', ahora)
+            if (self.fase in ('IDA','VUELTA') and self.orden == 'OBSERVAR'
+                    and self.senal is not None and self.senal['marca_ns'] > self.desde_ns
+                    and self.senal['color'] == self.giros.color):
+                # Acusar recepción antes de comprobar sensores: recordar una
+                # intención no autoriza movimiento. Un fotograma posterior sin
+                # flecha no debe borrarla durante una pausa de odometría.
+                ev = self.senal
+                self.ultima_senal_recibida = dict(ev)
+                guardada = self.giros.pendiente or self.senal_por_procesar
+                if guardada and ev['direccion'] != guardada['direccion']:
+                    self.conflicto_senal=dict(id=ev['id'],color=ev['color'],
+                        esperada=guardada['direccion'],observada=ev['direccion'],marca_ns=ev['marca_ns'])
+                    self.fallar(f"Cambio de sentido del cartel pendiente: {guardada['direccion']} "
+                                f"-> {ev['direccion']} (id {ev['id']}): detenido",ahora)
+                elif (not guardada and self.giros.activo is None and ev['id'] > self.giros.ultimo_id):
+                    self.senal_por_procesar = dict(ev)
+                    self.aproximacion_ns = ahora
+                if self.giros.activo is None:
+                    self.revalidacion_ns = ev['marca_ns']
         except (ValueError, TypeError, KeyError, OverflowError):
             self.actividad_ns = self.camara_ns = None
             self.senal = self.meta = None
@@ -261,9 +283,11 @@ class ControlMision:
             return valor if valor is not None and isfinite(valor) else None
         pendiente=self.giros.pendiente
         activo=self.giros.activo
-        return dict(color=self.giros.color, recibido=dict(self.senal) if self.senal else None,
+        return dict(color=self.giros.color,
+            recibido=dict(self.ultima_senal_recibida) if self.ultima_senal_recibida else None,
+            por_procesar=dict(self.senal_por_procesar) if self.senal_por_procesar else None,
             pendiente=dict(id=self.giros.ultimo_id,direccion=pendiente['direccion'],
-                edad_memoria_s=(ahora-pendiente['recibido_ns'])/1e9,
+                edad_memoria_s=(ahora-self.aproximacion_ns)/1e9,
                 edad_ultima_deteccion_s=(ahora-self.revalidacion_ns)/1e9
                     if self.revalidacion_ns is not None else None,
                 limite_memoria_s=self.cfg.tiempo_aproximacion_s) if pendiente else None,
@@ -452,6 +476,10 @@ class ControlMision:
             ev = self.senal if self.senal and self.senal['marca_ns'] > self.desde_ns else None
             if not evento_valido(ev, ahora):
                 ev = None
+            if self.senal_por_procesar is not None:
+                # Ya se validó al recibirla; su memoria tiene plazo propio de
+                # 30 s y no cambia la fecha de captura del evento original.
+                ev = self.senal_por_procesar
             # No reemplazar la primera dirección ni renovar su plazo por otro
             # ID/imagen/latido. Una contradicción del color del tramo detiene.
             if self.giros.pendiente:
@@ -481,9 +509,12 @@ class ControlMision:
             # la comprobación circular completa de abajo; no editar el snapshot.
             cfg_giro=SimpleNamespace(velocidad_giro=cfg.velocidad_giro,distancia_parada_m=0.)
             giro = self.giros.decidir(ev,pose,ahora,not preparando,lidar,cfg_giro)
+            self.senal_por_procesar = None
             if self.giros.pendiente and not tenia_pendiente:
-                self.aproximacion_ns = ahora
-                self.revalidacion_ns = ev['marca_ns'] if ev else None
+                if self.aproximacion_ns is None:
+                    self.aproximacion_ns = ahora
+                if self.revalidacion_ns is None:
+                    self.revalidacion_ns = ev['marca_ns'] if ev else None
             elif self.giros.pendiente is None:
                 self.aproximacion_ns = self.revalidacion_ns = None
             if tenia_pendiente and self.giros.pendiente is None and self.giros.activo is None and giro is None:
@@ -590,6 +621,7 @@ class ControlMision:
         if self.fase == 'FRENAR_SALIDA':
             if self.reposo.actualizar(pose, pose_ns, ahora):
                 self.giros = self.clase_giros('vuelta', self.cfg_giros_mision)
+                self.ultima_senal_recibida = None
                 self.cambiar('VUELTA', ahora, 'Salida preparada; seguir rojo')
                 self.meta_nueva = MetaNueva(ahora, self.cfg)
             return cero(self.motivo)
