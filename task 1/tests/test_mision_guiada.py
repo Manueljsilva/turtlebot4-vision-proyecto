@@ -68,7 +68,7 @@ class MisionTests(unittest.TestCase):
         self.iniciar()
         for i in range(12):
             self.paso(x=min(1., i*.1))
-        self.paso(meta=META, sensor=lidar(.55))
+        self.paso(meta=META, sensor=lidar(.4))
         self.assertEqual(self.c.fase, 'FRENAR_B')
         for _ in range(5):
             self.paso()
@@ -108,7 +108,7 @@ class MisionTests(unittest.TestCase):
         for i in range(1, 11):
             self.paso(x=max(.1, 1.-i*.1))
         self.assertEqual(self.c.fase,'VUELTA')  # Estar cerca de A sin ver bandera no finaliza.
-        self.paso(meta=META, sensor=lidar(.55))
+        self.paso(meta=META, sensor=lidar(.4))
         self.assertEqual(self.c.fase, 'FRENAR_A')
         for _ in range(5):
             self.paso()
@@ -119,7 +119,7 @@ class MisionTests(unittest.TestCase):
     def test_meta_inicial_visible_no_cuenta_como_b(self):
         self.iniciar()
         for i in range(12):
-            self.paso(meta=META, sensor=lidar(.55), x=min(1., i*.1))
+            self.paso(meta=META, sensor=lidar(.4), x=min(1., i*.1))
         self.assertEqual(self.c.fase, 'IDA')
         self.assertEqual(self.c.meta_nueva.votos, 0)
         self.assertIn('falta ausencia previa',self.c.diagnostico_meta)
@@ -216,17 +216,74 @@ class MisionTests(unittest.TestCase):
         for _ in range(4):
             self.paso(meta=META)  # Frontal 1.8 m.
         self.assertEqual(self.c.fase, 'IDA')
-        self.assertIn('frente 1.80m > 0.60m',self.c.diagnostico_meta)
+        self.assertIn('frente 1.80m > 0.40m',self.c.diagnostico_meta)
         for _ in range(4):
-            self.paso(meta=[.05, .2, .1, .4], sensor=lidar(.55))
+            self.paso(meta=[.05, .2, .1, .4], sensor=lidar(.4))
         self.assertEqual(self.c.fase, 'IDA')
         self.assertIn('centrarla',self.c.diagnostico_meta)
+
+    def test_meta_467mm_aproxima_sin_giro_evasivo_y_solo_frena_a_400mm(self):
+        self.iniciar()
+        for i in range(12):self.paso(x=min(1.,i*.1))
+        for frente in (.467,.45,.41,.401):
+            self.assertEqual(self.paso(meta=META,sensor=lidar(frente))[:2],(.05,0.))
+            self.assertEqual(self.c.fase,'IDA')
+            self.assertIsNone(self.c.b)
+            self.assertIsNone(self.c.evasion)
+        self.assertEqual(self.paso(meta=META,sensor=lidar(.4))[:2],(0.,0.))
+        self.assertEqual(self.c.fase,'FRENAR_B')
+        for _ in range(5):self.paso()
+        self.assertEqual(self.c.fase,'BUSCAR_B')
+
+    def test_meta_en_aproximacion_pierde_vista_o_holgura_detiene_sin_girar(self):
+        self.iniciar()
+        for i in range(12):self.paso(x=min(1.,i*.1))
+        self.paso(meta=META,sensor=lidar(.467))
+        inicio=self.c.aproximacion_meta_ns
+        self.assertEqual(self.paso(sensor=lidar(.44))[:2],(0.,0.))
+        self.assertIsNone(self.c.evasion)
+        self.assertEqual(self.paso(meta=META,sensor=lidar(.44),
+            holgura=HolguraGiro(True,.27,'Lateral cercano',.2))[:2],(0.,0.))
+        self.assertEqual(self.paso(meta=META,sensor=lidar(.44),marca=0)[:2],(0.,0.))
+        self.assertEqual(self.paso(meta=META,sensor=lidar(.44,valido=False))[:2],(0.,0.))
+        self.assertEqual(self.c.aproximacion_meta_ns,inicio)
+        self.assertEqual(self.paso(meta=META,sensor=lidar(.44))[:2],(.05,0.))
+        for _ in range(152):self.paso(marca=0)
+        self.assertEqual(self.c.fase,'FALLO')
+        self.assertIn('Aproximacion a meta agotada',self.c.motivo)
+
+    def test_meta_vuelta_espera_400mm_y_flecha_roja_conserva_perfil_mision(self):
+        self.qr_y_salida()
+        self.assertEqual(self.c.giros.cfg.esperar_pared_m,.305)
+        self.assertEqual(self.c.giros.cfg.tiempo_espera_pared_s,30.)
+        for i in range(1,11):self.paso(x=max(.1,1.-i*.1))
+        self.assertEqual(self.paso(meta=META,sensor=lidar(.467))[:2],(.05,0.))
+        self.assertEqual(self.c.fase,'VUELTA')
+        self.paso(meta=META,sensor=lidar(.4))
+        self.assertEqual(self.c.fase,'FRENAR_A')
+
+    def test_flecha_roja_se_guarda_al_perderla_y_activa_en_umbral_de_ida(self):
+        self.qr_y_salida()
+        ev=dict(id=1,direccion='DERECHA',color='rojo',marca_ns=self.t+200_000_000)
+        self.paso(senal=ev,sensor=lidar(.5))
+        for _ in range(40):self.paso(sensor=lidar(.38))
+        self.assertIsNotNone(self.c.giros.pendiente)
+        self.assertEqual(self.paso(sensor=lidar(.304))[:2],(0.,0.))
+        for _ in range(5):r=self.paso(sensor=lidar(.304))
+        self.assertEqual(r[:2],(0.,-.4))
+
+    def test_sin_flecha_detectada_no_inventa_direccion_guardada(self):
+        self.iniciar()
+        for _ in range(40):self.paso(sensor=lidar(.5))
+        self.assertIsNone(self.c.giros.pendiente)
+        self.assertIsNone(self.c.giros.activo)
+        self.assertIsNone(self.c.aproximacion_ns)
 
     def test_meta_frena_aunque_el_barrido_este_bloqueado_y_vision_sigue_activa(self):
         self.iniciar()
         for i in range(12):
             self.paso(x=min(1.,i*.1))
-        estrecho=lidar(.444,.314,.307)  # Rangos del registro; se añade obstáculo trasero.
+        estrecho=lidar(.4,.314,.307)  # Meta dentro del umbral y obstáculo trasero.
         trasera=HolguraGiro(True,.24,'Obstaculo trasero simulado',0.)
         self.assertEqual(self.paso(meta=META,sensor=estrecho,holgura=trasera)[:2],(0.,0.))
         self.assertEqual(self.c.fase,'FRENAR_B')
@@ -252,7 +309,7 @@ class MisionTests(unittest.TestCase):
             with self.subTest(sensor=sensor):
                 self.assertEqual(self.paso(meta=META,sensor=sensor)[:2],(0.,0.))
                 self.assertEqual(self.c.fase,'IDA')
-        self.paso(meta=META,sensor=lidar(.55))
+        self.paso(meta=META,sensor=lidar(.4))
         for _ in range(5):self.paso()
         self.assertEqual(self.c.fase,'BUSCAR_B')
         self.assertEqual(self.paso()[:2],(0.,.25))
@@ -272,12 +329,12 @@ class MisionTests(unittest.TestCase):
         self.paso(meta=META, sensor=lidar(1.8))
         marca = self.t
         for _ in range(3):
-            self.paso(meta=META, sensor=lidar(.55), marca=marca)
+            self.paso(meta=META, sensor=lidar(.4), marca=marca)
         self.assertEqual(self.c.meta_nueva.votos, 0)
         self.assertEqual(self.c.fase,'IDA')
         self.paso(meta=META, marca=0)
         self.assertEqual(self.c.meta_nueva.votos, 0)
-        self.paso(meta=META,sensor=lidar(.55))
+        self.paso(meta=META,sensor=lidar(.4))
         self.assertEqual(self.c.fase,'FRENAR_B')
         self.assertEqual(self.c.meta_nueva.votos,1)
 
@@ -286,7 +343,7 @@ class MisionTests(unittest.TestCase):
         for _ in range(12):
             self.paso()  # Ausencia visual, pero sigue en la posición B.
         for _ in range(4):
-            self.paso(meta=META, sensor=lidar(.55))
+            self.paso(meta=META, sensor=lidar(.4))
         self.assertEqual(self.c.fase, 'VUELTA')
         self.assertEqual(self.c.meta_nueva.votos, 0)
 
@@ -295,7 +352,7 @@ class MisionTests(unittest.TestCase):
         for i in range(12):
             self.paso(y=(i+1)*.1)
         for _ in range(4):
-            self.paso(meta=META, sensor=lidar(.55))
+            self.paso(meta=META, sensor=lidar(.4))
         self.assertEqual(self.c.fase, 'VUELTA')
 
     def test_qr_antes_de_b_incompleto_o_caducado_no_habilita_regreso(self):
@@ -444,7 +501,7 @@ class MisionTests(unittest.TestCase):
         ev=lambda:dict(id=1,direccion='IZQUIERDA',color='azul',marca_ns=self.t+200_000_000)
         self.paso(senal=ev(),sensor=lidar(.558))
         self.paso(senal=ev(),sensor=lidar(.466))
-        for _ in range(23):self.paso(sensor=lidar(.38))  # ~4.8 s sin nueva detección al frenar.
+        for _ in range(45):self.paso(sensor=lidar(.38))  # >9 s sin volver a ver la flecha.
         h=HolguraGiro(True,.264,'Contorno del registro',.12)
         vx,wz,motivo=self.paso(sensor=lidar(.304),holgura=h)
         self.assertEqual((vx,wz),(0.,0.))
@@ -514,11 +571,11 @@ class MisionTests(unittest.TestCase):
         self.iniciar()
         ev=dict(id=1,direccion='IZQUIERDA',color='azul',marca_ns=self.t+200_000_000)
         self.paso(senal=ev,sensor=lidar(.558))
-        for _ in range(33):
+        for _ in range(152):
             r=self.paso(sensor=lidar(.32),holgura=HolguraGiro(True,.28,'Contorno',.6))
             self.assertEqual(r[:2],(0.,0.))
         self.assertEqual(self.c.fase,'FALLO')
-        self.assertIn('caducada',self.c.motivo)
+        self.assertIn('Aproximacion a flecha agotada',self.c.motivo)
         self.assertIn('ultimo bloqueo de aproximacion',self.c.motivo)
         self.assertIsNone(self.c.giros.activo)
 
@@ -573,13 +630,16 @@ class MisionTests(unittest.TestCase):
         self.assertEqual(self.c.fase,'FALLO')
         self.assertIn('margen',self.c.motivo)
 
-    def test_caducar_flecha_detiene_mision_sin_evasion_automatica(self):
+    def test_flecha_guardada_sin_imagen_nueva_hasta_30s_no_gira_desde_lejos(self):
         self.iniciar()
         self.paso(senal=dict(id=1, direccion='DERECHA', color='azul', marca_ns=self.t+200_000_000))
         for _ in range(33):
-            self.paso()
+            self.assertEqual(self.paso()[:2],(.1,0.))
+        self.assertEqual(self.c.fase,'IDA')
+        self.assertEqual(self.c.giros.pendiente['direccion'],'DERECHA')
+        for _ in range(120):self.paso()
         self.assertEqual(self.c.fase, 'FALLO')
-        self.assertIn('caducada', self.c.motivo)
+        self.assertIn('Aproximacion a flecha agotada', self.c.motivo)
 
     def test_revalidacion_por_imagen_nueva_conserva_flecha_visible_y_limita_espera(self):
         self.iniciar()
@@ -588,6 +648,9 @@ class MisionTests(unittest.TestCase):
             self.paso(senal=ev)
         self.assertEqual(self.c.fase, 'IDA')
         self.assertIsNotNone(self.c.giros.pendiente)  # Más de seis segundos, imágenes nuevas.
+        inicio=self.c.aproximacion_ns
+        self.assertEqual(self.c.giros.pendiente['recibido_ns'],inicio)
+        self.assertGreater(self.c.revalidacion_ns,inicio)
         for _ in range(120):
             ev['marca_ns'] = self.t+200_000_000
             self.paso(senal=ev)
@@ -614,6 +677,33 @@ class MisionTests(unittest.TestCase):
         self.assertEqual(self.c.giros.pendiente['recibido_ns'],marca)  # Diagnosticar no revalida.
         self.paso('REINICIAR',reinicio=self.t+200_000_000)
         self.assertIsNone(self.c.conflicto_senal)
+
+    def test_nuevo_id_no_reemplaza_flecha_guardada_ni_renueva_plazo(self):
+        self.iniciar()
+        ev=dict(id=1,direccion='IZQUIERDA',color='azul',marca_ns=self.t+200_000_000)
+        self.paso(senal=ev)
+        inicio=self.c.giros.pendiente['recibido_ns']
+        for i in range(40):
+            ev.update(id=i+2,marca_ns=self.t+200_000_000)
+            self.paso(senal=ev)
+        d=self.c.diagnostico_giro(self.t,lidar())
+        self.assertEqual(d['pendiente']['id'],1)
+        self.assertEqual(self.c.giros.pendiente['recibido_ns'],inicio)
+        self.assertGreater(d['pendiente']['edad_memoria_s'],6.)
+        self.assertEqual(d['pendiente']['edad_ultima_deteccion_s'],0.)
+        ev.update(direccion='DERECHA',marca_ns=self.t+200_000_000)
+        self.assertEqual(self.paso(senal=ev)[:2],(0.,0.))
+        self.assertEqual(self.c.fase,'FALLO')
+
+    def test_memoria_flecha_expira_aunque_camara_sea_antigua_y_no_reanuda(self):
+        self.iniciar()
+        ev=dict(id=1,direccion='IZQUIERDA',color='azul',marca_ns=self.t+200_000_000)
+        self.paso(senal=ev)
+        for _ in range(152):
+            self.assertEqual(self.paso(marca=0)[:2],(0.,0.))
+        self.assertEqual(self.c.fase,'FALLO')
+        self.assertIn('Aproximacion a flecha agotada',self.c.motivo)
+        self.assertEqual(self.paso(sensor=lidar(.304))[:2],(0.,0.))
 
     def test_perdida_de_camara_gui_y_lidar_detiene(self):
         self.iniciar()

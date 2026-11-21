@@ -247,6 +247,13 @@ def dibujar(imagen, estado_camara, entrada, vision, estado, mover):
         escribir(panel, estado['estado'] if estado else 'Esperando nodo ROS', 18, 145)
         senal = (vision.ensayo.sesion.motivo if fase == 'BUSCAR_B' else
                  vision.resultado_senal['estado'] if vision.resultado_senal else 'Flechas solo durante ida/vuelta')
+        giro = estado.get('giro', {}) if estado else {}
+        if fase in ('IDA','VUELTA'):
+            if giro.get('activo'):
+                senal = f"Giro {giro['activo']} {giro.get('color','')}: frenar y completar 90 grados"
+            elif giro.get('pendiente'):
+                senal = (f"Flecha guardada: {giro['pendiente']['direccion']} {giro.get('color','')}; "
+                         f"esperar frente <= {giro.get('disparo_efectivo_m',.305):.3f} m")
         escribir(panel, senal, 18, 169)
         observados = ', '.join(c['nombre'] for c in vision.ensayo.caras) if fase == 'BUSCAR_B' else 'en espera'
         if fase in ('IDA', 'VUELTA'):
@@ -318,6 +325,8 @@ def main(argv=None):
               'No reproduce ruta ni usa mapa. Sin --mover no publica. Cerrar otros controles.', flush=True)
         print(f'[PERFIL MISION] Flecha: frente LiDAR <= {cfg_s.esperar_pared_m:.2f} m; '
               f'tolerancia {cfg_m.tolerancia_disparo_m:.3f} m; frenar/reposo antes de girar; '
+              f'memoria hasta giro (max {cfg_m.tiempo_aproximacion_s:.0f} s, sin renovar); '
+              f'meta: frente <= {cfg_m.frente_meta_m:.2f} m; '
               f'aproximacion en precaucion <= {cfg_m.velocidad_aproximacion_m_s:.2f} m/s; '
               f'giro sobre el sitio: radio {cfg_m.radio_giro_m:.2f}m + margen {cfg_m.margen_giro_m:.2f}m '
               '(base_link, TF completo y contorno 360 grados). '

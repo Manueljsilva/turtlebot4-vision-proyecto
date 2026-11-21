@@ -1,6 +1,6 @@
 # Ensayo integrado A → B → A
 
-Actualizado el 21 de noviembre de 2026: el usuario confirma que **el QR funciona tras aumentar su tamaño**. La prueba inmediata pasa a ser el recorrido completo, incluidas ambas banderas y flechas azules/rojas. **Una imagen nueva válida basta para aceptar una detección**. Botón **Reiniciar** para repetir sin cerrar ventana/cámara. Meta y frenado ya no exigen permiso de giro: si el barrido se bloquea, la visión estacionaria sigue activa. **246 pruebas locales pasan; todavía sin validación del recorrido completo ni del reinicio en hardware.** Disparo activo 0.30 m y radio aproximado 0.22 m aportado por el usuario, con margen 0.03 m. Los modos anteriores se conservan.
+Actualizado el 21 de noviembre de 2026: el usuario confirma que **el QR funciona tras aumentar su tamaño**. La prueba inmediata pasa a ser el recorrido completo, incluidas ambas banderas y flechas azules/rojas. **Una imagen nueva válida basta para aceptar una detección**. Botón **Reiniciar** para repetir sin cerrar ventana/cámara. Meta y frenado ya no exigen permiso de giro: si el barrido se bloquea, la visión estacionaria sigue activa. **253 pruebas locales pasan; todavía sin validación del recorrido completo ni del reinicio en hardware.** Disparo activo 0.30 m y radio aproximado 0.22 m aportado por el usuario, con margen 0.03 m. Los modos anteriores se conservan.
 Este ensayo sigue azul en la ida y rojo en la vuelta; no reproduce una trayectoria
 grabada ni incorpora SLAM/Nav2.
 
@@ -169,7 +169,7 @@ interfaz es 0/1 o 1/1; repetir un paquete no produce una detección nueva. Antes
 de Buscar la vista previa no envía una maniobra al controlador.
 
 La primera flecha válida se memoriza inmediatamente. El giro sigue esperando
-frente <=0.30 m y espacio/sensores válidos; completa 90° sobre el sitio. Si no
+frente <=0.305 m (nominal 0.30 + tolerancia 0.005) y espacio/sensores válidos; completa 90° sobre el sitio. Si no
 hay imagen reciente o hay señales ambiguas, no se inventa una dirección. La
 nueva aceptación no exige una pausa adicional para acumular votos.
 
@@ -192,11 +192,11 @@ sin calibración física todavía:
 
 - Antes de aceptar B: ausencia de meta durante >=1.5 s en imágenes nuevas y
   separación odométrica >=0.6 m de A. La meta debe reaparecer centrada, en una
-  imagen nueva válida, con retorno frontal <=0.6 m y LiDAR/TF válidos. No se acepta
+  imagen nueva válida, con retorno frontal <=0.40 m y LiDAR/TF válidos. No se acepta
   una meta mientras hay un giro por flecha activo.
 - Antes de aceptar A: nueva ausencia visual tras comenzar la vuelta, separación
   >=0.6 m de B y distancia odométrica a A <=0.6 m, además de meta centrada,
-  frontal <=0.6 m y una imagen nueva válida.
+  frontal <=0.40 m y una imagen nueva válida.
 - Las repeticiones del mismo paquete no suman votos ni tiempo de ausencia.
   Cámara/pose caducadas reinician la confirmación de meta.
 
@@ -205,6 +205,14 @@ distancia al cartel**. La odometría puede derivar y la meta tiene igual aparien
 en A/B. Estos filtros reducen confusiones en este montaje, sin identificar el
 lugar de forma global ni garantizar llegada exacta. No forzar la llegada ampliando
 radios o reduciendo barreras sin revisar el registro.
+
+Ver la meta desde lejos dibuja META VISTA, pero **no inicia el barrido**.
+Con bandera centrada, ausencia/separación y guardas de etapa válidas, aproxima
+recto a <=0.05 m/s hasta frontal <=0.40 m: no deja que la evasión inicie un giro
+a 0.45 m. Si pierde la bandera o queda descentrada, espera detenido hasta
+recuperarla. Holgura/frescura inválidas también detienen. El acercamiento a meta
+se limita a 30 s, sin renovar el plazo por imágenes o pausas. Una flecha pendiente
+tiene prioridad. Los mismos perfiles de memoria/disparo se aplican a azul y rojo.
 
 Confirmar la bandera ordena **parar**: no requiere permiso para girar. El barrido
 comprueba sus distancias después del reposo. Si muestra «Barrido bloqueado»,
@@ -246,10 +254,14 @@ añadida **solo en la misión guiada**:
   No deja que evasión gire antes en esa franja ni invierte la flecha. Exige
   contorno completo libre en base_link y sensores válidos. Para aproximar exige
   margen extra de 0.02 m + velocidad × (edad del scan + 0.1 s); si no cabe, se detiene.
-- Una imagen nueva que vuelve a confirmar el mismo cartel/sentido renueva la
-  espera. Un latido o paquete repetido no la renueva. Sin reconfirmación durante
-  seis segundos **antes de activar la maniobra**, detiene el ensayo; aproximación limitada a 30 s incluso si el
-  cartel sigue visible. Cambio de sentido del mismo cartel pendiente también detiene.
+- La primera flecha aceptada conserva su dirección aunque el cartel deje de
+  verse al acercarse. La aproximación tiene un plazo total de **30 s** desde ese
+  evento: nuevas imágenes, otros IDs y latidos no lo reinician. No exige
+  reconfirmación cada seis segundos en este modo. Una dirección contradictoria
+  del color del tramo detiene; no reemplaza la orden pendiente. La interfaz
+  muestra **Flecha guardada** y el sentido, separados de la detección visual.
+  Cámara/odometría/LiDAR/GUI recientes y holgura siguen siendo obligatorios;
+  recordar el cartel no autoriza avanzar sin sensores.
 - Al bloquearse conserva cero; timeout de giro por flecha sigue siendo 12 s.
   Ese plazo incluye el frenado previo y no se renueva por bloqueos. No intenta
   pasar por una dirección bloqueada ni resuelve automáticamente el atasco.
@@ -258,12 +270,13 @@ El registro del 21/11 quedó a 0.304 m: el margen adicional impedía avanzar y e
 disparo exacto 0.300 m impedía girar; al perder detección caducó la dirección.
 La tolerancia cubre esos 4 mm sin reducir el radio o margen de seguridad. A
 0.306 m aún espera; si el margen de avance veta acercarse desde más lejos,
-permanece detenido y explica el bloqueo. No amplía la espera ni dispara desde lejos.
+permanece detenido y explica el bloqueo. Esta revisión amplía la memoria a
+30 s totales, sin disparar desde lejos ni reducir márgenes.
 `giro.bloqueo_aproximacion` se distingue de `bloqueo_giro`; `disparo_m` es nominal,
 `disparo_efectivo_m` incluye tolerancia y `frenado_flecha_confirmado` indica reposo.
 «Activo» durante el frenado aún no significa que haya orden angular.
 
-**Sin flecha:** la evasión empieza desde 0.45 m y conserva el lado elegido
+**Sin flecha ni aproximación a meta:** la evasión empieza desde 0.45 m y conserva el lado elegido
 durante el giro frontal; diferencias pequeñas entre lados ya no lo invierten
 cada ciclo. Espera frente >0.49 m para terminar, publica un ciclo cero y luego
 puede avanzar. Si el contorno invade radio+margen (0.25 m), se detiene sin
@@ -274,7 +287,7 @@ en [MISION] muestra esa memoria. Las correcciones laterales y las guardas de
 seguridad se conservan; geometría/frenado y choques diagonales aún por medir.
 
 Al relanzar, `[PERFIL MISION]` debe anunciar 0.30 m, tolerancia 0.005 m,
-reposo antes de girar y aproximación 0.05 m/s. Son valores de
+reposo antes de girar, memoria máxima 30 s, meta 0.40 m y aproximación 0.05 m/s. Son valores de
 ensayo: el radio de 0.22 m fue estimado por el usuario, sin verificación independiente,
 y el retorno frontal LiDAR no mide necesariamente distancia al cartel.
 

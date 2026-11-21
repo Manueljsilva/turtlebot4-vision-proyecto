@@ -344,11 +344,11 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
 # Escribir nombre + Buscar. Sin --mover no completara el recorrido fisico.
 # Cerrar la comprobacion anterior con Ctrl+C; despues, circuito preparado:
 bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO" --mision-guiada --mover
-# IDA azul (giro de mision a 0.40 m) > FRENAR_B > BUSCAR_B (rostro/QR propio) >
+# IDA azul (giro nominal 0.30 m + tolerancia 0.005 m) > FRENAR_B > BUSCAR_B (rostro/QR propio) >
 # FRENAR_QR > ORIENTAR_SALIDA (entrada B +180) > FRENAR_SALIDA > VUELTA roja > FRENAR_A > FIN.
 # Buscar solo fija nombre/inicia; no se capturan fotos ni se reconoce durante la ida.
 # QR debe aceptarse 1/1 y guardarse antes de habilitar retorno. No vuelve sin QR.
-# Una bandera visible de lejos no basta: nueva/centrada, frente <=0.6 m y sensores validos.
+# Una bandera visible de lejos no basta: nueva/centrada, frente <=0.40 m y sensores validos.
 # A: ademas distancia odometrica <=0.6 m del inicio, tras separarse >=0.6 m de B.
 # Estar cerca de A sin ver su bandera no termina. Tras meta A y reposo: FIN,
 # robot detenido y panel grande con el mensaje QR en la interfaz/terminal.
@@ -377,8 +377,13 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
 # Ensayos aislados y Task 2 conservan sus configuraciones; no es huella validada.
 # [MISION] y [QR] explican cada parada. FALLO no se libera mostrando otro cartel;
 # revisar motivo y usar Reiniciar para otro intento explicito.
-# Este modo renueva flecha pendiente SOLO con reconfirmacion en imagenes nuevas;
-# 6 s sin reconfirmacion ANTES de activar o 30 s de aproximacion detienen.
+# Mision: memoriza la primera flecha hasta el umbral, aunque deje de verse.
+# Plazo TOTAL de aproximacion 30 s; nuevos IDs/imagenes/latidos no lo renuevan.
+# La interfaz muestra Flecha guardada; camara/GUI/odom/LiDAR deben seguir recientes.
+# Misma memoria y disparo efectivo <=0.305 m en ida azul y vuelta roja.
+# Meta centrada con guardas validas: aproxima <=0.05 m/s hasta frente <=0.40 m.
+# Si la pierde, espera detenido; no inicia evasion a 0.45 m durante aproximacion.
+# Aproximacion a meta tambien limitada a 30 s; conserva holgura y sensores.
 # Activada cerca del umbral: plazo de giro 12 s incluye frenado, sin reiniciarse.
 # Bloqueo_aproximacion es distinto de bloqueo_giro. No modifica el ensayo 16/17.
 # No combinar --mision-guiada con --senales, --tramo, --ensayo-giro-companero u otro modo.
@@ -396,7 +401,7 @@ bash "task 1/ejecutar_autonomo_robot.sh" --ip "$TB4_IP" --dominio "$TB4_DOMINIO"
 # q/Esc/Ctrl+C termina. --mover se rechaza; no mezclar modos.
 # Luego cerrar y repetir bloque 18: nombre + Buscar, esperar IDA y A registrado.
 # En IDA/VUELTA: cuadro META VISTA = detector; [META] = condicion de llegada pendiente.
-# Llegada conserva ausencia >=1.5 s, separacion >=0.6 m, centrado, frente <=0.6 m,
+# Llegada conserva ausencia >=1.5 s, separacion >=0.6 m, centrado, frente <=0.40 m,
 # sensores validos y una imagen nueva admisible. No bajar barreras para forzarla.
 # Los nuevos PNG de señales/ sirven de referencias; PDF conservado, sin entrenamiento.
 
