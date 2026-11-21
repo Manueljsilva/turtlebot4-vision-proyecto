@@ -97,3 +97,30 @@ class HolguraTests(unittest.TestCase):
         self.assertTrue(h2.valida)
         self.assertAlmostEqual(h2.distancia_minima_m,.219)
         self.assertAlmostEqual(h2.distancia_avance_m,.219)
+
+    def test_recorrido_recto_no_infla_el_robot_hacia_una_pared_lateral(self):
+        from holgura_giro import distancia_libre_recta
+        s=scan(2.5)
+        s.ranges[90]=s.ranges[270]=.275
+        s.ranges[180]=.435
+        h=self.analizar(s)
+        self.assertAlmostEqual(h.distancia_minima_m,.275)
+        self.assertAlmostEqual(distancia_libre_recta(h,.25),.185)
+
+    def test_recorrido_recto_protege_diagonales_y_obstaculo_dentro_de_la_huella(self):
+        from holgura_giro import distancia_libre_recta
+        s=scan(2.5)
+        s.ranges[190]=.275  # A 10 grados: invade el siguiente tramo recto.
+        self.assertLess(distancia_libre_recta(self.analizar(s),.25),.026)
+        s.ranges[270]=.249
+        self.assertEqual(distancia_libre_recta(self.analizar(s),.25),0.)
+
+    def test_recorrido_recto_respeta_tf_radio_y_no_inventa_cobertura(self):
+        from holgura_giro import distancia_libre_recta, HolguraGiro
+        s=scan(2.5);s.ranges[180]=.435
+        h=self.analizar(s,(-.04,0.,0.))
+        self.assertAlmostEqual(distancia_libre_recta(h,.25),.145)
+        self.assertAlmostEqual(distancia_libre_recta(h,.27),.125)
+        self.assertIsNone(distancia_libre_recta(HolguraGiro(True,.4,'Sin puntos',.1),.25))
+        s.ranges[0]=float('-inf')
+        self.assertIsNone(distancia_libre_recta(self.analizar(s),.25))

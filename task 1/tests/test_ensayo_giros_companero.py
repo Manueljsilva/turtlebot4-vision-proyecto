@@ -43,7 +43,7 @@ class SnapshotTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             destino=Path(tmp)
             for nombre in ('config_senales.py','control_busqueda.py','control_meta.py',
-                           'control_mision.py','evasion_lidar.py'):
+                           'control_mision.py','evasion_lidar.py','holgura_giro.py'):
                 shutil.copyfile(app.TAREA/nombre,destino/nombre)
             shutil.copyfile(CONTROL,destino/'control_giros.py')
             shutil.copyfile(CONFIG,destino/'senales.json')

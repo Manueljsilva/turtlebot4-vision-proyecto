@@ -14,6 +14,7 @@ from control_busqueda import CONFIRMACIONES_VISUALES, EDAD_ACTIVIDAD_NS, EDAD_CA
 from control_giros import ControlGiro, evento_valido
 from control_meta import ReposoOdometria, misma_caja
 from evasion_lidar import calcular_velocidad_evasion
+from holgura_giro import distancia_libre_recta
 
 
 def normalizar(a):
@@ -138,6 +139,8 @@ class ControlMision:
         self.freno_flecha = None
         self.bloqueo_aproximacion = None
         self.rearme_bloqueo = None
+        self.salida_flecha = None
+        self.ultimo_giro_completado = None
 
     def cambiar(self, fase, ahora, motivo):
         self.fase, self.desde_ns, self.motivo = fase, ahora, motivo
@@ -153,6 +156,7 @@ class ControlMision:
             self.senal_por_procesar = None
             self.aproximacion_ns = self.revalidacion_ns = None
             self.rearme_bloqueo = None
+            self.salida_flecha = None
 
     def fallar(self, motivo, ahora):
         if self.fase not in ('FALLO', 'FIN'):
@@ -324,6 +328,7 @@ class ControlMision:
             return valor if valor is not None and isfinite(valor) else None
         pendiente=self.giros.pendiente
         activo=self.giros.activo
+        salida=self.salida_flecha
         return dict(color=self.giros.color,
             recibido=dict(self.ultima_senal_recibida) if self.ultima_senal_recibida else None,
             por_procesar=dict(self.senal_por_procesar) if self.senal_por_procesar else None,
@@ -334,6 +339,14 @@ class ControlMision:
                     if self.revalidacion_ns is not None else None,
                 limite_memoria_s=self.cfg.tiempo_aproximacion_s) if pendiente else None,
             activo=activo['direccion'] if activo else None, conflicto=self.conflicto_senal,
+            avance_deg=(activo['sentido']*normalizar(self.pose['yaw']-activo['yaw'])*180/pi
+                        if activo and self.pose else None),
+            objetivo_deg=self.cfg_senales.angulo_giro_deg,
+            ultimo_completado=self.ultimo_giro_completado,
+            salida_recta=(dict(reposo_confirmado=salida['confirmado'],
+                distancia_m=hypot(self.pose['x']-salida['x'],self.pose['y']-salida['y']) if self.pose else None,
+                requerido_m=self.giros.cfg.desplazamiento_rearme_m,
+                edad_s=(ahora-salida['inicio_ns'])/1e9) if salida else None),
             evasion=dict(self.evasion) if self.evasion else None,
             frente_m=distancia('dist_frente'), izquierda_m=distancia('dist_izquierda'),
             derecha_m=distancia('dist_derecha'), disparo_m=self.cfg_senales.esperar_pared_m,
@@ -354,16 +367,45 @@ class ControlMision:
             return 0.,0.,etiqueta+': aproximacion bloqueada; '+bloqueo
         velocidad=(min(cfg.velocidad_avance,self.cfg.velocidad_aproximacion_m_s)
                    if lento or lidar.dist_frente <= cfg.distancia_precaucion_m else cfg.velocidad_avance)
-        minimo=self.cfg.radio_giro_m+self.cfg.margen_giro_m+self.cfg.margen_aproximacion_m
-        limite=minimo+velocidad*(self.holgura.edad_s+.1)
-        if self.holgura.distancia_minima_m <= limite:
-            motivo=(f'centro={self.holgura.distancia_minima_m:.3f}m <= {limite:.3f}m; '
-                    f'frente={lidar.dist_frente:.3f}m')
+        radio=self.cfg.radio_giro_m+self.cfg.margen_giro_m
+        recorrido=distancia_libre_recta(self.holgura,radio)
+        margen=self.cfg.margen_aproximacion_m+velocidad*(self.holgura.edad_s+.1)
+        # En ejecución real se comprueba el disco trasladado hacia delante.
+        # Los dobles antiguos sin puntos conservan el veto radial conservador.
+        distancia=self.holgura.distancia_minima_m if recorrido is None else recorrido
+        limite=radio+margen if recorrido is None else margen
+        if distancia <= limite:
+            medida='centro' if recorrido is None else 'recorrido libre'
+            motivo=(f'{medida}={distancia:.3f}m <= {limite:.3f}m; frente={lidar.dist_frente:.3f}m')
             self.bloqueo_aproximacion=dict(motivo=motivo,marca_ns=ahora,
-                distancia_centro_m=self.holgura.distancia_minima_m,limite_m=limite)
+                distancia_centro_m=self.holgura.distancia_minima_m,limite_m=limite,
+                recorrido_libre_m=recorrido,margen_recorrido_m=margen)
             return 0.,0.,etiqueta+': margen de aproximacion insuficiente; '+motivo
         self.bloqueo_aproximacion=None
-        return velocidad,0.,etiqueta+': aproximar recto hasta el umbral; sin giro evasivo'
+        accion=('avanzar recto con holgura; sin segundo giro' if etiqueta == 'Salida tras flecha'
+                else 'aproximar recto hasta el umbral; sin giro evasivo')
+        return velocidad,0.,etiqueta+': '+accion
+
+    def salir_de_flecha(self, ahora, pose, pose_ns, lidar, cfg, solo_reposo=False):
+        """Frenar tras los 90° y avanzar con protección antes de otra evasión."""
+        s=self.salida_flecha
+        if s is None:
+            return None
+        desvio=abs(normalizar(pose['yaw']-s['yaw_objetivo']))*180/pi
+        if desvio > self.cfg_senales.tolerancia_deg+1e-6:
+            self.fallar(f'Desviacion tras giro de flecha ({desvio:.1f} grados): detenido',ahora)
+            return 0.,0.,self.motivo
+        if not s['confirmado']:
+            s['confirmado']=s['reposo'].actualizar(pose,pose_ns,ahora)
+            return 0.,0.,'Salida tras flecha: frenar y confirmar reposo 0.7s antes de avanzar'
+        if hypot(pose['x']-s['x'],pose['y']-s['y']) >= self.giros.cfg.desplazamiento_rearme_m:
+            self.salida_flecha=None
+            return None
+        if solo_reposo:
+            return None
+        # No encadenar una corrección lateral con otros 90° en el mismo sitio.
+        # Un camino ocupado detiene: esta fase no fuerza un giro alternativo.
+        return self.aproximar(ahora,lidar,cfg,'Salida tras flecha',lento=True)
 
     def evadir(self, ahora, lidar, cfg):
         """Conservar el lado del giro frontal hasta salir con margen, sin arcos."""
@@ -454,6 +496,10 @@ class ControlMision:
                         motivo+='; ultimo bloqueo de aproximacion: '+self.bloqueo_aproximacion['motivo']
                     self.fallar(motivo,ahora)
                     return cero(self.motivo)
+            if (self.salida_flecha is not None
+                    and ahora-self.salida_flecha['inicio_ns'] > self.cfg.tiempo_aproximacion_s*1e9):
+                self.fallar('Salida recta tras flecha agotada: detenido; revisar espacio y sensores',ahora)
+                return cero(self.motivo)
         if self.fase == 'BUSCAR_B' and ahora-self.inicio_barrido_ns >= 90_000_000_000:
             self.fallar('Barrido agotado (90 s)', ahora)
         if self.inicio_orientacion_ns is not None and self.fase in ('ORIENTAR_SALIDA', 'FRENAR_SALIDA'):
@@ -487,6 +533,11 @@ class ControlMision:
             self.meta_nueva = MetaNueva(ahora, self.cfg)
             return cero(self.motivo)
         if self.fase in ('IDA', 'VUELTA'):
+            # También ante otra señal/meta: no saltarse el frenado posterior ni
+            # autorizar un segundo giro por una desviación del primero.
+            salida=self.salir_de_flecha(ahora,pose,pose_ns,lidar,cfg,solo_reposo=True)
+            if salida is not None:
+                return salida
             origen = self.a if self.fase == 'IDA' else self.b
             separado = hypot(pose['x']-origen['x'], pose['y']-origen['y']) >= self.cfg.separacion_meta_m
             cerca_a = hypot(pose['x']-self.a['x'], pose['y']-self.a['y']) <= self.cfg.radio_llegada_a_m
@@ -587,6 +638,7 @@ class ControlMision:
                 lidar_giro = (replace(lidar, dist_frente=esperar) if is_dataclass(lidar)
                               else SimpleNamespace(**{**vars(lidar), 'dist_frente': esperar}))
             cfg_giro=SimpleNamespace(velocidad_giro=cfg.velocidad_giro,distancia_parada_m=0.)
+            activo_anterior=dict(self.giros.activo) if self.giros.activo else None
             giro = self.giros.decidir(ev_giro,pose,ahora,not preparando,lidar_giro,cfg_giro)
             if not esperando_rearme:
                 self.senal_por_procesar = None
@@ -604,7 +656,10 @@ class ControlMision:
                 self.fallar(motivo+'; detenido, revisar antes de reiniciar',ahora)
                 return cero(self.motivo)
             if self.giros.fallo:
-                self.fallar(self.giros.fallo, ahora)
+                motivo=self.giros.fallo
+                if self.freno_flecha and self.freno_flecha.get('ultimo_bloqueo'):
+                    motivo+='; ultimo bloqueo: '+self.freno_flecha['ultimo_bloqueo']
+                self.fallar(motivo, ahora)
             if giro is not None:
                 self.evasion=None
                 self.aproximacion_meta_ns=None
@@ -618,6 +673,7 @@ class ControlMision:
                         quieto=f['reposo'].actualizar(pose,pose_ns,ahora)
                         bloqueo=self.bloqueo_giro(lidar,cfg)
                         if bloqueo:
+                            f['ultimo_bloqueo']=bloqueo
                             return cero('Flecha cercana: detenido antes del giro; '+bloqueo)
                         if not quieto:
                             return cero(f'Flecha cercana ({lidar.dist_frente:.3f}m): '
@@ -632,9 +688,18 @@ class ControlMision:
                         return cero('Reposo de flecha confirmado: iniciar 90 grados sobre el sitio')
                     bloqueo = self.bloqueo_giro(lidar,cfg)
                     if bloqueo:
+                        f['ultimo_bloqueo']=bloqueo
                         return cero('Giro por flecha bloqueado: '+bloqueo+'; no invierte sentido')
                 elif self.fase != 'FALLO':
                     self.freno_flecha = self.bloqueo_aproximacion = None
+                    if activo_anterior and not self.giros.fallo:
+                        a=activo_anterior
+                        self.ultimo_giro_completado=dict(id=self.giros.ultimo_id,
+                            direccion=a['direccion'],color=self.giros.color,marca_ns=ahora,
+                            avance_deg=a['sentido']*normalizar(pose['yaw']-a['yaw'])*180/pi)
+                        self.salida_flecha=dict(inicio_ns=ahora,x=pose['x'],y=pose['y'],
+                            yaw_objetivo=normalizar(a['yaw']+a['sentido']*self.cfg_senales.angulo_giro_deg*pi/180),
+                            confirmado=False,reposo=ReposoOdometria())
                 return giro
             if self.giros.pendiente:
                 self.aproximacion_meta_ns=None
@@ -649,8 +714,13 @@ class ControlMision:
             # válidas se coordina un avance lento hasta 0.40 m, sin anticipar B.
             meta_encaminada=(self.meta is not None and self.meta_nueva.salida_visual and separado
                 and (self.fase == 'IDA' or cerca_a) and abs(self.meta[0]+self.meta[2]/2-.5) <= .2)
-            if meta_encaminada and self.aproximacion_meta_ns is None:
+            if (meta_encaminada and self.aproximacion_meta_ns is None
+                    and self.observado(lidar)
+                    and lidar.dist_frente <= cfg.distancia_precaucion_m+self.cfg.margen_salida_evasion_m):
                 self.aproximacion_meta_ns=ahora
+            salida=self.salir_de_flecha(ahora,pose,pose_ns,lidar,cfg)
+            if salida is not None:
+                return salida
             if self.aproximacion_meta_ns is not None:
                 self.evasion=None
                 if not meta_encaminada:

@@ -6,7 +6,7 @@ rostro objetivo/QR propio → rojo/evasión → meta A. A también lleva bandera
 mirando al robot cuando regrese. Al confirmar meta A y reposo, aparece un panel
 grande con la palabra y el robot queda detenido. El regreso completo aún no está
 validado físicamente. Guía vigente: [PRUEBA_MISION_GUIADA.md](PRUEBA_MISION_GUIADA.md),
-bloque 18 de [COMANDOS.txt](COMANDOS.txt); 277 tests locales. Flecha guardada
+bloque 18 de [COMANDOS.txt](COMANDOS.txt); 290 tests locales. Flecha guardada
 hasta disparo <=0.305 m (máximo 30 s), también en rojo; meta exige frontal <=0.40 m
 con acercamiento lento protegido antes de frenar/barrer. Revisión sobre main ca5d880: protección de avance ante diagonales, memoria de
 flecha durante rearme y recuperación QR con rechazo explícito, sin renovar marcas.
@@ -16,6 +16,8 @@ a Salir, detiene y espera reposo antes de permitir otra persona en la misma
 ventana; el nuevo Buscar vuelve a registrar A. Reinicio aún pendiente en hardware.
 Las descripciones
 históricas de tres confirmaciones de abajo se sustituyen por una imagen nueva válida.
+
+**Revisión de salida tras flecha:** después de los 90° confirma reposo y avanza recto, con protección y <=0.05 m/s, hasta 0.40 m de rearme. No encadena otra corrección lateral en el mismo sitio. El margen de aproximación se comprueba sobre el disco trasladado hacia delante, sin inflar lateralmente la huella. Meta lejana inicia sus 30 s finales en zona cercana (frontal <=0.49 m); llegada sigue <=0.40 m. Ángulo y salida visibles en telemetría. Repetir en hardware.
 
 **Ajuste vigente de la misión (21/11):** flecha memorizada hasta retorno frontal
 LiDAR nominal 0.30 m, con tolerancia 0.005 m: a <=0.305 m frena y espera

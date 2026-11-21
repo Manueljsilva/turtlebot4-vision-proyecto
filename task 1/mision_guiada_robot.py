@@ -121,6 +121,7 @@ def guardar_estado(archivo, sesion, estado, palabra, interrumpida_por_reinicio=F
         nombre_solicitado=sesion.nombre, identidad_confirmada=sesion.nombre if palabra is not None else None,
         palabra_qr=palabra, a_odometria=estado.get('a'), b_odometria=estado.get('b'),
         fase=estado['fase'], motivo=estado['estado'], regreso_a_confirmado=estado['fase'] == 'FIN',
+        diagnostico_giro=estado.get('giro'), motivo_meta=estado.get('motivo_meta'),
         ruta_reproducida=False, interrumpida_por_reinicio=interrumpida_por_reinicio)
     archivo.parent.mkdir(parents=True, exist_ok=True)
     temporal = archivo.with_suffix('.tmp')
@@ -286,7 +287,9 @@ def dibujar(imagen, estado_camara, entrada, vision, estado, mover):
         giro = estado.get('giro', {}) if estado else {}
         if fase in ('IDA','VUELTA'):
             if giro.get('activo'):
-                senal = f"Giro {giro['activo']} {giro.get('color','')}: frenar y completar 90 grados"
+                avance=giro.get('avance_deg')
+                angulo=f'{avance:.1f}/{giro.get("objetivo_deg",90.):.0f} grados' if avance is not None else '90 grados'
+                senal = f"Giro {giro['activo']} {giro.get('color','')}: {angulo} por odometria"
             elif giro.get('pendiente'):
                 senal = (f"Flecha guardada: {giro['pendiente']['direccion']} {giro.get('color','')}; "
                          f"esperar frente <= {giro.get('disparo_efectivo_m',.305):.3f} m")
@@ -296,6 +299,9 @@ def dibujar(imagen, estado_camara, entrada, vision, estado, mover):
                          f"{r['direccion']}")
             elif giro.get('por_procesar'):
                 senal = f"Flecha recibida: {giro['por_procesar']['direccion']}; esperando sensores recientes"
+            elif giro.get('salida_recta'):
+                s=giro['salida_recta']
+                senal=f"Salida recta tras flecha: {s['distancia_m']:.2f}/{s['requerido_m']:.2f} m; sin otro giro"
         escribir(panel, senal, 18, 169)
         observados = ', '.join(c['nombre'] for c in vision.ensayo.caras) if fase == 'BUSCAR_B' else 'en espera'
         if fase in ('IDA', 'VUELTA'):

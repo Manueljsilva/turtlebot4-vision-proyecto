@@ -1,8 +1,30 @@
 # Ensayo integrado A → B → A
 
-Actualizado el 21 de noviembre de 2026: el usuario confirma que **el QR funciona tras aumentar su tamaño**. La prueba inmediata pasa a ser el recorrido completo, incluidas ambas banderas y flechas azules/rojas. **Una imagen nueva válida basta para aceptar una detección**. Botón **Reiniciar** para repetir sin cerrar ventana/cámara. Meta y frenado ya no exigen permiso de giro: si el barrido se bloquea, la visión estacionaria sigue activa. **277 pruebas locales pasan; todavía sin validación del recorrido completo ni del reinicio en hardware.** Disparo activo 0.30 m y radio aproximado 0.22 m aportado por el usuario, con margen 0.03 m. Los modos anteriores se conservan.
+Actualizado el 21 de noviembre de 2026: el usuario confirma que **el QR funciona tras aumentar su tamaño**. La prueba inmediata pasa a ser el recorrido completo, incluidas ambas banderas y flechas azules/rojas. **Una imagen nueva válida basta para aceptar una detección**. Botón **Reiniciar** para repetir sin cerrar ventana/cámara. Meta y frenado ya no exigen permiso de giro: si el barrido se bloquea, la visión estacionaria sigue activa. **290 pruebas locales pasan; todavía sin validación del recorrido completo ni del reinicio en hardware.** Disparo activo 0.30 m y radio aproximado 0.22 m aportado por el usuario, con margen 0.03 m. Los modos anteriores se conservan.
 Este ensayo sigue azul en la ida y rojo en la vuelta; no reproduce una trayectoria
 grabada ni incorpora SLAM/Nav2.
+
+## Repetir giro y aproximación (21/11, revisión posterior)
+
+El usuario observó 90° por flecha y luego otro giro. Ahora se confirma reposo
+tras los 90° y se realiza una salida recta protegida a <=0.05 m/s hasta los
+0.40 m de rearme. No se encadena una corrección lateral en el mismo sitio.
+La ventana/telemetría muestran grados medidos, `ultimo_completado` y
+`salida_recta`; el ángulo de flecha sigue siendo 90°. Un camino ocupado detiene,
+sin forzar salida ni recortar el radio; desviación >5° o salida >30 s enclavan.
+
+Para aproximar se comprueba el disco de 0.25 m trasladado hacia delante; el
+margen de frenado se aplica a ese recorrido, sin inflar el ancho hacia una
+pared lateral. Diagonales, contorno ocupado, datos insuficientes/caducados siguen
+deteniendo. **Una distancia al centro <=0.25 m sigue bloqueando giro**: fue el
+motivo del último fragmento, después de iniciar derecha y antes del timeout.
+
+Una bandera vista lejos no gasta el plazo final: el acercamiento lento de 30 s
+comienza al entrar en frontal <=0.49 m; llegada sigue <=0.40 m. Sensores/guardas
+de etapa intactos. Cerrar y relanzar para cargar estos cambios. Probar primero
+una flecha con salida despejada; comprobar 90°, reposo y avance recto antes de
+añadir meta. El mismo comando de misión de abajo sirve. Validación local actual:
+**290 Task 1 y 51 Task 2**, sin validar físicamente esta revisión.
 
 ## Correcciones graves revisadas antes de repetir (21/11)
 

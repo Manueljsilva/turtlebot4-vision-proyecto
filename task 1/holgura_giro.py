@@ -18,6 +18,25 @@ class HolguraGiro:
     edad_s: float | None = None
     sectores: tuple[CoberturaSector, ...] = ()
     distancia_avance_m: float | None = None
+    puntos_base: tuple[tuple[float, float], ...] = ()
+
+
+def distancia_libre_recta(holgura, radio):
+    """Recorrido de un disco hacia +x hasta el primer punto observado.
+
+    El radio conserva la huella y su margen. El frenado se añade al recorrido,
+    no al ancho lateral del robot. Sin puntos/cobertura no se inventa espacio.
+    """
+    if (holgura is None or not holgura.valida or not holgura.puntos_base
+            or not isfinite(radio) or radio <= 0):
+        return None
+    libres = []
+    for x, y in holgura.puntos_base:
+        if hypot(x, y) <= radio:
+            return 0.
+        if x >= 0 and abs(y) <= radio:
+            libres.append(max(0., x-sqrt(max(0., radio*radio-y*y))))
+    return min(libres) if libres else None
 
 
 def transformacion_plana(traslacion, rotacion):
@@ -56,6 +75,7 @@ def analizar_holgura(scan, tf_plano, edad_s, cfg):
     total, utiles, infs, nans, fuera = ([0]*4 for _ in range(5))
     distancias = []
     distancias_avance = []
+    puntos_base = []
     proximidad = False
     cono_avance = radians(105)
     for i, r in enumerate(scan.ranges):
@@ -68,6 +88,7 @@ def analizar_holgura(scan, tf_plano, edad_s, cfg):
                 proximidad = True
             else:
                 px, py = tx+r*cos(ang), ty+r*sin(ang)
+                puntos_base.append((px, py))
                 dist = hypot(px, py)
                 distancias.append(dist)
                 if abs(atan2(py, px)) <= cono_avance:
@@ -88,4 +109,5 @@ def analizar_holgura(scan, tf_plano, edad_s, cfg):
     if insuficientes:
         return desconocida('Cobertura de giro insuficiente: '+', '.join(insuficientes),sectores)
     dist_avance = min(distancias_avance) if distancias_avance else min(distancias)
-    return HolguraGiro(True,min(distancias),'Contorno observado en base_link',edad_s,sectores,dist_avance)
+    return HolguraGiro(True,min(distancias),'Contorno observado en base_link',edad_s,sectores,
+                       dist_avance,tuple(puntos_base))

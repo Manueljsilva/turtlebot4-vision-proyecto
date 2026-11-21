@@ -2,7 +2,16 @@
 
 Actualizado el 21 de noviembre de 2026. Fuente base: las cinco páginas de [Computer_vision_proyectos.pdf](Computer_vision_proyectos.pdf), revisadas completas. Las indicaciones del usuario del 13 y 17 de noviembre **prevalecen para Task 1**. Se distinguen los requisitos confirmados, las decisiones propuestas y los componentes realmente implementados en [ESTADO_PROYECTO.md](ESTADO_PROYECTO.md).
 
-**Prioridad actual (21/11): validar en hardware los cuatro fallos graves corregidos.**
+**Prioridad actual (21/11): repetir flecha, salida recta y llegada a meta.**
+El usuario confirmó 90° seguidos de otro giro. Tras flecha se añade reposo y salida
+recta protegida a <=0.05 m/s hasta el rearme de 0.40 m, sin corrección lateral
+encadenada. Mostrar ángulo real por odometría. En aproximación se comprueba el
+disco trasladado: frenado/margen longitudinal no inflan el ancho lateral. Meta
+lejana no gasta sus 30 s hasta zona cercana (actualmente frontal <=0.49 m).
+Conservar giro de 90°, disparos 0.305/0.40 m, radio/márgenes, sensores y límites;
+bloqueos reales detienen. **290 Task 1 + 51 Task 2**. Corrección física pendiente.
+
+**Entrega anterior: cuatro fallos graves corregidos.**
 Base revisada del compañero: **main ca5d880**. Conservar su solución de diagonales,
 contorno de avance, recepción QR, precisión float32 y telemetría no bloqueante.
 La revisión completa memoria/plazo de flecha durante rearme (sin exigir verla
@@ -18,9 +27,9 @@ invertir; no dar por resuelto todo circuito con giros más juntos. Tras retenci�
 QR de 5 s sin poder aceptar, pedir nueva lectura de forma coordinada, sin falsificar
 marcas. Las guardas de parada por sensores/GUI caducados siguen activas.
 
-Solo se corrigen prioridades altas en esta entrega. Mantener pendientes los
-hallazgos medios de la auditoría: meta vista lejos con aproximación de 30 s,
-contorno radial que bloquea aproximación por detrás, exceso de caras y exclusión
+La petición posterior trata además el plazo de meta lejana y el bloqueo lateral
+de aproximación. Mantener pendientes los hallazgos medios restantes:
+contorno circular que bloquea aproximación por detrás, exceso de caras y exclusión
 global entre Task 1/Task 2. Conservar cambios locales de guías/notebooks/red y
 percepción fuera de la publicación. Integración Git por adelanto de main, sin
 sobrescribir archivos ajenos ni forzar rama; comprobar commit remoto y estado local.
