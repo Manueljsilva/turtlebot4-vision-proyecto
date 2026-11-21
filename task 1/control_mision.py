@@ -103,6 +103,7 @@ class ControlMision:
         self.senal_por_procesar = self.ultima_senal_recibida = None
         self.qr_votos = 0
         self.qr_pendiente = None
+        self.qr_reintentar_ns = None
         self.a = self.b = self.yaw_entrada_b = None
         self.qr_confirmado = False
         self.pose = self.pose_ns = None
@@ -143,6 +144,7 @@ class ControlMision:
         self.reposo = ReposoOdometria()
         if fase != 'BUSCAR_B':
             self.qr_pendiente = None
+            self.qr_reintentar_ns = None
         if fase not in ('IDA', 'FALLO'):
             self.evasion = None
         if fase not in ('IDA','VUELTA','FALLO'):
@@ -207,9 +209,12 @@ class ControlMision:
                     and self.busqueda_desde_ns is not None
                     and self.qr_votos == CONFIRMACIONES_VISUALES
                     and self.qr_ns is not None
-                    and reciente(self.qr_ns, ahora, EDAD_CAMARA_NS)
                     and self.qr_ns > self.busqueda_desde_ns):
-                self.qr_pendiente = self.qr_ns
+                if reciente(self.qr_ns, ahora, EDAD_CAMARA_NS):
+                    self.qr_pendiente = self.qr_ns
+                    self.qr_reintentar_ns = None
+                elif self.qr_ns <= ahora and self.qr_pendiente is None:
+                    self.qr_reintentar_ns = self.qr_ns
             if self.orden == 'INICIAR' and self.solicitud_ns is None:
                 self.solicitud_ns = self.actividad_ns
                 if self.reinicio_ns and self.fase == 'ESPERAR':
@@ -430,6 +435,12 @@ class ControlMision:
             self.fallar('Control cerrado', ahora)
         if self.fase in ('FALLO', 'FIN'):
             return cero(self.motivo)
+        # Retener una lectura recibida fresca permite recuperar sensores, pero
+        # no conservar una confirmación caducada indefinidamente. La GUI solo
+        # reabre esa lectura cuando recibe este rechazo explícito y su marca.
+        if (self.fase == 'BUSCAR_B' and self.qr_pendiente is not None
+                and not reciente(self.qr_pendiente, ahora, 5_000_000_000)):
+            self.qr_reintentar_ns, self.qr_pendiente = self.qr_pendiente, None
         if self.solicitud_ns is not None and ahora-self.solicitud_ns > self.cfg.tiempo_maximo_mision_s*1e9:
             self.fallar('Tiempo total de ensayo agotado', ahora)
             return cero(self.motivo)
@@ -553,6 +564,7 @@ class ControlMision:
             # la comprobación circular completa de abajo; no editar el snapshot.
             # No consumir el ID del controlador antes de cumplir desplazamiento_rearme_m.
             ev_giro = ev
+            esperando_rearme = False
             if (self.giros.activo is None and self.giros.pendiente is None and ev is not None
                     and ev['color'] == self.giros.color and ev['id'] > self.giros.ultimo_id
                     and self.giros.ultima_posicion is not None and self.rearme_insuficiente(pose)):
@@ -563,6 +575,8 @@ class ControlMision:
                     distancia_m=dist_rearme, requerido_m=self.giros.cfg.desplazamiento_rearme_m,
                     marca_ns=ev['marca_ns'],
                 )
+                self.senal_por_procesar = dict(ev)
+                esperando_rearme = True
                 ev_giro = None
             elif self.giros.pendiente is not None or self.giros.activo is not None or not self.rearme_insuficiente(pose):
                 self.rearme_bloqueo = None
@@ -574,13 +588,14 @@ class ControlMision:
                               else SimpleNamespace(**{**vars(lidar), 'dist_frente': esperar}))
             cfg_giro=SimpleNamespace(velocidad_giro=cfg.velocidad_giro,distancia_parada_m=0.)
             giro = self.giros.decidir(ev_giro,pose,ahora,not preparando,lidar_giro,cfg_giro)
-            self.senal_por_procesar = None
+            if not esperando_rearme:
+                self.senal_por_procesar = None
             if self.giros.pendiente and not tenia_pendiente:
                 if self.aproximacion_ns is None:
                     self.aproximacion_ns = ahora
                 if self.revalidacion_ns is None:
                     self.revalidacion_ns = ev['marca_ns'] if ev else None
-            elif self.giros.pendiente is None:
+            elif self.giros.pendiente is None and not esperando_rearme:
                 self.aproximacion_ns = self.revalidacion_ns = None
             if tenia_pendiente and self.giros.pendiente is None and self.giros.activo is None and giro is None:
                 motivo='Se perdio la maniobra de flecha pendiente'
@@ -624,6 +639,12 @@ class ControlMision:
             if self.giros.pendiente:
                 self.aproximacion_meta_ns=None
                 return self.aproximar(ahora,lidar,cfg,'Flecha guardada')
+            if esperando_rearme:
+                self.evasion = None
+                self.aproximacion_meta_ns = None
+                if lidar is not None and lidar.observacion_valida and lidar.dist_frente <= esperar + 1e-4:
+                    return cero('Flecha guardada: rearme insuficiente y pared cercana; detenido sin invertir')
+                return self.aproximar(ahora,lidar,cfg,'Flecha guardada: esperando rearme')
             # La evasión gira desde 0.45 m. Con bandera centrada y guardas
             # válidas se coordina un avance lento hasta 0.40 m, sin anticipar B.
             meta_encaminada=(self.meta is not None and self.meta_nueva.salida_visual and separado

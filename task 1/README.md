@@ -6,9 +6,12 @@ rostro objetivo/QR propio → rojo/evasión → meta A. A también lleva bandera
 mirando al robot cuando regrese. Al confirmar meta A y reposo, aparece un panel
 grande con la palabra y el robot queda detenido. El regreso completo aún no está
 validado físicamente. Guía vigente: [PRUEBA_MISION_GUIADA.md](PRUEBA_MISION_GUIADA.md),
-bloque 18 de [COMANDOS.txt](COMANDOS.txt); 260 tests locales. Flecha guardada
+bloque 18 de [COMANDOS.txt](COMANDOS.txt); 277 tests locales. Flecha guardada
 hasta disparo <=0.305 m (máximo 30 s), también en rojo; meta exige frontal <=0.40 m
-con acercamiento lento protegido antes de frenar/barrer. **Reiniciar**, junto
+con acercamiento lento protegido antes de frenar/barrer. Revisión sobre main ca5d880: protección de avance ante diagonales, memoria de
+flecha durante rearme y recuperación QR con rechazo explícito, sin renovar marcas.
+Telemetría no bloqueante compartida; prueba física de estas correcciones pendiente.
+**Reiniciar**, junto
 a Salir, detiene y espera reposo antes de permitir otra persona en la misma
 ventana; el nuevo Buscar vuelve a registrar A. Reinicio aún pendiente en hardware.
 Las descripciones

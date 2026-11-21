@@ -43,7 +43,7 @@ def preparar_movimiento(comando_camara, contenedor, config, mover, config_senale
     ejecutar_comando([*shell, 'source /opt/ros/jazzy/setup.bash && '
                      'python3 -c "import rclpy, tf2_ros, nav_msgs.msg, sensor_msgs.msg, geometry_msgs.msg"'])
     for archivo in ('evasion_lidar.py', 'seguridad_lidar.py', 'control_giros.py', 'config_senales.py',
-                    'control_busqueda.py', 'busqueda_lidar_ros.py'):
+                    'control_busqueda.py', 'busqueda_lidar_ros.py', 'telemetria_ros.py'):
         origen = control_giros_origen if archivo == 'control_giros.py' and control_giros_origen else TAREA / archivo
         ejecutar_comando(['sudo', '-n', 'docker', 'cp', str(origen), f'{contenedor}:{remoto}/{archivo}'])
     ejecutar_comando(['sudo', '-n', 'docker', 'cp', str(config), f'{contenedor}:{remoto}/config.json'])

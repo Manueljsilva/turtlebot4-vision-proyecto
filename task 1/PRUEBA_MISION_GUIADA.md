@@ -1,8 +1,30 @@
 # Ensayo integrado A → B → A
 
-Actualizado el 21 de noviembre de 2026: el usuario confirma que **el QR funciona tras aumentar su tamaño**. La prueba inmediata pasa a ser el recorrido completo, incluidas ambas banderas y flechas azules/rojas. **Una imagen nueva válida basta para aceptar una detección**. Botón **Reiniciar** para repetir sin cerrar ventana/cámara. Meta y frenado ya no exigen permiso de giro: si el barrido se bloquea, la visión estacionaria sigue activa. **260 pruebas locales pasan; todavía sin validación del recorrido completo ni del reinicio en hardware.** Disparo activo 0.30 m y radio aproximado 0.22 m aportado por el usuario, con margen 0.03 m. Los modos anteriores se conservan.
+Actualizado el 21 de noviembre de 2026: el usuario confirma que **el QR funciona tras aumentar su tamaño**. La prueba inmediata pasa a ser el recorrido completo, incluidas ambas banderas y flechas azules/rojas. **Una imagen nueva válida basta para aceptar una detección**. Botón **Reiniciar** para repetir sin cerrar ventana/cámara. Meta y frenado ya no exigen permiso de giro: si el barrido se bloquea, la visión estacionaria sigue activa. **277 pruebas locales pasan; todavía sin validación del recorrido completo ni del reinicio en hardware.** Disparo activo 0.30 m y radio aproximado 0.22 m aportado por el usuario, con margen 0.03 m. Los modos anteriores se conservan.
 Este ensayo sigue azul en la ida y rojo en la vuelta; no reproduce una trayectoria
 grabada ni incorpora SLAM/Nav2.
+
+## Correcciones graves revisadas antes de repetir (21/11)
+
+Se integra main **ca5d880** del compañero y se completan sus soluciones. No aumenta
+velocidades ni cambia el disparo nominal de flecha/meta, radio, márgenes o reposo.
+
+- Avance normal: ambos laterales demasiado cercanos detienen; el contorno válido
+  frontal/lateral en base_link protege también el avance ante objetos diagonales.
+- Segunda flecha: se conserva aunque desaparezca mientras espera rearme de **0.40 m
+  desde el giro previo**. No consume ID ni deja girar a evasión en sentido contrario.
+  Conserva plazo total de recepción **30 s**. Si llega al umbral frontal sin rearme,
+  se detiene y explica la causa; no se fuerza un giro ni se baja esa guarda.
+- QR leído y recibido fresco: retención de hasta **5 s** para recuperar sensores.
+  Si caduca, el nodo pide volver a leer esa misma confirmación mediante su marca;
+  GUI vuelve a exigir una imagen nueva del objetivo y su QR propio. Un estado viejo
+  sin acuse no borra una palabra ya aceptada. Imagen reciente no rescata QR antiguo.
+- Telemetría: pipe lleno/sin lector no bloquea el siguiente ciclo de parada. El
+  lanzador copia `telemetria_ros.py` tanto para misión como para búsqueda aislada.
+
+Validación local: 277 tests Task 1 y 51 Task 2, incluidos canales POSIX y recuperación.
+Cerrar/relanzar una vez carga esta revisión. Después sirve Reiniciar para repetir.
+Prueba física pendiente; hallazgos medios de la auditoría se mantienen separados.
 
 ## Colocación acordada
 

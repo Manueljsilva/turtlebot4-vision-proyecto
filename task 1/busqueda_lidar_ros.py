@@ -20,6 +20,7 @@ from control_giros import ControlGiro
 from config_senales import cargar_config_senales
 from evasion_lidar import cargar_config, decidir_scan
 from seguridad_lidar import EvasionLidarNode
+from telemetria_ros import emitir_telemetria
 
 
 class EntradaControl:
@@ -113,7 +114,7 @@ class BusquedaLidarNode(EvasionLidarNode):
                                   mover=self.pub_cmd is not None)
             if diagnostico_giro is not None:
                 estado['giro_ensayo'] = diagnostico_giro
-            print(json.dumps(estado), flush=True)
+            emitir_telemetria(json.dumps(estado))
             self._estado_ns = ahora
         return vx, wz
 

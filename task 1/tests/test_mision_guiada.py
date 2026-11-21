@@ -878,8 +878,76 @@ class MisionTests(unittest.TestCase):
         self.assertEqual(vx, 0.)
         self.assertLess(wz, 0.)
 
+    def test_segunda_flecha_se_conserva_sin_rever_cartel_durante_rearme(self):
+        self.iniciar()
+        self.c.giros.ultima_posicion=(0.,0.)
+        for i in range(1,4):self.paso(x=i*.1)
+        ev=dict(id=2,direccion='DERECHA',color='azul',marca_ns=self.t+200_000_000)
+        self.paso(senal=ev,sensor=lidar(.8))
+        inicio=self.c.aproximacion_ns
+        self.assertEqual(self.c.senal_por_procesar,ev)
+        self.assertEqual(self.c.giros.ultimo_id,0)
+        self.assertEqual(self.paso(x=.35,sensor=lidar(.32))[:2],(.05,0.))
+        self.assertIsNone(self.c.evasion)
+        self.assertEqual(self.c.aproximacion_ns,inicio)
+        self.assertEqual(self.paso(x=.35,sensor=lidar(.304))[:2],(0.,0.))
+        self.assertIsNone(self.c.giros.activo)  # No omitir el desplazamiento minimo.
+        self.paso(x=.45,sensor=lidar(.304))
+        for _ in range(5):r=self.paso(sensor=lidar(.304))
+        self.assertEqual(r[:2],(0.,-.4))
+
+    def test_rearme_espera_acotada_sin_renovar_por_nuevas_imagenes(self):
+        self.iniciar()
+        self.c.giros.ultima_posicion=(0.,0.)
+        self.paso(x=.15);self.paso(x=.30)
+        for _ in range(153):
+            ev=dict(id=2,direccion='DERECHA',color='azul',marca_ns=self.t+200_000_000)
+            r=self.paso(senal=ev,sensor=lidar(.304))
+            self.assertEqual(r[:2],(0.,0.))
+        self.assertEqual(self.c.fase,'FALLO')
+        self.assertIn('Aproximacion a flecha agotada',self.c.motivo)
+
+    def test_qr_retenido_caduca_durante_pausa_y_pide_relectura_explicita(self):
+        self.llegar_b()
+        marca=self.t+200_000_000
+        self.paso('QR_LISTO',qr_ns=marca,votos=1,marca=0)
+        self.assertEqual(self.c.qr_pendiente,marca)
+        for _ in range(30):self.paso('QR_LISTO',qr_ns=marca,votos=1,marca=0)
+        self.assertIsNone(self.c.qr_pendiente)
+        self.assertEqual(self.c.qr_reintentar_ns,marca)
+        self.assertFalse(self.c.qr_confirmado)
+        # Un frame reciente sin lectura QR nueva no rescata evidencia caducada.
+        self.paso('QR_LISTO',qr_ns=marca,votos=1)
+        self.assertEqual(self.c.fase,'BUSCAR_B')
+        self.paso('QR_LISTO',qr_ns=self.t+200_000_000,votos=1)
+        self.assertEqual(self.c.fase,'FRENAR_QR')
+
+    def test_qr_primera_entrega_caducada_no_se_acepta_por_camara_reciente(self):
+        self.llegar_b()
+        marca=self.t+200_000_000
+        for _ in range(8):self.paso('VERIFICAR')
+        self.paso('QR_LISTO',qr_ns=marca,votos=1)
+        self.assertEqual(self.c.fase,'BUSCAR_B')
+        self.assertFalse(self.c.qr_confirmado)
+        self.assertIsNone(self.c.qr_pendiente)
+        self.assertEqual(self.c.qr_reintentar_ns,marca)
+
 
 class PreparacionTests(unittest.TestCase):
+    def test_reintento_qr_requiere_rechazo_explicito_de_la_misma_lectura(self):
+        marca=2_000_000_000
+        s=NS(palabra='sol',ultima_marca=marca)
+        ensayo=NS(sesion=s,reintentar_qr=Mock())
+        v=NS(ensayo=ensayo)
+        for estado in (dict(fase='BUSCAR_B',qr_pendiente=False),
+                       dict(fase='BUSCAR_B',qr_reintentar_ns=marca-1),
+                       dict(fase='FRENAR_QR',qr_reintentar_ns=marca),
+                       dict(fase='BUSCAR_B',qr_confirmado=True,qr_reintentar_ns=marca)):
+            self.assertFalse(app.aplicar_reintento_qr(v,estado))
+        ensayo.reintentar_qr.assert_not_called()
+        self.assertTrue(app.aplicar_reintento_qr(v,dict(fase='BUSCAR_B',qr_reintentar_ns=marca)))
+        ensayo.reintentar_qr.assert_called_once()
+
     def puente_sin_proceso(self):
         p=app.PuenteMision.__new__(app.PuenteMision)
         p.cerrojo=threading.Lock()
@@ -1062,6 +1130,7 @@ class PreparacionTests(unittest.TestCase):
             self.assertTrue(any(str(app.CONFIG_SENALES_MISION) == x[-2] for x in copias))
             self.assertTrue(any(str(CONTROL) == x[-2] for x in copias))
             self.assertTrue(any(str(app.TAREA/'holgura_giro.py') == x[-2] for x in copias))
+            self.assertTrue(any(str(app.TAREA/'telemetria_ros.py') == x[-2] for x in copias))
             self.assertFalse(any('rostros' in x[-2] or 'galeria' in x[-2] for x in copias))
 
     def test_vision_no_analiza_rostros_antes_de_b_y_cambia_a_rojo(self):
@@ -1127,6 +1196,31 @@ class PreparacionTests(unittest.TestCase):
             self.assertEqual(v.ensayo.sesion.palabra,'árbol')
             self.assertEqual(v.ensayo.sesion.orden,'QR_LISTO')
             self.assertEqual(pausa.call_count,1)
+
+    def test_relectura_qr_tras_rechazo_usa_otra_imagen_y_misma_asociacion_objetivo(self):
+        sistema=SistemaFacial(Mock(),Galeria([[1,0]],['Persona A']),Criterio(.5,.1))
+        _,cfg=cargar_ensayo()
+        v=app.VisionMision(sistema,cfg)
+        sesion=app.SesionInterfaz()
+        t=20_000_000_000
+        sesion.iniciar('Persona A',t-2_000_000_000)
+        estado=dict(fase='BUSCAR_B',busqueda_desde_ns=t-100_000_000)
+        imagen=np.zeros((200,300,3),np.uint8)
+        cara=dict(caja=[30,30,50,70],aceptado=True,nombre='Persona A')
+        codigos=[dict(caja=[90,40,30,30],texto='árbol')]
+        with patch('prueba_meta_robot.analizar_candidatos',return_value=[cara]), \
+                patch('prueba_meta_robot.detectar_regiones_fotos',return_value=[]), \
+                patch.object(v.ensayo.detector,'detectar',return_value=dict(meta=None,codigos=codigos)) as leer:
+            with patch.object(app.time,'monotonic_ns',return_value=t):
+                v.actualizar(imagen,t,t,estado,sesion,Mock())
+            self.assertEqual(v.ensayo.sesion.palabra,'árbol')
+            self.assertTrue(app.aplicar_reintento_qr(v,dict(estado,qr_reintentar_ns=t)))
+            self.assertIsNone(v.ensayo.sesion.palabra)
+            with patch.object(app.time,'monotonic_ns',return_value=t+1_500_000_000):
+                v.actualizar(imagen,t+1_500_000_000,t+1_500_000_000,estado,sesion,Mock())
+            self.assertEqual(v.ensayo.sesion.palabra,'árbol')
+            self.assertEqual(v.ensayo.ultima_marca,t+1_500_000_000)
+            self.assertEqual(leer.call_count,2)
 
     def test_ventana_espera_camara_y_cierra_sin_iniciar(self):
         sistema = SistemaFacial(Mock(), Galeria([[1,0]], ['Persona A']), Criterio(.5,.1))
@@ -1321,8 +1415,8 @@ class NodoTests(unittest.TestCase):
         with patch.dict(sys.modules,reemplazos):
             spec = importlib.util.spec_from_file_location('mision_ros_simulada_nb',app.TAREA/'mision_ros.py')
             ros = importlib.util.module_from_spec(spec); spec.loader.exec_module(ros)
-        _,cfg_s = cargar_ensayo(config=app.CONFIG_SENALES_MISION)
-        c = ControlMision(cfg_s)
+        original,cfg_s = cargar_ensayo(config=app.CONFIG_SENALES_MISION)
+        c = ControlMision(cfg_s,clase_giros=original.ControlGiro)
         entrada = NS(fin=threading.Event(),tomar=lambda:None)
         nodo = ros.MisionNode(True,ConfigEvasion(),entrada,c)
         ahora=20_000_000_000
@@ -1330,6 +1424,9 @@ class NodoTests(unittest.TestCase):
             camara_ns=ahora,meta=None,senal=None,qr_ns=None,qr_votos=0)),ahora)
         nodo.pose=dict(frame_id='odom',child_frame_id='base_link',x=0.,y=0.,yaw=0.)
         nodo.pose_ns=ahora
+        # El primer ciclo registra A y ordena cero; simularlo antes de evaluar
+        # telemetría bloqueada mientras existe una propuesta de avance.
+        c.decidir(ahora,nodo.pose,ahora,None,ConfigEvasion())
         scan=NS(header=NS(frame_id='base_link'),ranges=[1.8]*360,angle_min=-pi,
             angle_increment=2*pi/360,range_min=.05,range_max=12.)
         class SalidaBloqueada:
@@ -1352,7 +1449,8 @@ class NodoTests(unittest.TestCase):
                         os.write(w_fd, b'x'*4096)
                     except BlockingIOError:
                         break
-                nodo2 = ros.MisionNode(True,ConfigEvasion(),entrada,ControlMision(cfg_s))
+                nodo2 = ros.MisionNode(True,ConfigEvasion(),entrada,
+                                      ControlMision(cfg_s,clase_giros=original.ControlGiro))
                 nodo2.pose, nodo2.pose_ns = nodo.pose, ahora
                 with os.fdopen(w_fd, 'w', closefd=False) as w_file, \
                         patch.object(ros.time,'monotonic_ns',return_value=ahora+300_000_000), \

@@ -4,10 +4,8 @@ import argparse
 import fcntl
 import json
 from math import degrees, hypot
-import os
 from pathlib import Path
 import signal
-import stat
 import sys
 import time
 
@@ -25,40 +23,7 @@ from control_mision import ControlMision, cargar_config_mision
 from evasion_lidar import cargar_config, decidir_scan
 from holgura_giro import analizar_holgura, transformacion_plana
 from seguridad_lidar import EvasionLidarNode
-
-
-def _emitir_telemetria(texto):
-    """Emite JSON sin bloquear el lazo de control si stdout apunta a un pipe lleno."""
-    salida = sys.stdout
-    if salida is None:
-        return
-    try:
-        fd = salida.fileno()
-    except (AttributeError, OSError, ValueError):
-        fd = None
-    if type(fd) is int and fd >= 0:
-        try:
-            modo = os.fstat(fd).st_mode
-        except OSError:
-            modo = 0
-        if stat.S_ISFIFO(modo) or stat.S_ISSOCK(modo):
-            datos = (texto + '\n').encode('utf-8')
-            try:
-                limite = os.fpathconf(fd, 'PC_PIPE_BUF') if hasattr(os, 'fpathconf') else 4096
-            except (OSError, ValueError):
-                limite = 4096
-            if len(datos) <= limite:
-                try:
-                    os.set_blocking(fd, False)
-                    os.write(fd, datos)
-                except (BlockingIOError, BrokenPipeError, InterruptedError, OSError):
-                    pass
-            return
-    try:
-        salida.write(texto + '\n')
-        salida.flush()
-    except (BlockingIOError, BrokenPipeError, OSError, ValueError):
-        pass
+from telemetria_ros import emitir_telemetria as _emitir_telemetria
 
 
 class MisionNode(EvasionLidarNode):
@@ -105,6 +70,7 @@ class MisionNode(EvasionLidarNode):
                 fase=c.fase, fase_desde_ns=c.desde_ns, vx=vx, wz=wz, mover=self.pub_cmd is not None,
                 terminado=c.fase in ('FALLO', 'FIN'), a=c.a, b=c.b,
                 qr_confirmado=c.qr_confirmado, qr_pendiente=c.qr_pendiente is not None,
+                qr_reintentar_ns=c.qr_reintentar_ns,
                 busqueda_desde_ns=c.busqueda_desde_ns,
                 reinicio_ns=c.reinicio_ns,
                 yaw_entrada_b=c.yaw_entrada_b,

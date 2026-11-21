@@ -2,29 +2,28 @@
 
 Actualizado el 21 de noviembre de 2026. Fuente base: las cinco páginas de [Computer_vision_proyectos.pdf](Computer_vision_proyectos.pdf), revisadas completas. Las indicaciones del usuario del 13 y 17 de noviembre **prevalecen para Task 1**. Se distinguen los requisitos confirmados, las decisiones propuestas y los componentes realmente implementados en [ESTADO_PROYECTO.md](ESTADO_PROYECTO.md).
 
-**Prioridad actual (21/11): prueba completa A → B → A.** El usuario confirma que el QR ya funciona al aumentar su tamaño. Preparar A con bandera visible al regresar, flechas azules en ida/rojas en vuelta, B con bandera al fondo y fotografías/QR legibles. Ejecutar --mision-guiada --mover, nombre/Buscar desde A. Verificar giros, llegada B, reposo/barrido, objetivo/QR propio, orientación de entrada B +180°, vuelta y nueva meta A. La interfaz muestra ahora una tarjeta grande con la palabra solo tras FIN/QR confirmado. Pasan 260 tests locales; no hay retorno físico confirmado todavía. Publicar cada cambio terminado y verificar main, con exclusiones vigentes.
+**Prioridad actual (21/11): validar en hardware los cuatro fallos graves corregidos.**
+Base revisada del compañero: **main ca5d880**. Conservar su solución de diagonales,
+contorno de avance, recepción QR, precisión float32 y telemetría no bloqueante.
+La revisión completa memoria/plazo de flecha durante rearme (sin exigir verla
+otra vez ni girar contrario), caducidad del QR retenido y relectura con rechazo
+explícito del nodo; comparte telemetría segura entre misión y búsqueda aislada.
+**277 tests Task 1 + 51 Task 2**, incluida validación POSIX de pipe lleno y la
+parada posterior. Sin prueba física nueva; mantener radio/márgenes/velocidades.
 
-**Prueba inmediata (21/11):** conservar la flecha confirmada aunque deje de verse
-al acercarse y aceptar meta solo con frontal <=**0.40 m**. Memoria integrada
-máxima de 30 s desde el primer evento, sin renovación por imágenes/IDs/latidos;
-el plazo también vence durante pausas. La interfaz muestra Flecha guardada.
-Azul y rojo usan igual disparo nominal 0.30 + tolerancia 0.005 m y reposo antes
-de completar 90°. Ante bandera centrada y guardas válidas, aproximar <=0.05 m/s
-sin giro evasivo desde 0.45 m; si pierde la bandera, detener. Acercamiento a meta
-limitado a 30 s, sin reducir márgenes. 260 tests locales; cerrar/relanzar y probar
-físicamente. El fragmento nuevo no contiene flecha recibida/pendiente/activa;
-sí acepta B a ~0.467 m con el umbral anterior de 0.60 m. No atribuir todas las
-pruebas de flecha a caducidad sin el evento. Recorrido completo aún pendiente.
+Cerrar/relanzar --mision-guiada --mover, nombre/Buscar desde A. Comprobar primera
+y segunda flecha, giro/reposo, meta B, objetivo/QR propio, retorno rojo y meta A.
+Rearme exige 0.40 m desde giro anterior: si pared impide alcanzarlo, detener sin
+invertir; no dar por resuelto todo circuito con giros más juntos. Tras retención
+QR de 5 s sin poder aceptar, pedir nueva lectura de forma coordinada, sin falsificar
+marcas. Las guardas de parada por sensores/GUI caducados siguen activas.
 
-**Aclaración y entrega del evento (21/11):** el usuario confirma 1/1 durante IDA.
-No descartar esa observación porque el fragmento no la contiene. Se reproducen
-pérdidas entre GUI rápida/emisor de 100 ms y durante recuperación odométrica.
-El puente conserva el evento fresco hasta acuse del nodo; el nodo memoriza antes
-de los permisos de movimiento, con plazo 30 s desde recepción. Sin renovar marca
-de imagen ni autorizar movimiento caducado; UI y giro.recibido/por_procesar
-separan lectura, recepción y espera. Pasan 260 tests; reproducción local no
-identifica por sí sola la causa física exacta de todos los intentos del usuario.
-Relanzar una vez y comprobar Flecha recibida/guardada antes de probar el giro.
+Solo se corrigen prioridades altas en esta entrega. Mantener pendientes los
+hallazgos medios de la auditoría: meta vista lejos con aproximación de 30 s,
+contorno radial que bloquea aproximación por detrás, exceso de caras y exclusión
+global entre Task 1/Task 2. Conservar cambios locales de guías/notebooks/red y
+percepción fuera de la publicación. Integración Git por adelanto de main, sin
+sobrescribir archivos ajenos ni forzar rama; comprobar commit remoto y estado local.
 
 **Ajuste anterior (21/11):** el usuario pide pasar a 0.30 m y reporta bloqueo en meta.
 El fragmento muestra evasión en IDA, izquierda ~0.311 m contra límite 0.32 m y

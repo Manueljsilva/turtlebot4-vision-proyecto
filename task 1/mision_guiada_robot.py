@@ -128,6 +128,22 @@ def guardar_estado(archivo, sesion, estado, palabra, interrumpida_por_reinicio=F
     temporal.replace(archivo)
 
 
+def aplicar_reintento_qr(vision, estado):
+    """Solo el rechazo de esta lectura autoriza borrarla y volver a inferir.
+
+    Un estado anterior al acuse no demuestra rechazo y no debe borrar una
+    palabra mientras el nodo ya prepara el retorno.
+    """
+    b = vision.ensayo.sesion
+    if (estado and estado.get('fase') == 'BUSCAR_B'
+            and not estado.get('qr_confirmado') and b.palabra is not None
+            and type(estado.get('qr_reintentar_ns')) is int
+            and estado['qr_reintentar_ns'] == b.ultima_marca):
+        vision.ensayo.reintentar_qr()
+        return True
+    return False
+
+
 class VisionMision:
     def __init__(self, sistema, cfg):
         self.ensayo = EnsayoB(sistema)
@@ -276,7 +292,7 @@ def dibujar(imagen, estado_camara, entrada, vision, estado, mover):
                          f"esperar frente <= {giro.get('disparo_efectivo_m',.305):.3f} m")
             elif giro.get('rearme'):
                 r = giro['rearme']
-                senal = (f"Flecha rechazada por rearme ({r['distancia_m']:.2f}/{r['requerido_m']:.2f} m): "
+                senal = (f"Flecha guardada; esperando rearme ({r['distancia_m']:.2f}/{r['requerido_m']:.2f} m): "
                          f"{r['direccion']}")
             elif giro.get('por_procesar'):
                 senal = f"Flecha recibida: {giro['por_procesar']['direccion']}; esperando sensores recientes"
@@ -400,10 +416,7 @@ def main(argv=None):
                 if estado_camara == 'Camara del robot':
                     estado_camara = 'Sin imagen reciente'
             b = vision.ensayo.sesion
-            if (estado and estado['fase'] == 'BUSCAR_B'
-                    and not estado.get('qr_confirmado') and not estado.get('qr_pendiente')
-                    and b.palabra is not None and not reciente(b.ultima_marca, ahora, EDAD_CAMARA_NS)):
-                vision.ensayo.reintentar_qr()
+            aplicar_reintento_qr(vision, estado)
             orden = 'ESPERAR' if sesion.inicio_ns is None or estado is None else (
                 'INICIAR' if estado['fase'] == 'ESPERAR' else 'OBSERVAR')
             if estado and estado['fase'] == 'BUSCAR_B':

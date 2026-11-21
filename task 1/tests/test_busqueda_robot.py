@@ -33,10 +33,11 @@ class PreparacionBusquedaTests(unittest.TestCase):
             self.assertEqual('--mover' in orden,mover)
             self.assertIn('-i',orden)
             copias=[c.args[0] for c in cmd.call_args_list if 'cp' in c.args[0]]
-            self.assertEqual(len(copias),7)
+            self.assertEqual(len(copias),8)
             self.assertEqual({Path(c[-2]).name for c in copias},
                              {'evasion_lidar.py','seguridad_lidar.py','control_busqueda.py',
-                              'busqueda_lidar_ros.py','evasion_lidar.json','control_giros.py','config_senales.py'})
+                              'busqueda_lidar_ros.py','evasion_lidar.json','control_giros.py','config_senales.py',
+                              'telemetria_ros.py'})
 
     def test_no_arranca_control_con_cmd_vel_ausente_o_tipo_incorrecto(self):
         for respuesta in ('','/cmd_vel [geometry_msgs/msg/Twist]',
@@ -154,6 +155,31 @@ def cargar_ros_simulado():
 
 
 class NodoIntegradoTests(unittest.TestCase):
+    def test_salida_bloqueada_no_impide_procesar_parada_en_busqueda_aislada(self):
+        mod=cargar_ros_simulado()
+        ahora=5_000_000_000
+        entrada=NS(fin=threading.Event(),linea=None)
+        def tomar():
+            linea,entrada.linea=entrada.linea,None
+            return linea
+        entrada.tomar=tomar
+        n=mod.BusquedaLidarNode(True,ConfigEvasion(),entrada)
+        n.pose=dict(frame_id='odom',child_frame_id='base_link',x=0.,y=0.,yaw=0.)
+        n.pose_ns=ahora
+        scan=NS(header=NS(frame_id='base_link'),ranges=[1.8]*360,angle_min=-pi,
+                angle_increment=2*pi/360,range_min=.05,range_max=12.)
+        entrada.linea=json.dumps(dict(version=1,secuencia=0,orden='BUSCAR',
+            actividad_ns=ahora,camara_ns=ahora))
+        class SalidaBloqueada:
+            def write(self,_):raise BlockingIOError('pipe lleno')
+            def flush(self):pass
+        with patch.object(mod.time,'monotonic_ns',return_value=ahora),patch('sys.stdout',SalidaBloqueada()):
+            n._scan_cb(scan);n._ciclo()
+            self.assertEqual(n.pub_cmd.mensajes[-1].twist.linear.x,.1)
+            entrada.fin.set()
+            n._ciclo()
+            self.assertEqual(n.pub_cmd.mensajes[-1].twist.linear.x,0.)
+
     def test_evasion_publica_giro_sin_avance_y_luego_reanuda_recto(self):
         mod = cargar_ros_simulado()
         entrada = NS(fin=threading.Event(), linea=None)
