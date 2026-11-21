@@ -16,15 +16,21 @@ Este ensayo conserva la configuración **LiDAR local**: avance 0.10 m/s, giro ha
 0.40 rad/s, precaución 0.45 m y parada 0.32 m. La rama original usa 0.22 m/s,
 0.90 rad/s, 0.55 m y 0.34 m; esos cambios no se incorporan. Por tanto se prueba su
 controlador de espera con nuestro perfil de movimiento, no toda la rama tal cual.
-No combinar con `--config-senales`: se usa la copia original de 52 cm/seis segundos.
+**Ajuste local del 20 de noviembre:** se usa
+[`config/senales_giro_ensayo.json`](../../config/senales_giro_ensayo.json), con
+`esperar_pared_m=0.48` en lugar de 0.52 m. Es la misma configuración que se carga
+en la ventana y se copia al nodo ROS. La copia original de este directorio queda
+intacta en 0.52 m y se sigue verificando, junto con el controlador, por SHA-256.
+El único cambio respecto a ese JSON es el disparo; se conservan seis segundos de
+espera, confirmaciones, ángulo y rearme. No combinar con `--config-senales`.
 
 Cambio local solicitado el 19 de noviembre: la evasión frontal y lateral ahora
 ordena **avance cero mientras gira**, y vuelve al avance recto cuando ya no requiere
 giro. El controlador/configuración originales de señales siguen intactos; este
 cambio pertenece a la evasión local con la que se ensayan. Las velocidades angulares,
-distancias y protecciones se conservan. No equivale a verificar frenado o huella en
+distancias LiDAR y protecciones se conservan. No equivale a verificar frenado o huella en
 el robot. La evasión gira al llegar a precaución 0.45 m o al corregir un lateral;
-una flecha confirmada pide su giro al llegar a <=0.52 m, sujeto a la barrera de 0.32 m.
+una flecha confirmada pide ahora su giro al llegar a <=0.48 m, sujeto a la barrera de 0.32 m.
 
 Nombre + Buscar funcionan como en la prueba combinada: se registra A antes de
 avanzar, la evasión funciona aun sin flecha y el rostro objetivo puede detener la
@@ -38,8 +44,8 @@ sin `--mover`. Mostrar una flecha del color elegido: debe confirmarse en tres
 imágenes nuevas. Con el robot quieto se puede acercar un panel con la flecha que
 también sea visible a la altura del LiDAR; observar distancias en la terminal.
 
-- Frente >0.52 m: `ESPERA_PARED`, dirección y edad `pendiente_s`.
-- Frente <=0.52 m y frente/laterales >0.32 m: `GIRANDO`, propuesta vx=0 y
+- Frente >0.48 m: `ESPERA_PARED`, dirección y edad `pendiente_s`.
+- Frente <=0.48 m y frente/laterales >0.32 m: `GIRANDO`, propuesta vx=0 y
   wz negativa para derecha o positiva para izquierda.
 - Sensor/cámara/actividad caducados, cobertura/TF insuficientes o giro bloqueado:
   propuesta cero; revisar también `[BUSQUEDA]` y `permitido`.
@@ -79,7 +85,7 @@ inicio, envío y caducidad. No se redujo el umbral a partir de ese registro.
 El controlador original descarta la dirección tras seis segundos aunque el mismo
 cartel siga visible. `SIN_FLECHA_PENDIENTE` tras esa espera puede ser ese fallo,
 no un fallo de cámara. Hacer primero esta comprobación **sin --mover**: mantener el
-cartel más de siete segundos con frente >0.52 m y después acercar el panel. Con el
+cartel más de siete segundos con frente >0.48 m y después acercar el panel. Con el
 mismo ID no volverá a armar el giro; cerrar/reabrir para repetir.
 
 Mientras espera, la evasión conserva el mando. No hay vinculación entre el retorno

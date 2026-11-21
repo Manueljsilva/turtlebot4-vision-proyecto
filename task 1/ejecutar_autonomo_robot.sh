@@ -12,7 +12,9 @@ EVASION=false
 RECONOCIMIENTO=false
 INTEGRADA=false
 SENALES_SOLO=false
+META_SOLO=false
 PRUEBA_B=false
+MISION=false
 AVANZAR_META=false
 CON_SENALES=false
 ENSAYO_GIRO=false
@@ -37,7 +39,9 @@ while [[ $# -gt 0 ]]; do
         --solo-reconocimiento) RECONOCIMIENTO=true; shift ;;
         --evasion-reconocimiento) INTEGRADA=true; shift ;;
         --solo-senales) SENALES_SOLO=true; shift ;;
+        --solo-meta) META_SOLO=true; shift ;;
         --prueba-meta-b) PRUEBA_B=true; shift ;;
+        --mision-guiada) MISION=true; shift ;;
         --avanzar-hasta-meta) AVANZAR_META=true; shift ;;
         --senales) CON_SENALES=true; shift ;;
         --ensayo-giro-companero) ENSAYO_GIRO=true; shift ;;
@@ -48,10 +52,13 @@ while [[ $# -gt 0 ]]; do
             echo 'O bien: ... --solo-reconocimiento [--nombre NOMBRE] [--topico-camara TOPICO]'
             echo 'O bien: ... --evasion-reconocimiento [--mover] [--nombre NOMBRE]'
             echo 'O bien: ... --solo-senales [--tramo ida|vuelta] (cámara, siempre sin movimiento)'
+            echo 'O bien: ... --solo-meta (solo camara/bandera, sin galeria ni publicador)'
             echo 'O bien: ... --prueba-meta-b [--nombre NOMBRE] [--mover] (cerca de B, solo giro)'
+            echo 'O bien: ... --mision-guiada [--nombre NOMBRE] [--mover] (ensayo azul > meta/QR > rojo > A)'
+            echo 'Mision guiada: bandera B al fondo; usa disparo local 48 cm y orientacion de entrada +180 grados.'
             echo 'Añadir --avanzar-hasta-meta al ensayo B para evasion previa; despues de la meta frena y solo gira.'
             echo 'Añadir --senales [--tramo ida|vuelta] a la prueba combinada para giros por señales.'
-            echo 'Añadir --ensayo-giro-companero a --evasion-reconocimiento --senales para probar espera de pared (52 cm/6 s).'
+            echo 'Añadir --ensayo-giro-companero a --evasion-reconocimiento --senales para probar espera de pared (ajuste local 48 cm/6 s).'
             echo 'Ida usa azul; vuelta usa rojo. Giro de 90 grados por odometría, ajustable con --config-senales.'
             echo 'Sin --mover muestra decisiones/percepcion del modo elegido; no crea publicador de velocidad.'
             echo 'Admite TB4_IP, TB4_DOMINIO, TB4_CONTENEDOR y --config RUTA.'
@@ -65,7 +72,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 MODOS=0
-for MODO in "$EVASION" "$RECONOCIMIENTO" "$INTEGRADA" "$SENALES_SOLO" "$PRUEBA_B"; do
+for MODO in "$EVASION" "$RECONOCIMIENTO" "$INTEGRADA" "$SENALES_SOLO" "$META_SOLO" "$PRUEBA_B" "$MISION"; do
     if "$MODO"; then MODOS=$((MODOS+1)); fi
 done
 [[ "$MODOS" -eq 1 ]] || { echo 'Elegir un solo modo; consultar --help.' >&2; exit 2; }
@@ -86,13 +93,13 @@ fi
 if "$INTEGRADA" && ! "$CON_SENALES" && [[ ${#OPCIONES_SENALES[@]} -gt 0 ]]; then
     echo 'Añadir --senales para configurar giros en la prueba combinada.' >&2; exit 2
 fi
-if "$SENALES_SOLO"; then
-    [[ ${#OPCIONES[@]} -eq 0 ]] || { echo '--solo-senales nunca permite --mover.' >&2; exit 2; }
+if "$SENALES_SOLO" || "$META_SOLO"; then
+    [[ ${#OPCIONES[@]} -eq 0 ]] || { echo 'El modo visual nunca permite --mover.' >&2; exit 2; }
     for OPCION in "${OPCIONES_FACIALES[@]}"; do
         [[ "$OPCION" != --nombre && "$OPCION" != --sin-ventana ]] || {
-            echo 'La prueba de señales no usa nombres ni --sin-ventana.' >&2; exit 2; }
+            echo 'El modo visual no usa nombres ni --sin-ventana.' >&2; exit 2; }
     done
-elif "$INTEGRADA" || "$PRUEBA_B"; then
+elif "$INTEGRADA" || "$PRUEBA_B" || "$MISION"; then
     if "$EVASION" || "$RECONOCIMIENTO"; then
         echo 'Elegir un solo modo: --evasion-reconocimiento, --solo-evasion o --solo-reconocimiento.' >&2
         exit 2
@@ -131,10 +138,19 @@ if "$PRUEBA_B"; then
         --dominio "$DOMINIO_ROBOT" --contenedor "$CONTENEDOR" --config "$CONFIG" \
         "${OPCIONES_FACIALES[@]}" "${OPCIONES[@]}"
 fi
+if "$MISION"; then
+    exec "$PYTHON" -u "$TAREA_DIR/mision_guiada_robot.py" --ip "$IP_ROBOT" \
+        --dominio "$DOMINIO_ROBOT" --contenedor "$CONTENEDOR" --config "$CONFIG" \
+        "${OPCIONES_FACIALES[@]}" "${OPCIONES[@]}"
+fi
 if "$SENALES_SOLO"; then
     exec "$PYTHON" -u "$TAREA_DIR/prueba_senales_robot.py" --ip "$IP_ROBOT" \
         --dominio "$DOMINIO_ROBOT" --contenedor "$CONTENEDOR" \
         "${OPCIONES_FACIALES[@]}" "${OPCIONES_SENALES[@]}"
+fi
+if "$META_SOLO"; then
+    exec "$PYTHON" -u "$TAREA_DIR/prueba_meta_visual.py" --ip "$IP_ROBOT" \
+        --dominio "$DOMINIO_ROBOT" --contenedor "$CONTENEDOR" "${OPCIONES_FACIALES[@]}"
 fi
 if "$RECONOCIMIENTO"; then
     exec "$PYTHON" -u "$TAREA_DIR/prueba_facial_robot.py" --ip "$IP_ROBOT" \

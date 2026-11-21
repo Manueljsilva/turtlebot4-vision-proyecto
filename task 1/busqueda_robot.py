@@ -232,7 +232,7 @@ def main(argv=None):
     if args.ensayo_giro_companero and not args.senales:
         parser.error('--ensayo-giro-companero requiere --senales')
     if args.ensayo_giro_companero and args.config_senales != TAREA/'config/senales_giro.json':
-        parser.error('El ensayo usa su configuración de señales original; no combinar con --config-senales')
+        parser.error('El ensayo usa config/senales_giro_ensayo.json; no combinar con --config-senales')
     video, puente = None, None
     ventana = 'Task 1 - evasion y busqueda de persona'
     abierta = False
@@ -248,7 +248,7 @@ def main(argv=None):
             print(f'[ENSAYO GIROS] Compañero {SNAPSHOT[:7]}: pared {cfg_senales.esperar_pared_m:.2f} m, '
                   f'memoria {cfg_senales.tiempo_espera_pared_s:.1f} s; '
                   f'avance {cfg_evasion.velocidad_avance:.2f} m/s, giro {cfg_evasion.velocidad_giro:.2f} rad/s. '
-                  'Controlador original con configuración LiDAR local; no es la misión completa.', flush=True)
+                  'Controlador original con ajustes locales de señales y LiDAR; no es la misión completa.', flush=True)
         else:
             cfg_senales = cargar_config_senales(args.config_senales) if args.senales else None
         consulta_senales = ConsultaSenales(args.tramo, cfg_senales) if args.senales else None

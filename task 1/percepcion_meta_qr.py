@@ -122,15 +122,29 @@ class DetectorMetaQR:
         for x, y, w, h in cajas_qr:
             x0, y0, x1, y1 = [int(v*escala*s) for v in (x, y, x+w, y+h)]
             cv2.rectangle(pequeno, (max(0, x0-4), max(0, y0-4)), (x1+4, y1+4), 255, -1)
-        pts, grupo, _, confianza = detect_meta(pequeno)
         meta = None
-        if len(grupo):
-            caja = caja_puntos(pts[grupo]/(s*escala))
+        # La preview pequeña pierde cruces al muestrear radios enteros. Un único
+        # reintento acotado mejora su localización subpíxel; no crea detalle nuevo.
+        aumento = min(2., 960/max(pequeno.shape))
+        factores = (1., aumento) if aumento >= 1.5 else (1.,)
+        for factor in factores:
+            busqueda = (pequeno if factor == 1. else cv2.resize(pequeno, None, fx=factor, fy=factor,
+                                                              interpolation=cv2.INTER_CUBIC))
+            pts, grupo, _, confianza = detect_meta(busqueda)
+            if not len(grupo):
+                continue
+            caja = caja_puntos(pts[grupo]/(s*escala*factor))
             x, y, w, h = caja
+            # En el reintento buscar también localizadores QR pequeños que antes
+            # podían quedar por debajo de diez píxeles. Conserva el veto, sin leer texto.
+            extra = ([[v/(s*escala*factor) for v in b] for b in marcadores_qr(busqueda)]
+                     if factor != 1. else [])
             tiene_qr = any(x-.1*w <= a+c/2 <= x+1.1*w and y-.1*h <= b+d/2 <= y+1.1*h
-                           for a, b, c, d in cajas_qr+finders)
+                           for a, b, c, d in cajas_qr+finders+extra)
             if not tiene_qr and w >= 25 and h >= 40:
-                meta = dict(caja=caja, confianza=confianza, esquinas=len(grupo))
+                meta = dict(caja=caja, confianza=confianza, esquinas=len(grupo),
+                            metodo='geometria' if factor == 1. else 'geometria_ampliada')
+                break
         return dict(meta=meta, codigos=codigos)
 
 

@@ -1,0 +1,9 @@
+{
+  "separacion_meta_m": 0.6,
+  "ausencia_meta_s": 1.5,
+  "radio_llegada_a_m": 0.6,
+  "frente_meta_m": 0.6,
+  "tiempo_maximo_mision_s": 900.0,
+  "tiempo_orientacion_s": 45.0,
+  "tiempo_aproximacion_s": 30.0
+}

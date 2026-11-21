@@ -1,4 +1,4 @@
-"""Carga explícita del controlador experimental, sin sustituir el habitual."""
+"""Controlador original verificado y ajuste local del ensayo, sin sustituir el habitual."""
 
 import hashlib
 import importlib.util
@@ -9,7 +9,7 @@ import sys
 SNAPSHOT = 'e78c3b52d07be0add80103365bb2ad5fc068e91b'
 CARPETA = Path(__file__).resolve().parent / 'experimentos/mejora_competicion'
 CONTROL = CARPETA / 'control_giros.py'
-CONFIG = CARPETA / 'senales_giro.json'
+CONFIG = Path(__file__).resolve().parent / 'config/senales_giro_ensayo.json'
 HASHES = {
     'control_giros.py': '14a9a10e20c9a742a09052a949b85bb7775b7d92863134d1836e27b9c42fdd44',
     'senales_giro.json': '163c604919c932e85b87b984a2a0e734d7f236f79c2ff38767433472955e36e1',
@@ -32,7 +32,7 @@ def diagnostico_senales(resultado, inicio_ns, ahora_ns, enviado=None):
 
 
 def cargar_ensayo(carpeta=CARPETA):
-    """Verifica copias del snapshot antes de importarlas o copiarlas a Docker."""
+    """Verifica el snapshot y carga el perfil local usado también en Docker."""
     carpeta = Path(carpeta)
     for nombre, esperado in HASHES.items():
         if hashlib.sha256((carpeta / nombre).read_bytes()).hexdigest() != esperado:
@@ -43,7 +43,7 @@ def cargar_ensayo(carpeta=CARPETA):
     sys.modules[nombre_modulo] = modulo  # dataclass necesita resolver su módulo.
     try:
         spec.loader.exec_module(modulo)
-        cfg = modulo.cargar_config_senales(carpeta / 'senales_giro.json')
+        cfg = modulo.cargar_config_senales(CONFIG)
     except Exception:
         sys.modules.pop(nombre_modulo, None)
         raise

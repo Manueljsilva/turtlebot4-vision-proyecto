@@ -1,0 +1,12 @@
+{
+  "ancho": 640,
+  "diametro_minimo_px": 55,
+  "confirmaciones": 3,
+  "ausencia_rearme_s": 1.5,
+  "angulo_giro_deg": 90.0,
+  "tolerancia_deg": 5.0,
+  "tiempo_maximo_giro_s": 12.0,
+  "desplazamiento_rearme_m": 0.4,
+  "esperar_pared_m": 0.48,
+  "tiempo_espera_pared_s": 6.0
+}

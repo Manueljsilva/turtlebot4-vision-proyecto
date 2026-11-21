@@ -2,6 +2,7 @@
 
 import io
 import json
+from dataclasses import asdict
 from math import pi
 from pathlib import Path
 import shutil
@@ -38,7 +39,11 @@ def scan(frente=1.8):
 class SnapshotTests(unittest.TestCase):
     def test_copias_verificadas_y_cambio_rechazado(self):
         mod, cfg = cargar_ensayo()
-        self.assertEqual(cfg.esperar_pared_m, .52)
+        self.assertEqual(cfg.esperar_pared_m, .48)
+        original = mod.cargar_config_senales(CARPETA/'senales_giro.json')
+        self.assertEqual(original.esperar_pared_m, .52)
+        self.assertEqual({k for k, v in asdict(cfg).items() if v != asdict(original)[k]},
+                         {'esperar_pared_m'})
         self.assertEqual(cfg.tiempo_espera_pared_s, 6.)
         self.assertEqual(Path(mod.__file__).resolve(), CONTROL)
         with tempfile.TemporaryDirectory() as tmp:
@@ -61,12 +66,14 @@ class SnapshotTests(unittest.TestCase):
                                   s.range_min, s.range_max, cfg=cfg)
         self.assertIsNone(ctrl.decidir(evento(), pose, AHORA, True, lidar(1.8), cfg))
         self.assertEqual(ctrl.pendiente['direccion'], 'DERECHA')
-        giro = ctrl.decidir(None, pose, AHORA+100_000_000, True, lidar(.50), cfg)
+        self.assertIsNone(ctrl.decidir(None, pose, AHORA+50_000_000, True, lidar(.50), cfg))
+        self.assertIsNone(ctrl.activo)
+        giro = ctrl.decidir(None, pose, AHORA+100_000_000, True, lidar(.48), cfg)
         self.assertEqual(giro[:2], (0., -.4))
         pose['yaw'] = -85*pi/180
-        self.assertLess(ctrl.decidir(None, pose, AHORA+200_000_000, True, lidar(.50), cfg)[1], 0)
+        self.assertLess(ctrl.decidir(None, pose, AHORA+200_000_000, True, lidar(.48), cfg)[1], 0)
         pose['yaw'] = -pi/2
-        fin = ctrl.decidir(None, pose, AHORA+300_000_000, True, lidar(.50), cfg)
+        fin = ctrl.decidir(None, pose, AHORA+300_000_000, True, lidar(.48), cfg)
         self.assertEqual(fin[:2], (0., 0.))
         self.assertIn('completado', fin[2])
 
@@ -78,7 +85,7 @@ class SnapshotTests(unittest.TestCase):
         pose = dict(x=0., y=0., yaw=0.)
         for segundo in range(8):
             ahora = AHORA+segundo*1_000_000_000
-            s = scan(.50 if segundo == 7 else 1.8)
+            s = scan(.48 if segundo == 7 else 1.8)
             lidar = analizar_lidar(s.ranges, s.angle_min, s.angle_increment,
                                    s.range_min, s.range_max, cfg=cfg)
             salida = ctrl.decidir(evento(ahora), pose, ahora, True, lidar, cfg)
@@ -99,6 +106,10 @@ class SnapshotTests(unittest.TestCase):
             control = [c for c in copias if c[-1].endswith('/control_giros.py')]
             self.assertEqual(len(control), 1)
             self.assertEqual(control[0][-2], str(CONTROL))
+            config = [c for c in copias if c[-1].endswith('/senales.json')]
+            self.assertEqual(len(config), 1)
+            self.assertEqual(config[0][-2], str(CONFIG))
+            self.assertNotEqual(CONFIG, CARPETA/'senales_giro.json')
             self.assertFalse(any('rostros' in c[-2] or 'galeria' in c[-2] or 'mision_meta' in c[-2] for c in copias))
         self.assertEqual((app.TAREA/'control_giros.py').read_bytes(), original)
 
@@ -232,12 +243,18 @@ for linea in sys.stdin:
             lejos = ciclo(0, 1.8)
             self.assertEqual(lejos['giro_ensayo']['fase'], 'ESPERA_PARED')
             self.assertEqual((lejos['vx'], lejos['wz']), (.1, 0.))
-            cerca = ciclo(.3, .5)
+            aproximando = ciclo(.3, .5)
+            self.assertEqual(aproximando['giro_ensayo']['fase'], 'ESPERA_PARED')
+            self.assertEqual(aproximando['giro_ensayo']['disparo_m'], .48)
+            self.assertEqual((aproximando['vx'], aproximando['wz']), (.1, 0.))
+            cerca = ciclo(.6, .48)
             self.assertEqual(cerca['giro_ensayo']['fase'], 'GIRANDO')
             self.assertEqual((cerca['vx'], cerca['wz']), (0., -.4))
-            bloqueo = ciclo(.6, .30)
+            bloqueo = ciclo(.9, .32)
             self.assertEqual((bloqueo['vx'], bloqueo['wz']), (0., 0.))
-            sin_camara = ciclo(1.2, .5, fresco=False)
+            mas_cerca = ciclo(1.2, .30)
+            self.assertEqual((mas_cerca['vx'], mas_cerca['wz']), (0., 0.))
+            sin_camara = ciclo(1.5, .48, fresco=False)
             self.assertEqual((sin_camara['vx'], sin_camara['wz']), (0., 0.))
             self.assertFalse(sin_camara['giro_ensayo']['permitido'])
             if mover:
