@@ -320,8 +320,8 @@ def dibujar(imagen, estado_camara, entrada, vision, estado, mover):
         if fase in ('IDA','VUELTA'):
             if giro.get('activo'):
                 avance=giro.get('avance_deg')
-                angulo=f'{avance:.1f}/{giro.get("objetivo_deg",90.):.0f} grados' if avance is not None else '90 grados'
-                senal = f"Giro {giro['activo']} {giro.get('color','')}: {angulo} por odometria"
+                angulo=f' | {avance:.1f} grados recorridos' if avance is not None else ''
+                senal = f"Giro {giro['activo']} {giro.get('color','')}: hasta salida libre"+angulo
             elif giro.get('pendiente'):
                 senal = (f"Flecha guardada: {giro['pendiente']['direccion']} {giro.get('color','')}; "
                          f"esperar frente <= {giro.get('disparo_efectivo_m',.305):.3f} m")
@@ -411,7 +411,8 @@ def main(argv=None):
               f'aproximacion en precaucion <= {cfg_m.velocidad_aproximacion_m_s:.2f} m/s; '
               f'giro sobre el sitio: radio {cfg_m.radio_giro_m:.2f}m + margen {cfg_m.margen_giro_m:.2f}m '
               '(base_link, TF completo y contorno 360 grados). '
-              'Evasion frontal mantiene sentido hasta salir con margen.', flush=True)
+              f'Flecha/evasion hasta salida libre, sin objetivo fijo de 90 grados; '
+              f'max {cfg_s.tiempo_maximo_giro_s:.0f} s por maniobra.', flush=True)
         while True:
             puente.comprobar()
             if video.proceso.poll() is not None:

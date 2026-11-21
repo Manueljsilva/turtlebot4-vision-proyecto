@@ -334,9 +334,10 @@ class ControlMision:
                     if self.revalidacion_ns is not None else None,
                 limite_memoria_s=self.cfg.tiempo_aproximacion_s) if pendiente else None,
             activo=activo['direccion'] if activo else None, conflicto=self.conflicto_senal,
-            avance_deg=(activo['sentido']*normalizar(self.pose['yaw']-activo['yaw'])*180/pi
+            avance_deg=(activo['sentido']*(self.yaw_total-activo['yaw_total'])*180/pi
                         if activo and self.pose else None),
-            objetivo_deg=self.cfg_senales.angulo_giro_deg,
+            objetivo_deg=None, criterio_fin='salida_libre',
+            frente_salida_m=(cfg.distancia_precaucion_m+self.cfg.margen_salida_evasion_m if cfg else None),
             ultimo_completado=self.ultimo_giro_completado,
             salida_recta=(dict(reposo_confirmado=salida['confirmado'],
                 corrigiendo=bool(salida.get('correccion')),
@@ -433,6 +434,41 @@ class ControlMision:
             return vx,wz,'Salida tras flecha: recto bloqueado; '+motivo
         return recto
 
+    def salida_libre(self, lidar, cfg):
+        """Frente despejado y recorrido de avance protegido antes de acabar un giro."""
+        if (not self.observado(lidar)
+                or lidar.dist_frente <= cfg.distancia_precaucion_m+self.cfg.margen_salida_evasion_m
+                or self.bloqueo_giro(lidar,cfg) is not None
+                or self.bloqueo_avance(lidar,cfg) is not None):
+            return False
+        radio=self.cfg.radio_giro_m+self.cfg.margen_giro_m
+        recorrido=distancia_libre_recta(self.holgura,radio)
+        if recorrido is None:
+            dist=self.holgura.distancia_avance_m
+            recorrido=(dist if dist is not None else self.holgura.distancia_minima_m)-radio
+        margen=self.cfg.margen_aproximacion_m+cfg.velocidad_avance*(self.holgura.edad_s+.1)
+        return recorrido > margen
+
+    def giro_por_salida(self, evento, pose, ahora, permitido, lidar, cfg, cfg_admision):
+        """Reutiliza admisión/memoria originales; la rotación termina por LiDAR."""
+        if self.giros.activo is None:
+            giro=self.giros.decidir(evento,pose,ahora,permitido,lidar,cfg_admision)
+            if self.giros.activo is not None:
+                self.giros.activo['yaw_total']=self.yaw_total
+            return giro
+        if not permitido:
+            return 0.,0.,'Giro por flecha: esperando frenado/sensores'
+        a=self.giros.activo
+        avance=a['sentido']*(self.yaw_total-a['yaw_total'])
+        if avance < -20*pi/180:
+            self.giros.fallo='Odometria indica giro contrario: detenido; revisar'
+            return 0.,0.,self.giros.fallo
+        if self.salida_libre(lidar,cfg):
+            self.giros.activo=None
+            return 0.,0.,'Giro por flecha completado: salida libre observada con margen'
+        velocidad=cfg.velocidad_giro if self.observado(lidar) and lidar.dist_frente <= cfg.distancia_parada_m else cfg.velocidad_giro*.75
+        return 0.,a['sentido']*velocidad,f"Giro {a['direccion']} por senal {self.giros.color}: buscar salida libre"
+
     def evadir(self, ahora, lidar, cfg):
         """Conservar el lado del giro frontal hasta salir con margen, sin arcos."""
         if not self.observado(lidar):
@@ -455,33 +491,16 @@ class ControlMision:
         e=self.evasion
         avance=e['sentido']*(self.yaw_total-e['yaw'])
         agotado = ahora-e['inicio_ns'] > self.cfg_senales.tiempo_maximo_giro_s*1e9
-        objetivo=self.cfg_senales.angulo_giro_deg*pi/180
-        # Al acabar la maniobra, una salida recta ya segura no debe convertirse
-        # en FALLO solo por quedar entre precaución e histéresis (0.45–0.49 m).
-        if (not agotado and objetivo <= avance <= objetivo+self.cfg_senales.tolerancia_deg*pi/180
-                and lidar.dist_frente > cfg.distancia_precaucion_m and vx > 0 and wz == 0
-                and self.bloqueo_avance(lidar,cfg) is None):
-            radio=self.cfg.radio_giro_m+self.cfg.margen_giro_m
-            recorrido=distancia_libre_recta(self.holgura,radio)
-            if recorrido is None:
-                dist=self.holgura.distancia_avance_m
-                recorrido=(dist if dist is not None else self.holgura.distancia_minima_m)-radio
-            margen=self.cfg.margen_aproximacion_m+vx*(self.holgura.edad_s+.1)
-            if recorrido > margen:
-                self.evasion=None
-                return 0.,0.,'Giro evasivo completado: salida recta observada y con margen'
-        if agotado or avance >= self.cfg_senales.angulo_giro_deg*pi/180 or avance < -.35:
+        if agotado or avance < -.35:
             if avance < -.35:
                 causa = f'giro contrario segun odometria ({avance*180/pi:.1f} grados)'
-            elif avance >= self.cfg_senales.angulo_giro_deg*pi/180:
-                causa = f'limite angular alcanzado ({avance*180/pi:.1f} grados)'
             else:
                 causa = f'plazo de {self.cfg_senales.tiempo_maximo_giro_s:.1f}s agotado'
             if e.get('ultimo_bloqueo'):
                 causa += '; ultimo bloqueo: '+e['ultimo_bloqueo']
             self.fallar('Evasion sin salida: '+causa+'; detenido, revisar antes de reiniciar',ahora)
             return 0., 0., self.motivo
-        if lidar.dist_frente > cfg.distancia_precaucion_m+self.cfg.margen_salida_evasion_m:
+        if self.salida_libre(lidar,cfg):
             self.evasion=None
             return 0., 0., 'Frente libre con margen: terminar giro evasivo antes de avanzar'
         bloqueo = self.bloqueo_giro(lidar,cfg)
@@ -527,6 +546,20 @@ class ControlMision:
         if self.solicitud_ns is not None and ahora-self.solicitud_ns > self.cfg.tiempo_maximo_mision_s*1e9:
             self.fallar('Tiempo total de ensayo agotado', ahora)
             return cero(self.motivo)
+        # El plazo original incluye frenado y pausas. Un corte de cámara no
+        # reinicia ni suspende el límite de la maniobra que estaba en marcha.
+        if (self.giros.activo is not None and
+                ahora-self.giros.activo['inicio_ns'] > self.cfg_senales.tiempo_maximo_giro_s*1e9):
+            motivo=f'Giro sin completar a tiempo ({self.cfg_senales.tiempo_maximo_giro_s:.1f}s): sin salida libre'
+            if self.freno_flecha and self.freno_flecha.get('ultimo_bloqueo'):
+                motivo+='; ultimo bloqueo: '+self.freno_flecha['ultimo_bloqueo']
+            self.fallar(motivo,ahora)
+        if (self.evasion is not None and
+                ahora-self.evasion['inicio_ns'] > self.cfg_senales.tiempo_maximo_giro_s*1e9):
+            motivo=f'Evasion sin salida: plazo de {self.cfg_senales.tiempo_maximo_giro_s:.1f}s agotado'
+            if self.evasion.get('ultimo_bloqueo'):
+                motivo+='; ultimo bloqueo: '+self.evasion['ultimo_bloqueo']
+            self.fallar(motivo,ahora)
         # También expira durante pausas de cámara/GUI; recuperar sensores no
         # autoriza retomar una dirección antigua fuera del plazo de maniobra.
         if self.fase in ('IDA','VUELTA'):
@@ -647,7 +680,7 @@ class ControlMision:
                     esperada=self.giros.activo['direccion'],observada=ev['direccion'],marca_ns=ev['marca_ns'])
                 self.fallar('Cambio de sentido del cartel durante frenado: detenido',ahora)
                 return cero(self.motivo)
-            # El controlador original conserva evento, disparo radial y 90°.
+            # El controlador original conserva admisión, evento y disparo radial.
             # Su veto antiguo por rangos sin traslación se sustituye aquí por
             # la comprobación circular completa de abajo; no editar el snapshot.
             lidar_giro = lidar
@@ -658,7 +691,7 @@ class ControlMision:
                               else SimpleNamespace(**{**vars(lidar), 'dist_frente': esperar}))
             cfg_giro=SimpleNamespace(velocidad_giro=cfg.velocidad_giro,distancia_parada_m=0.)
             activo_anterior=dict(self.giros.activo) if self.giros.activo else None
-            giro = self.giros.decidir(ev,pose,ahora,not preparando,lidar_giro,cfg_giro)
+            giro = self.giro_por_salida(ev,pose,ahora,not preparando,lidar_giro,cfg,cfg_giro)
             self.senal_por_procesar = None
             if self.giros.pendiente is not None or self.giros.activo is not None:
                 # El reposo anterior ya se comprobó arriba. No corregir el
@@ -704,10 +737,11 @@ class ControlMision:
                         # giro. No reiniciar el plazo original de 12 s ni volver
                         # a cambiar esta referencia tras pausas/obstáculos.
                         activo['yaw']=pose['yaw']
+                        activo['yaw_total']=self.yaw_total
                         self.giros.ultima_posicion=(pose['x'],pose['y'])
                         f['confirmado']=True
                         self.bloqueo_aproximacion=None
-                        return cero('Reposo de flecha confirmado: iniciar 90 grados sobre el sitio')
+                        return cero('Reposo de flecha confirmado: girar sobre el sitio hasta salida libre')
                     bloqueo = self.bloqueo_giro(lidar,cfg)
                     if bloqueo:
                         f['ultimo_bloqueo']=bloqueo
@@ -718,9 +752,10 @@ class ControlMision:
                         a=activo_anterior
                         self.ultimo_giro_completado=dict(id=self.giros.ultimo_id,
                             direccion=a['direccion'],color=self.giros.color,marca_ns=ahora,
-                            avance_deg=a['sentido']*normalizar(pose['yaw']-a['yaw'])*180/pi)
+                            avance_deg=a['sentido']*(self.yaw_total-a['yaw_total'])*180/pi,
+                            criterio='salida_libre')
                         self.salida_flecha=dict(inicio_ns=ahora,x=pose['x'],y=pose['y'],
-                            yaw_objetivo=normalizar(a['yaw']+a['sentido']*self.cfg_senales.angulo_giro_deg*pi/180),
+                            yaw_objetivo=pose['yaw'],
                             confirmado=False,reposo=ReposoOdometria())
                 return giro
             if self.giros.pendiente:

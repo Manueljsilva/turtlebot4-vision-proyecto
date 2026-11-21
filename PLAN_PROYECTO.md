@@ -2,22 +2,27 @@
 
 Actualizado el 21 de noviembre de 2026. Fuente base: las cinco páginas de [Computer_vision_proyectos.pdf](Computer_vision_proyectos.pdf), revisadas completas. Las indicaciones del usuario del 13 y 17 de noviembre **prevalecen para Task 1**. Se distinguen los requisitos confirmados, las decisiones propuestas y los componentes realmente implementados en [ESTADO_PROYECTO.md](ESTADO_PROYECTO.md).
 
-**Prioridad actual (21/11): probar la misión completa con salida adaptable.**
-El usuario autoriza eliminar los 40 cm obligatorios tras flecha y el fallo de
-30 s de esa salida. Tras reposo, preferir recto protegido; un recorrido bloqueado
-permite volver a evasión con holgura/sensores, y una flecha nueva no exige distancia
-mínima. Conservar 90°/límites, rearme visual/ID, margen/huella y paradas de misión.
-**304 Task 1 +51 Task 2** locales; falta el recorrido físico completo. No proponer
-ensayos físicos aislados como siguiente paso: el usuario tiene poco tiempo.
-Meta B y transición al barrido confirmadas en el último registro, objetivo facial
-no aceptado; vídeo 250x250, tamaño de la foto pendiente de comprobar sin relajar
-criterio. Mantener el QR propio y el retorno pendientes de esta prueba.
+**Prioridad actual (21/11): misión completa con giros hasta salida libre.**
+El usuario confirma quitar el giro fijo de 90° de las flechas y el tope angular
+de evasión. La flecha memoriza el lado, aproxima al umbral y gira sobre el sitio
+hasta frontal >0.49 m y trayectoria protegida; evasión usa el mismo criterio.
+El ángulo real puede ser menor o mayor que 90°. Conservar reposo, huella/sensores,
+máximo 12 s incluidos frenado/pausas y fallo por odometría incoherente/giro contrario.
+Guardar el rumbo real al terminar; no corregir hacia el antiguo objetivo de 90°.
+El retorno deliberado entrada B+180° y las fases meta/rostro/QR no cambian.
+Salida adaptable sin 40 cm y una ejecución por ID con rearme visual continúan.
+**311 tests Task 1**; no ejecutar suite Task 2 durante estos cambios, según el
+usuario. No proponer ensayos físicos aislados como siguiente paso: solo recorrido
+completo. El usuario mantiene diagnóstico/propuesta y aprobación antes de nuevos
+cambios; este ajuste ya está expresamente autorizado.
 
-**Posible cambio futuro, sin implementar:** usar la flecha para fijar el lado y
-terminar el giro al encontrar una salida libre como evasión, sustituyendo 90°.
-Definir criterio y límites antes de solicitar aprobación; hoy siguen 90°.
-El usuario pide diagnóstico/propuesta y confirmación antes de nuevos cambios de
-comportamiento; el ajuste de salida adaptable ya está aprobado.
+El último log sin flechas muestra FALLO de evasión al alcanzar 90.5°, frente 0.402 m
+y contorno libre ~0.347 m. La prueba local reproduce y corrige ese límite angular,
+sin prometer que el circuito físico termine ni quitar el timeout de 12 s.
+Meta B y barrido habían sido confirmados; reconocimiento físico/QR propio/retorno
+requieren comprobarse en el recorrido completo. Conservar cámara/galería, originales
+del compañero, ensayos históricos y Task 2; publicar código/guías a main con sus
+exclusiones, sin nuevas fotos, modelos o datos personales.
 
 **Entrega anterior: repetir flecha, salida recta y llegada a meta.**
 El usuario confirmó 90° seguidos de otro giro. Tras flecha se añade reposo y salida

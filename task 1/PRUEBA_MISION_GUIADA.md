@@ -1,11 +1,35 @@
 # Ensayo integrado A → B → A
 
-Actualizado el 21 de noviembre de 2026. **304 tests Task 1 y 51 Task 2** locales.
+Actualizado el 21 de noviembre de 2026. **311 tests Task 1** locales; no se ejecutó la suite Task 2, según el usuario.
 El usuario confirma meta B y barrido; en el último intento no hay rostro objetivo
 aceptado. La lectura QR había funcionado al aumentar su tamaño; el regreso completo
 sigue pendiente. A también lleva bandera. Pruebas físicas siguientes: **únicamente
 recorrido completo**, según el usuario. Este modo sigue azul en ida y rojo en vuelta;
 no reproduce una trayectoria grabada ni incorpora SLAM/Nav2.
+
+## Giro hasta salida libre (vigente)
+
+El usuario autoriza sustituir los 90° fijos de flecha y el límite angular de evasión.
+La flecha fija el lado; tras aproximación y reposo gira sin avance hasta observar:
+
+- Frontal LiDAR **>0.49 m** (precaución 0.45 + margen de salida 0.04).
+- Contorno/TF recientes, espacio circular >0.25 m y protección frontal/lateral.
+- Recorrido libre del disco del robot mayor que el margen longitudinal de frenado.
+
+Evasión usa el mismo criterio. Se puede terminar antes o después de 90°; una
+pared todavía enfrente a 90° permite continuar girando por el lado elegido.
+La maniobra conserva **12 s desde activación**, incluidos frenado y pausas:
+si vence sin salida segura, queda en FALLO. El plazo no se reinicia al recuperar
+cámara/odometría. Giro contrario o telemetría incoherente conservan sus fallos.
+Al hallar salida ordena cero; tras flecha confirma reposo antes de continuar y
+guarda la orientación real, sin corregir luego hacia los antiguos 90°.
+Los 180° deliberados desde la orientación de entrada B para regresar no cambian.
+
+El registro 6b3dee8b falló por evasión a 90.5°, frente 0.402 m y contorno libre;
+no contiene una flecha recibida. Este límite se reproduce en pruebas locales y
+se elimina, sin certificar todavía el recorrido físico. UI/terminal muestran
+«hasta salida libre» y ángulo recorrido. Ensayos históricos y originales del
+compañero conservan sus bytes y giros anteriores. Solo cambia --mision-guiada.
 
 ## Salida adaptable tras flecha
 
@@ -13,7 +37,7 @@ El último atasco completa IZQUIERDA a 91.3°, avanza 13 cm y no puede continuar
 recto con el margen calculado. Exigir 40 cm impedía evasión y acababa en FALLO por
 30 s. El usuario autoriza retirar ambas restricciones en la misión integrada:
 
-- Tras 90° confirma reposo >=3 poses/0.7 s y prefiere recto con huella protegida.
+- Tras encontrar salida libre confirma reposo >=3 poses/0.7 s y prefiere recto con huella protegida.
 - Si el recorrido recto se bloquea, puede actuar evasión con sensores/holgura
   válidos antes de recorrer 40 cm. Si falta espacio de giro o datos, se detiene.
 - Una flecha nueva del tramo puede admitirse sin distancia mínima. Mismo ID no
@@ -24,9 +48,8 @@ recto con el margen calculado. Exigir 40 cm impedía evasión y acababa en FALLO
 - La interfaz distingue «Giro ... por odometría», «Salida adaptable» y «Evasión por
   obstáculo». Puede haber otro giro por un obstáculo después de completar la flecha.
 
-Los giros de flecha siguen siendo **90°**, con reposo, tolerancia 5° y plazo 12 s.
-La idea de usar la flecha para elegir lado y terminar al encontrar salida libre
-queda pendiente; **todavía no está implementada**. Radio aproximado 0.22 m más
+El giro hasta salida libre ya está implementado en misión, con reposo y plazo de
+12 s. El ángulo real es diagnóstico y no un objetivo fijo. Radio aproximado 0.22 m más
 margen 0.03 m, frescura de sensores y criterio facial se conservan. Los perfiles de
 ensayos históricos mantienen su mínimo de 0.4 m; solo el adaptador de misión lo
 sustituye por cero. No se modifican los originales del compañero ni Task 2.
@@ -109,7 +132,7 @@ después ya no hace falta Ctrl+C entre intentos. Este botón está en --mision-g
 
 1. **IDA:** registra A, navega con evasión y acepta flechas azules en la primera
    imagen nueva válida. Disparo nominal 0.30 m + tolerancia 0.005 m; frena,
-   confirma reposo y gira 90° por odometría,
+   confirma reposo y gira hacia ese lado hasta salida libre protegida,
    siempre con avance cero. Exige contorno 360° y distancia al centro >0.25 m
    (radio 0.22 + margen 0.03 m), además de sensores/TF frescos.
 2. **FRENAR_B:** confirma una meta nueva y frena. Exige >=3 poses nuevas durante
@@ -124,7 +147,7 @@ después ya no hace falta Ctrl+C entre intentos. Este botón está en --mision-g
    ciegas desde esa foto ni necesita buscar otra vez la bandera B. Giro sin avance,
    <=0.25 rad/s, tolerancia 5° y plazo de 45 s para orientar y frenar.
 5. **VUELTA:** después de reposo, reinicia la confirmación visual y usa solamente
-   flechas rojas, manteniendo evasión y 90° por odometría.
+   flechas rojas, manteniendo evasión y giro hasta salida libre.
 6. **FRENAR_A / FIN:** confirma una meta nueva cerca del inicio odométrico,
    comprueba reposo y muestra la palabra completa en la terminal
    `[RESULTADO EN A]` y en un **panel grande «Punto A alcanzado / Mensaje del QR»**.
@@ -186,7 +209,7 @@ interfaz es 0/1 o 1/1; repetir un paquete no produce una detección nueva. Antes
 de Buscar la vista previa no envía una maniobra al controlador.
 
 La primera flecha válida se memoriza inmediatamente. El giro sigue esperando
-frente <=0.305 m (nominal 0.30 + tolerancia 0.005) y espacio/sensores válidos; completa 90° sobre el sitio. Si no
+frente <=0.305 m (nominal 0.30 + tolerancia 0.005) y espacio/sensores válidos; gira sobre el sitio hasta salida libre. Si no
 hay imagen reciente o hay señales ambiguas, no se inventa una dirección. La
 nueva aceptación no exige una pausa adicional para acumular votos.
 
@@ -267,7 +290,7 @@ añadida **solo en la misión guiada**:
 - Una flecha pendiente aproxima recto: a 0.10 m/s fuera de precaución y como
   máximo 0.05 m/s dentro de precaución. Disparo nominal 0.30 m, con **tolerancia
   0.005 m**: al llegar a <=0.305 m frena y exige >=3 poses nuevas/0.7 s de reposo.
-  Solo entonces inicia 90° sobre el sitio, con yaw fijado una vez desde reposo.
+  Solo entonces inicia giro hasta salida libre, con yaw inicial fijado una vez desde reposo.
   No deja que evasión gire antes en esa franja ni invierte la flecha. Exige
   contorno completo libre en base_link y sensores válidos. Para aproximar exige
   margen extra de 0.02 m + velocidad × (edad del scan + 0.1 s); si no cabe, se detiene.
@@ -305,10 +328,9 @@ permanece detenido y explica el bloqueo. Esta revisión amplía la memoria a
 
 **Sin flecha ni aproximación a meta:** la evasión empieza desde 0.45 m y conserva el lado elegido
 durante el giro frontal; diferencias pequeñas entre lados ya no lo invierten
-cada ciclo. Espera frente >0.49 m para terminar; al completar 90° dentro de
-tolerancia también puede finalizar con frente >0.45 m y trayectoria recta segura.
+cada ciclo. Exige frente >0.49 m y recorrido protegido para terminar, sin tope de 90°.
 Publica un ciclo cero y luego puede avanzar. Si el contorno invade radio+margen (0.25 m), se detiene sin
-cambiar de sentido. Incluye obstáculos detrás y correcciones laterales. Sin salida tras 90°/12 s queda en FALLO; no gira indefinidamente.
+cambiar de sentido. Incluye obstáculos detrás y correcciones laterales. Sin salida tras 12 s queda en FALLO; no gira indefinidamente.
 Esto corrige un vaivén reproducido con los mínimos del registro, sin asegurar
 alineación paralela a una pared ni resolver cualquier laberinto. `giro.evasion`
 en [MISION] muestra esa memoria. Las correcciones laterales y las guardas de
