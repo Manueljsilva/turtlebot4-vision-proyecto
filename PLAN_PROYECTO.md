@@ -2,7 +2,17 @@
 
 Actualizado el 21 de noviembre de 2026. Fuente base: las cinco páginas de [Computer_vision_proyectos.pdf](Computer_vision_proyectos.pdf), revisadas completas. Las indicaciones del usuario del 13 y 17 de noviembre **prevalecen para Task 1**. Se distinguen los requisitos confirmados, las decisiones propuestas y los componentes realmente implementados en [ESTADO_PROYECTO.md](ESTADO_PROYECTO.md).
 
-**Prioridad actual (21/11): repetir flecha, salida recta y llegada a meta.**
+**Prioridad actual (21/11): reducir enclavamientos recuperables y aislar bandera en IDA.**
+El usuario confirmó giro correcto. Deriva pequeña tras flecha ahora puede corregir
+rumbo con reposo/holgura y giro acotado; evasión al límite puede concluir si el
+camino recto ya es seguro a >0.45 m. Mantener sensores, huella 0.25 m, límites y
+paradas de misión: no moverse hasta colisionar. **298 Task 1 + 51 Task 2** locales.
+Bandera no detectada durante IDA sigue sin reproducirse físicamente. Referencia
+positiva; `[META VISUAL]` separa detector/resolución de guardas de llegada.
+Si persiste SIN META en IDA, comprobar --solo-meta quieto y obtener fotograma;
+no reducir criterios/veto QR sin evidencia. Repetir correcciones en hardware.
+
+**Entrega anterior: repetir flecha, salida recta y llegada a meta.**
 El usuario confirmó 90° seguidos de otro giro. Tras flecha se añade reposo y salida
 recta protegida a <=0.05 m/s hasta el rearme de 0.40 m, sin corrección lateral
 encadenada. Mostrar ángulo real por odometría. En aproximación se comprueba el

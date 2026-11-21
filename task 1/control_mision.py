@@ -344,6 +344,7 @@ class ControlMision:
             objetivo_deg=self.cfg_senales.angulo_giro_deg,
             ultimo_completado=self.ultimo_giro_completado,
             salida_recta=(dict(reposo_confirmado=salida['confirmado'],
+                corrigiendo=bool(salida.get('correccion')),
                 distancia_m=hypot(self.pose['x']-salida['x'],self.pose['y']-salida['y']) if self.pose else None,
                 requerido_m=self.giros.cfg.desplazamiento_rearme_m,
                 edad_s=(ahora-salida['inicio_ns'])/1e9) if salida else None),
@@ -391,13 +392,32 @@ class ControlMision:
         s=self.salida_flecha
         if s is None:
             return None
-        desvio=abs(normalizar(pose['yaw']-s['yaw_objetivo']))*180/pi
-        if desvio > self.cfg_senales.tolerancia_deg+1e-6:
+        error=normalizar(s['yaw_objetivo']-pose['yaw'])
+        desvio=abs(error)*180/pi
+        if desvio > 20.:
             self.fallar(f'Desviacion tras giro de flecha ({desvio:.1f} grados): detenido',ahora)
+            return 0.,0.,self.motivo
+        if desvio > self.cfg_senales.tolerancia_deg+1e-6 and not s.get('correccion'):
+            s['correccion']=dict(inicio_ns=ahora)
+            s['confirmado'],s['reposo']=False,ReposoOdometria()
+            return 0.,0.,f'Corregir rumbo tras flecha ({desvio:.1f} grados): frenar antes de girar'
+        correccion=s.get('correccion')
+        if correccion and ahora-correccion['inicio_ns'] > self.cfg_senales.tiempo_maximo_giro_s*1e9:
+            self.fallar('Correccion de rumbo agotada: detenido; revisar espacio y odometria',ahora)
             return 0.,0.,self.motivo
         if not s['confirmado']:
             s['confirmado']=s['reposo'].actualizar(pose,pose_ns,ahora)
             return 0.,0.,'Salida tras flecha: frenar y confirmar reposo 0.7s antes de avanzar'
+        if correccion:
+            if desvio <= self.cfg_senales.tolerancia_deg*.5:
+                s['correccion']=None
+                s['confirmado'],s['reposo']=False,ReposoOdometria()
+                return 0.,0.,'Rumbo recuperado: confirmar reposo antes de avanzar'
+            bloqueo=self.bloqueo_giro(lidar,cfg)
+            if bloqueo:
+                return 0.,0.,'Correccion de rumbo bloqueada: '+bloqueo
+            velocidad=min(.12,cfg.velocidad_giro,max(.04,abs(error)*.8))
+            return 0.,velocidad if error>0 else -velocidad,f'Corregir rumbo tras flecha: {desvio:.1f} grados restantes'
         if hypot(pose['x']-s['x'],pose['y']-s['y']) >= self.giros.cfg.desplazamiento_rearme_m:
             self.salida_flecha=None
             return None
@@ -429,6 +449,21 @@ class ControlMision:
         e=self.evasion
         avance=e['sentido']*(self.yaw_total-e['yaw'])
         agotado = ahora-e['inicio_ns'] > self.cfg_senales.tiempo_maximo_giro_s*1e9
+        objetivo=self.cfg_senales.angulo_giro_deg*pi/180
+        # Al acabar la maniobra, una salida recta ya segura no debe convertirse
+        # en FALLO solo por quedar entre precaución e histéresis (0.45–0.49 m).
+        if (not agotado and objetivo <= avance <= objetivo+self.cfg_senales.tolerancia_deg*pi/180
+                and lidar.dist_frente > cfg.distancia_precaucion_m and vx > 0 and wz == 0
+                and self.bloqueo_avance(lidar,cfg) is None):
+            radio=self.cfg.radio_giro_m+self.cfg.margen_giro_m
+            recorrido=distancia_libre_recta(self.holgura,radio)
+            if recorrido is None:
+                dist=self.holgura.distancia_avance_m
+                recorrido=(dist if dist is not None else self.holgura.distancia_minima_m)-radio
+            margen=self.cfg.margen_aproximacion_m+vx*(self.holgura.edad_s+.1)
+            if recorrido > margen:
+                self.evasion=None
+                return 0.,0.,'Giro evasivo completado: salida recta observada y con margen'
         if agotado or avance >= self.cfg_senales.angulo_giro_deg*pi/180 or avance < -.35:
             if avance < -.35:
                 causa = f'giro contrario segun odometria ({avance*180/pi:.1f} grados)'

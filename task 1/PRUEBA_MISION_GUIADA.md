@@ -1,10 +1,29 @@
 # Ensayo integrado A → B → A
 
-Actualizado el 21 de noviembre de 2026: el usuario confirma que **el QR funciona tras aumentar su tamaño**. La prueba inmediata pasa a ser el recorrido completo, incluidas ambas banderas y flechas azules/rojas. **Una imagen nueva válida basta para aceptar una detección**. Botón **Reiniciar** para repetir sin cerrar ventana/cámara. Meta y frenado ya no exigen permiso de giro: si el barrido se bloquea, la visión estacionaria sigue activa. **290 pruebas locales pasan; todavía sin validación del recorrido completo ni del reinicio en hardware.** Disparo activo 0.30 m y radio aproximado 0.22 m aportado por el usuario, con margen 0.03 m. Los modos anteriores se conservan.
+Actualizado el 21 de noviembre de 2026: el usuario confirma que **el QR funciona tras aumentar su tamaño**. La prueba inmediata pasa a ser el recorrido completo, incluidas ambas banderas y flechas azules/rojas. **Una imagen nueva válida basta para aceptar una detección**. Botón **Reiniciar** para repetir sin cerrar ventana/cámara. Meta y frenado ya no exigen permiso de giro: si el barrido se bloquea, la visión estacionaria sigue activa. **298 pruebas locales pasan; todavía sin validación del recorrido completo ni del reinicio en hardware.** Disparo activo 0.30 m y radio aproximado 0.22 m aportado por el usuario, con margen 0.03 m. Los modos anteriores se conservan.
 Este ensayo sigue azul en la ida y rojo en la vuelta; no reproduce una trayectoria
 grabada ni incorpora SLAM/Nav2.
 
-## Repetir giro y aproximación (21/11, revisión posterior)
+## Continuidad y bandera durante IDA (21/11, última revisión)
+
+No se elimina la parada protectora. Se permiten recuperar dos casos: deriva
+pequeña de rumbo después de flecha (frena, corrige con holgura a <=0.12 rad/s y
+confirma reposo), y evasión al completar 90° con frente >0.45 m y avance recto
+observado/seguro. Corrección >12 s, desvío >20°, sensores caducados o huella
+ocupada detienen. Salida recta total sigue limitada a 30 s. El círculo conserva
+0.25 m; la sesión de flecha también registró un punto a 0.14 m, no ignorarlo.
+
+El usuario vio IDA durante el fallo visual de bandera. No se ha reproducido esa
+imagen; el detector sigue aceptando la referencia local y conserva sus criterios.
+La terminal ahora separa `[META VISUAL]` (VISTA/SIN META, resolución) de `[META]`
+(guardas de llegada). En ESPERAR/FALLO puede mostrar la bandera como diagnóstico,
+sin autorizar movimiento ni declarar B. Si en IDA da SIN META, cerrar y ejecutar
+`--solo-meta` sin --mover (comando de abajo), mostrar la bandera completa y guardar
+las líneas; un fotograma del vídeo permitirá revisar tamaño/ángulo/iluminación.
+La vista previa no guarda imágenes. **298 Task 1 +51 Task 2**; prueba física nueva
+pendiente. Cerrar/relanzar carga esta revisión, Reiniciar no recarga código.
+
+## Repetir giro y aproximación (21/11, revisión anterior)
 
 El usuario observó 90° por flecha y luego otro giro. Ahora se confirma reposo
 tras los 90° y se realiza una salida recta protegida a <=0.05 m/s hasta los

@@ -307,10 +307,76 @@ class MisionTests(unittest.TestCase):
 
     def test_salida_de_flecha_no_admite_desviacion_angular_para_hacer_media_vuelta(self):
         self.completar_flecha_derecha()
-        r=self.paso(sensor=lidar(.8),yaw=-pi/2-.15)
+        r=self.paso(sensor=lidar(.8),yaw=-pi/2-.36)
         self.assertEqual(r[:2],(0.,0.))
         self.assertEqual(self.c.fase,'FALLO')
         self.assertIn('Desviacion tras giro',self.c.motivo)
+
+    def test_desvio_51_grados_corrige_con_reposo_y_no_enclava_el_intento(self):
+        self.completar_flecha_derecha()
+        for _ in range(6):self.paso(sensor=lidar(.8))
+        r=self.paso(sensor=lidar(.8),yaw=-pi/2-5.1*pi/180)
+        self.assertEqual(r[:2],(0.,0.))
+        self.assertEqual(self.c.fase,'IDA')
+        for _ in range(6):r=self.paso(sensor=lidar(.8))
+        self.assertEqual(r[0],0.)
+        self.assertGreater(r[1],0.)
+        self.assertLessEqual(r[1],.12)
+        self.assertEqual(self.paso(sensor=lidar(.8),yaw=-pi/2-.02)[:2],(0.,0.))
+        for _ in range(6):r=self.paso(sensor=lidar(.8))
+        self.assertEqual(r[:2],(.05,0.))
+        self.assertEqual(self.c.fase,'IDA')
+
+    def test_correccion_pequena_no_gira_con_huella_ocupada_y_conserva_plazo(self):
+        self.completar_flecha_derecha()
+        for _ in range(6):self.paso(sensor=lidar(.8))
+        self.paso(sensor=lidar(.8),yaw=-pi/2-.1)
+        for _ in range(65):
+            r=self.paso(sensor=lidar(.8),holgura=HolguraGiro(True,.14,'Registro de huella',.05))
+            self.assertEqual(r[:2],(0.,0.))
+        self.assertEqual(self.c.fase,'FALLO')
+        self.assertIn('Correccion de rumbo agotada',self.c.motivo)
+
+    def test_correccion_pequena_lazo_cerrado_converge_sin_otro_cuarto_de_vuelta(self):
+        self.completar_flecha_derecha()
+        for _ in range(6):self.paso(sensor=lidar(.8))
+        yaw=-pi/2-5.1*pi/180;wz=0.
+        for _ in range(70):
+            yaw+=wz*.1
+            vx,wz,_=self.paso(dt=.1,sensor=lidar(.8),yaw=yaw)
+            self.assertEqual(self.c.fase,'IDA')
+            self.assertLessEqual(abs(wz),.12)
+            self.assertLessEqual(abs(normalizar(yaw+pi/2)),5.2*pi/180)
+            if vx>0:break
+        self.assertGreater(vx,0.)
+        self.assertEqual(wz,0.)
+        self.assertLess(abs(normalizar(yaw+pi/2)),2.5*pi/180)
+
+    def test_camara_caducada_sigue_deteniendo_tras_giro_y_ante_salida_evasiva(self):
+        self.completar_flecha_derecha()
+        for _ in range(6):self.paso(sensor=lidar(.8))
+        self.assertEqual(self.paso(sensor=lidar(.8),marca=0)[:2],(0.,0.))
+        self.assertEqual(self.c.fase,'IDA')
+
+    def test_evasion_a_903_grados_y_frente_468mm_finaliza_si_el_avance_es_seguro(self):
+        self.iniciar()
+        self.paso(sensor=lidar(.4,.9,.6))
+        for yaw in (.3,.6,.9,1.2):self.paso(sensor=lidar(.4,.9,.6),yaw=yaw)
+        r=self.paso(sensor=lidar(.468,.892,.468),yaw=90.3*pi/180,
+                    holgura=HolguraGiro(True,.4316,'Contorno del registro',.05))
+        self.assertEqual(r[:2],(0.,0.))
+        self.assertEqual(self.c.fase,'IDA')
+        self.assertIsNone(self.c.evasion)
+        self.assertEqual(self.paso(sensor=lidar(.468,.892,.468))[:2],(.1,0.))
+
+    def test_evasion_al_limite_no_omite_obstaculo_o_datos_caducados(self):
+        self.iniciar()
+        self.paso(sensor=lidar(.4,.9,.6))
+        for yaw in (.3,.6,.9,1.2):self.paso(sensor=lidar(.4,.9,.6),yaw=yaw)
+        r=self.paso(sensor=lidar(.468,.892,.468),yaw=90.3*pi/180,
+                    holgura=HolguraGiro(True,.24,'Ocupado',.05))
+        self.assertEqual(r[:2],(0.,0.))
+        self.assertEqual(self.c.fase,'FALLO')
 
     def test_siguiente_flecha_no_omite_reposo_posterior_ni_rearme(self):
         self.completar_flecha_derecha()
@@ -1279,6 +1345,40 @@ class PreparacionTests(unittest.TestCase):
         v.actualizar(None,None,t+2_000_000_000,estado,sesion,Mock())
         self.assertIsNone(v.meta)
         self.assertIsNone(v.deteccion_meta)
+
+    def test_meta_previa_y_tras_fallo_es_solo_diagnostico_sin_ordenes(self):
+        sistema=SistemaFacial(Mock(),Galeria([[1,0]],['Persona A']),Criterio(.5,.1))
+        _,cfg=cargar_ensayo()
+        v=app.VisionMision(sistema,cfg);sesion=app.SesionInterfaz()
+        t=20_000_000_000;im=np.zeros((240,320,3),np.uint8)
+        with patch.object(v.detector_meta,'detectar',return_value=dict(meta=dict(caja=[128,48,64,96]),codigos=[])) as detector, \
+                patch.object(v.ensayo,'actualizar') as rostro:
+            for fase in ('ESPERAR','FALLO'):
+                estado=dict(fase=fase)
+                anotada=v.actualizar(im,t,t,estado,sesion,Mock())
+                v.actualizar(im,t,t,estado,sesion,Mock())
+                self.assertTrue(np.any(anotada))
+                self.assertIsNone(v.meta)
+                self.assertIsNone(v.senal)
+                self.assertIn('VISTA',v.resumen_meta())
+                self.assertIn('diagnostico',v.resumen_meta())
+                t+=100_000_000
+            self.assertEqual(detector.call_count,2)
+            rostro.assert_not_called()
+            v.actualizar(None,None,t+2_000_000_000,dict(fase='FALLO'),sesion,Mock())
+            self.assertIn('Sin imagen reciente',v.resumen_meta())
+
+    def test_meta_visual_en_ida_informa_resolucion_y_no_depende_de_guardas_de_llegada(self):
+        sistema=SistemaFacial(Mock(),Galeria([[1,0]],['Persona A']),Criterio(.5,.1))
+        _,cfg=cargar_ensayo();v=app.VisionMision(sistema,cfg)
+        sesion=app.SesionInterfaz();t=20_000_000_000;sesion.iniciar('Persona A',t-1000)
+        im=np.zeros((240,320,3),np.uint8)
+        with patch.object(app.time,'monotonic_ns',return_value=t), \
+                patch.object(v.detector_meta,'detectar',return_value=dict(meta=None,codigos=[])), \
+                patch('senales_giro.DetectorGiros.detectar',return_value=[]):
+            v.actualizar(im,t,t,dict(fase='IDA',fase_desde_ns=t-100),sesion,Mock())
+        self.assertIn('SIN META',v.resumen_meta())
+        self.assertIn('320x240',v.resumen_meta())
 
     def test_copia_solo_control_y_perfiles_al_nodo_con_publicador_opcional(self):
         cmd = ['sudo','-n','docker','exec','-i','proyecto2-sim','bash','-c','script',

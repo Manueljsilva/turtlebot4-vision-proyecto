@@ -154,15 +154,51 @@ class VisionMision:
         self.ultima = None
         self.meta = self.senal = self.resultado_senal = None
         self.deteccion_meta = None
+        self.imagen_meta = None
+        self.fase_meta = None
+        self.meta_previa_marca = self.meta_previa_fase = self.meta_previa = None
+
+    def resumen_meta(self):
+        if self.imagen_meta is None:
+            if self.fase_meta not in (None,'IDA','VUELTA','ESPERAR','FALLO'):
+                return 'Detector de meta en pausa durante '+self.fase_meta
+            return 'Sin imagen reciente para el detector de meta'
+        ancho,alto,diagnostico=self.imagen_meta
+        resultado='META VISTA' if self.deteccion_meta else 'SIN META en el detector visual'
+        return f'{resultado} | imagen={ancho}x{alto}'+(' | solo diagnostico; no confirma llegada' if diagnostico else '')
+
+    def anotar_meta(self, imagen, diagnostico=False):
+        self.imagen_meta=(imagen.shape[1],imagen.shape[0],diagnostico)
+        if self.deteccion_meta is None:
+            return imagen
+        anotada=imagen.copy()
+        x,y,w,h=[round(v) for v in self.deteccion_meta['caja']]
+        cv2.rectangle(anotada,(x,y),(x+w,y+h),(80,220,220),2)
+        escribir(anotada,'META VISTA (diagnostico)' if diagnostico else 'META VISTA',
+                 x,max(18,y-7),(80,220,220),limite=38)
+        return anotada
 
     def actualizar(self, imagen, marca, ahora, estado, sesion, pausar):
         self.meta = self.senal = None
-        if (imagen is None or not reciente(marca, ahora, EDAD_CAMARA_NS) or estado is None
-                or sesion.inicio_ns is None or marca <= sesion.inicio_ns):
+        self.imagen_meta=None
+        self.fase_meta=None
+        if imagen is None or not reciente(marca, ahora, EDAD_CAMARA_NS) or estado is None:
             self.resultado_senal = None
             self.deteccion_meta = None
             return imagen
         fase = estado['fase']
+        self.fase_meta=fase
+        if fase in ('ESPERAR','FALLO'):
+            self.resultado_senal=None
+            if (fase != self.meta_previa_fase or self.meta_previa_marca is None
+                    or marca > self.meta_previa_marca):
+                self.meta_previa=self.detector_meta.detectar(imagen,leer_qr=False,buscar_meta=True).get('meta')
+                self.meta_previa_marca,self.meta_previa_fase=marca,fase
+            self.deteccion_meta=self.meta_previa
+            return self.anotar_meta(imagen,diagnostico=True)
+        if sesion.inicio_ns is None or marca <= sesion.inicio_ns:
+            self.resultado_senal=self.deteccion_meta=None
+            return imagen
         if fase == 'BUSCAR_B':
             self.deteccion_meta = None
             b = self.ensayo.sesion
@@ -199,11 +235,7 @@ class VisionMision:
         ev = self.resultado_senal.get('evento') if self.resultado_senal else None
         self.senal = ev if ev and reciente(ev['marca_ns'], time.monotonic_ns(), EDAD_CAMARA_NS) else None
         anotada = dibujar_detecciones(imagen, self.resultado_senal, tramo) if self.resultado_senal else imagen.copy()
-        if self.deteccion_meta is not None:
-            x, y, w, h = [round(v) for v in self.deteccion_meta['caja']]
-            cv2.rectangle(anotada, (x,y), (x+w,y+h), (80,220,220), 2)
-            escribir(anotada, 'META VISTA', x, max(18,y-7), (80,220,220), limite=30)
-        return anotada
+        return self.anotar_meta(anotada)
 
 
 def crear_intento(sistema, cfg, puente, nombre=None):
@@ -301,7 +333,8 @@ def dibujar(imagen, estado_camara, entrada, vision, estado, mover):
                 senal = f"Flecha recibida: {giro['por_procesar']['direccion']}; esperando sensores recientes"
             elif giro.get('salida_recta'):
                 s=giro['salida_recta']
-                senal=f"Salida recta tras flecha: {s['distancia_m']:.2f}/{s['requerido_m']:.2f} m; sin otro giro"
+                senal=('Ajustando rumbo tras flecha; sin avance' if s.get('corrigiendo') else
+                       f"Salida recta tras flecha: {s['distancia_m']:.2f}/{s['requerido_m']:.2f} m; sin otro giro")
         escribir(panel, senal, 18, 169)
         observados = ', '.join(c['nombre'] for c in vision.ensayo.caras) if fase == 'BUSCAR_B' else 'en espera'
         if fase in ('IDA', 'VUELTA'):
@@ -419,6 +452,7 @@ def main(argv=None):
             ahora = time.monotonic_ns()
             if not reciente(marca, ahora, EDAD_CAMARA_NS):
                 imagen, marca = None, None
+                vision.meta=vision.senal=vision.deteccion_meta=vision.imagen_meta=vision.fase_meta=None
                 if estado_camara == 'Camara del robot':
                     estado_camara = 'Sin imagen reciente'
             b = vision.ensayo.sesion
@@ -450,6 +484,7 @@ def main(argv=None):
                 print(f'[MISION] {estado or "Esperando control"} | [QR] {vision.ensayo.resumen_qr()}', flush=True)
                 if estado:
                     print(f'[META] {estado.get("motivo_meta", "Esperando diagnostico")}', flush=True)
+                    print('[META VISUAL] '+vision.resumen_meta(),flush=True)
                 paquete = getattr(video, '_decodificado', None)
                 edad = (ahora-paquete['recibido_ns'])/1e9 if paquete else None
                 detalle = f'ultima imagen decodificada: {edad:.2f}s desde recepcion ROS' if edad is not None else 'sin imagen decodificada'
