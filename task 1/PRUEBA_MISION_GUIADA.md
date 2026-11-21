@@ -61,6 +61,15 @@ El tópico predeterminado sigue siendo `/oakd/rgb/preview/image_raw/compressed`;
 plazo para el primer fotograma. No combinar con los otros modos, --tramo,
 --senales o --ensayo-giro-companero: este modo gestiona los colores y etapas.
 
+**Comprobar que se abrió el modo correcto:** la terminal debe imprimir
+`ENSAYO INTEGRADO`, `mover=True` y estados `[MISION]`. Tras nombre/Buscar y
+sensores válidos, registra A y pasa a IDA. Si imprime `ENSAYO CERCA DE B` o
+`[PRUEBA B]`, se abrió el ensayo aislado, que no realiza el recorrido; si además
+indica `mover=False`, no publica velocidades. Eso ocurrió en el registro del
+21/11: esperaba la meta sin movimiento habilitado. Cerrar con Ctrl+C y ejecutar
+el comando completo anterior con `--mision-guiada --mover`, sin mezclar modos.
+No se activa movimiento automáticamente al pulsar Buscar si falta --mover.
+
 ## Secuencia y qué observar
 
 1. **IDA:** registra A, navega con evasión y acepta flechas azules en la primera
