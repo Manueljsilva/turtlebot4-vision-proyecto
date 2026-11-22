@@ -16,7 +16,7 @@ from unittest.mock import Mock, patch
 import numpy as np
 
 import mision_guiada_robot as app
-from control_mision import ConfigMision, ControlMision, MetaNueva, normalizar
+from control_mision import ConfigMision, ControlMision, MetaNueva, cargar_config_mision, normalizar
 from ensayo_giros_companero import cargar_ensayo, CONFIG, CONTROL
 from evasion_lidar import ConfigEvasion
 from holgura_giro import HolguraGiro
@@ -262,7 +262,7 @@ class MisionTests(unittest.TestCase):
         self.assertIsNotNone(self.c.giros.pendiente)
         self.assertIsNone(self.c.giros.activo)  # No anticipar el umbral de 0.305 m.
         # Una diagonal en el recorrido sí conserva la parada y explica su medida.
-        s.ranges[190]=.275
+        s.ranges[190]=.265  # Aún fuera de radio+margen .24, pero sin recorrido de frenado.
         h=analizar_holgura(s,(0.,0.,0.),.12,self.cfg)
         r=self.paso(sensor=lidar(.435,.45,.276),holgura=h)
         self.assertEqual(r[:2],(0.,0.))
@@ -627,7 +627,7 @@ class MisionTests(unittest.TestCase):
         self.assertEqual(self.paso(sensor=lidar(.435),holgura=h(.12))[:2],(.05,0.))
         r=self.paso(sensor=lidar(.435),holgura=h(.6))
         self.assertEqual(r[:2],(0.,0.))
-        self.assertIn('recorrido libre=0.040m',r[2])
+        self.assertIn('recorrido libre=0.050m',r[2])
         self.assertEqual(self.paso(sensor=lidar(.435),holgura=h(.61))[:2],(0.,0.))
 
     def test_salida_pausa_por_camara_y_recupera_sin_distancia_obligatoria(self):
@@ -731,6 +731,80 @@ class MisionTests(unittest.TestCase):
         self.assertIsNone(self.c.giros.activo)
         self.assertIsNone(self.c.aproximacion_ns)
 
+    def contorno_pasillo(self, izquierda=.2574456652, derecha=.314, edad=0., extra=()):
+        # Retornos ya transformados a base_link; cobertura/TF se prueban en holgura_giro.
+        puntos=((.782,0.),(0.,izquierda),(0.,-derecha),(-1.,0.))+tuple(extra)
+        distancia=min(float(np.hypot(x,y)) for x,y in puntos)
+        return HolguraGiro(True,distancia,'Pasillo simulado',edad,
+                           distancia_avance_m=distancia,puntos_base=puntos)
+
+    def test_perfil_mision_margen_2cm_sin_aumentar_velocidad_de_prueba(self):
+        activa=cargar_config_mision(Path(app.__file__).parent/'config/mision_guiada.json')
+        self.assertEqual(activa,ConfigMision())
+        self.assertAlmostEqual(activa.radio_giro_m+activa.margen_giro_m,.24)
+        self.assertEqual(activa.velocidad_aproximacion_m_s,.05)
+        self.assertEqual(self.cfg.velocidad_avance,.1)
+
+    def test_registro_laterales_258_314mm_avanza_a_velocidad_actual_en_ida_y_vuelta(self):
+        for fase in ('IDA','VUELTA'):
+            with self.subTest(fase=fase):
+                self.setUp()
+                self.iniciar() if fase=='IDA' else self.qr_y_salida()
+                for _ in range(8):
+                    r=self.paso(sensor=lidar(.782,.258,.314),holgura=self.contorno_pasillo(),
+                                x=self.pose['x']+.02)
+                    self.assertEqual(r[:2],(.1,0.))
+                    self.assertIn('Paso entre laterales',r[2])
+                    self.assertIn('0.10m/s',r[2])
+                    self.assertIsNone(self.c.evasion)
+                    self.assertEqual(self.c.fase,fase)
+
+    def test_pasillo_prioriza_recto_protegido_sobre_correccion_lateral(self):
+        self.iniciar()
+        r=self.paso(sensor=lidar(.782,.258,.45),holgura=self.contorno_pasillo(derecha=.45))
+        self.assertEqual(r[:2],(.1,0.))
+        self.assertIsNone(self.c.evasion)
+
+    def test_ambos_laterales_245mm_admiten_recto_pero_240mm_bloquean_huella(self):
+        self.iniciar()
+        r=self.paso(sensor=lidar(.782,.245,.245),
+                    holgura=self.contorno_pasillo(.245,.245))
+        self.assertEqual(r[:2],(.1,0.))
+        for limite in (.24,.239):
+            r=self.paso(sensor=lidar(.782,limite,.245),
+                        holgura=self.contorno_pasillo(limite,.245))
+            self.assertEqual(r[:2],(0.,0.))
+            self.assertIn('radio+margen=0.240m',r[2])
+
+    def test_pasillo_no_omite_diagonal_en_recorrido_ni_inventa_libre_sin_puntos(self):
+        self.iniciar()
+        h=self.contorno_pasillo(extra=((.05,.238),))
+        self.assertGreater(h.distancia_minima_m,.24)
+        r=self.paso(sensor=lidar(.782,.258,.314),holgura=h)
+        self.assertEqual(r[:2],(0.,0.))
+        self.assertIn('recorrido libre=',r[2])
+        self.assertIsNotNone(self.c.bloqueo_aproximacion)
+        r=self.paso(sensor=lidar(.782,.258,.314),holgura=replace(h,puntos_base=()))
+        self.assertEqual(r[:2],(0.,0.))
+
+    def test_pasillo_margen_longitudinal_usa_velocidad_actual_y_edad_scan(self):
+        self.iniciar()
+        h=self.contorno_pasillo(extra=((.29,0.),))
+        self.assertEqual(self.paso(sensor=lidar(.782,.258,.314),holgura=h)[:2],(.1,0.))
+        r=self.paso(sensor=lidar(.782,.258,.314),holgura=replace(h,edad_s=.3))
+        self.assertEqual(r[:2],(0.,0.))
+        self.assertAlmostEqual(self.c.bloqueo_aproximacion['margen_recorrido_m'],.06)
+        self.assertEqual(self.paso(sensor=lidar(.782,.258,.314),
+                                  holgura=replace(h,edad_s=.61))[:2],(0.,0.))
+
+    def test_pasillo_conserva_frenado_por_camara_odom_y_contorno_desconocidos(self):
+        self.iniciar()
+        h=self.contorno_pasillo()
+        self.assertEqual(self.paso(sensor=lidar(.782,.258,.314),holgura=h,marca=0)[:2],(0.,0.))
+        self.assertEqual(self.paso(sensor=lidar(.782,.258,.314),holgura=replace(h,valida=False))[:2],(0.,0.))
+        self.assertEqual(self.paso(sensor=lidar(.782,.258,.314),holgura=h,dt=.8)[:2],(0.,0.))
+        self.assertTrue(self.c.recuperando)
+
     def test_meta_frena_aunque_el_barrido_este_bloqueado_y_vision_sigue_activa(self):
         self.iniciar()
         for i in range(12):
@@ -744,7 +818,7 @@ class MisionTests(unittest.TestCase):
         self.assertEqual(self.c.fase,'BUSCAR_B')
         vx,wz,motivo=self.paso(sensor=estrecho,holgura=trasera)
         self.assertEqual((vx,wz),(0.,0.))
-        self.assertIn('distancia al centro=0.240m <= radio+margen=0.250m',motivo)
+        self.assertIn('distancia al centro=0.240m <= radio+margen=0.240m',motivo)
         self.assertIn('vision estacionaria sigue activa',motivo)
         self.assertEqual(self.paso('VERIFICAR',sensor=estrecho,holgura=trasera)[:2],(0.,0.))
         self.assertEqual(self.c.fase,'BUSCAR_B')
@@ -867,7 +941,7 @@ class MisionTests(unittest.TestCase):
         for _ in range(4):
             self.assertEqual(self.paso(sensor=lidar(.30))[:2],(0.,0.))
         self.assertEqual(self.paso(sensor=lidar(.30))[:2],(0.,.4))
-        self.assertEqual(self.paso(sensor=lidar(.30,derecha=.25))[:2],(0.,0.))
+        self.assertEqual(self.paso(sensor=lidar(.30,derecha=.24))[:2],(0.,0.))
 
     def test_evasion_mantiene_lado_con_las_variaciones_laterales_del_registro(self):
         self.iniciar()
@@ -915,22 +989,22 @@ class MisionTests(unittest.TestCase):
             if self.c.fase=='FALLO':break
         self.assertEqual(self.c.fase,'FALLO')
         self.assertIn('plazo de 12.0s agotado',motivo)
-        self.assertIn('ultimo bloqueo: distancia al centro=0.240m <= radio+margen=0.250m',motivo)
+        self.assertIn('ultimo bloqueo: distancia al centro=0.240m <= radio+margen=0.240m',motivo)
         self.assertNotIn('giro contrario',motivo)
         d=self.c.diagnostico_giro(self.t,lidar(.426,.311,.308),self.cfg)
-        self.assertEqual(d['limite_giro_m'],.25)
+        self.assertEqual(d['limite_giro_m'],.24)
         self.assertIn('distancia al centro=0.240m',d['bloqueo_giro'])
         self.assertEqual(self.paso(sensor=lidar(2.))[:2],(0.,0.))
 
     def test_disparo_sin_margen_sobre_huella_se_rechaza(self):
-        self.cfg_s=replace(self.cfg_s,esperar_pared_m=.27)
+        self.cfg_s=replace(self.cfg_s,esperar_pared_m=.26)
         self.c=ControlMision(self.cfg_s,clase_giros=self.mod.ControlGiro)
         self.iniciar()
         vx,wz,motivo=self.paso(sensor=lidar(.40))
         self.assertEqual((vx,wz),(0.,0.))
         self.assertEqual(self.c.fase,'FALLO')
-        self.assertIn('0.270m sin margen',motivo)
-        self.assertIn('radio+holgura+aproximacion 0.270m',motivo)
+        self.assertIn('0.260m sin margen',motivo)
+        self.assertIn('radio+holgura+aproximacion 0.260m',motivo)
         self.assertEqual(self.cfg.distancia_parada_m,.32)
 
     def test_aproximacion_compensa_edad_y_barrido_no_usa_holgura_anterior(self):
@@ -990,7 +1064,7 @@ class MisionTests(unittest.TestCase):
         self.assertIn('margen de aproximacion',r[2])
         self.assertIsNotNone(self.c.giros.pendiente)
         self.assertIsNone(self.c.giros.activo)
-        self.assertEqual(self.c.cfg.radio_giro_m+self.c.cfg.margen_giro_m,.25)
+        self.assertEqual(self.c.cfg.radio_giro_m+self.c.cfg.margen_giro_m,.24)
 
     def test_flecha_espera_reposo_real_y_fija_referencia_angular_una_sola_vez(self):
         self.iniciar()
@@ -1079,7 +1153,7 @@ class MisionTests(unittest.TestCase):
         self.iniciar()
         ev=lambda:dict(id=1,direccion='IZQUIERDA',color='azul',marca_ns=self.t+200_000_000)
         self.assertEqual(self.paso(senal=ev(),sensor=lidar(.44))[:2],(.05,0.))
-        self.assertEqual(self.paso(senal=ev(),sensor=lidar(.43,.27,1.))[:2],(0.,0.))
+        self.assertEqual(self.paso(senal=ev(),sensor=lidar(.43,.26,1.))[:2],(0.,0.))
         self.assertEqual(self.paso(senal=ev(),sensor=lidar(.43,valido=False))[:2],(0.,0.))
         self.assertEqual(self.paso(senal=ev(),sensor=lidar(.43),marca=0)[:2],(0.,0.))
         self.c.cfg=replace(self.c.cfg,radio_giro_m=.30)

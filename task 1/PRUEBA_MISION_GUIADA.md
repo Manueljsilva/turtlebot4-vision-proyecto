@@ -1,11 +1,33 @@
 # Ensayo integrado A → B → A
 
-Actualizado el 21 de noviembre de 2026. **311 tests Task 1** locales; no se ejecutó la suite Task 2, según el usuario.
+Actualizado el 21 de noviembre de 2026. **318 tests Task 1** locales; no se ejecutó la suite Task 2, según el usuario.
 El usuario confirma meta B y barrido; en el último intento no hay rostro objetivo
 aceptado. La lectura QR había funcionado al aumentar su tamaño; el regreso completo
 sigue pendiente. A también lleva bandera. Pruebas físicas siguientes: **únicamente
 recorrido completo**, según el usuario. Este modo sigue azul en ida y rojo en vuelta;
 no reproduce una trayectoria grabada ni incorpora SLAM/Nav2.
+
+
+## Paso entre laterales cercanos (vigente)
+
+En el registro con frente ~0.78 m, izquierda ~0.258 y derecha ~0.314, la regla
+lateral ordenaba cero sin comprobar si cabía avanzar. En misión, con frontal
+**>0.45 m** y sin giro frontal/flecha activo, se evalúa primero la trayectoria
+recta con la huella del robot. Si queda libre, avanza a **0.10 m/s**, igual que
+el avance normal de estas pruebas; no se introduce un límite de 0.05 para ese caso.
+
+El usuario autorizó bajar el margen circular de **3 a 2 cm**: radio estimado
+22 cm + margen 2 cm = **24 cm**. Para avanzar se exige además recorrido libre
+mayor que **0.02 m + velocidad × (edad scan + 0.1 s)**. Una pared lateral fuera
+del disco no consume ese margen longitudinal; una diagonal que invade el recorrido
+sí puede detener. Contorno ocupado, desconocidos/TF o sensores caducados conservan
+la parada. Si recto no cabe, una corrección lateral solo gira con holgura válida.
+El diagnóstico `Paso entre laterales` indica avance protegido o el bloqueo concreto.
+
+Aproximaciones a flecha/meta y salida adaptable siguen <=0.05 m/s. El objetivo de
+máxima velocidad en competición sigue pendiente de ajuste/validación de frenado y
+recepción, sin aumento automático ahora. Relanzar el **mismo comando de misión
+completa** para cargar el código/perfil; Reiniciar no recarga módulos.
 
 ## Giro hasta salida libre (vigente)
 
@@ -13,7 +35,7 @@ El usuario autoriza sustituir los 90° fijos de flecha y el límite angular de e
 La flecha fija el lado; tras aproximación y reposo gira sin avance hasta observar:
 
 - Frontal LiDAR **>0.49 m** (precaución 0.45 + margen de salida 0.04).
-- Contorno/TF recientes, espacio circular >0.25 m y protección frontal/lateral.
+- Contorno/TF recientes, espacio circular >0.24 m y protección frontal/lateral.
 - Recorrido libre del disco del robot mayor que el margen longitudinal de frenado.
 
 Evasión usa el mismo criterio. Se puede terminar antes o después de 90°; una
@@ -50,7 +72,7 @@ recto con el margen calculado. Exigir 40 cm impedía evasión y acababa en FALLO
 
 El giro hasta salida libre ya está implementado en misión, con reposo y plazo de
 12 s. El ángulo real es diagnóstico y no un objetivo fijo. Radio aproximado 0.22 m más
-margen 0.03 m, frescura de sensores y criterio facial se conservan. Los perfiles de
+margen 0.02 m, frescura de sensores y criterio facial se conservan. Los perfiles de
 ensayos históricos mantienen su mínimo de 0.4 m; solo el adaptador de misión lo
 sustituye por cero. No se modifican los originales del compañero ni Task 2.
 
@@ -133,8 +155,8 @@ después ya no hace falta Ctrl+C entre intentos. Este botón está en --mision-g
 1. **IDA:** registra A, navega con evasión y acepta flechas azules en la primera
    imagen nueva válida. Disparo nominal 0.30 m + tolerancia 0.005 m; frena,
    confirma reposo y gira hacia ese lado hasta salida libre protegida,
-   siempre con avance cero. Exige contorno 360° y distancia al centro >0.25 m
-   (radio 0.22 + margen 0.03 m), además de sensores/TF frescos.
+   siempre con avance cero. Exige contorno 360° y distancia al centro >0.24 m
+   (radio 0.22 + margen 0.02 m), además de sensores/TF frescos.
 2. **FRENAR_B:** confirma una meta nueva y frena. Exige >=3 poses nuevas durante
    0.7 s de reposo antes de guardar la orientación de entrada y habilitar rostros.
 3. **BUSCAR_B:** barrido sobre el sitio, hasta 0.25 rad/s, una vuelta o 90 s.
@@ -257,7 +279,7 @@ tiene prioridad. Los mismos perfiles de memoria/disparo se aplican a azul y rojo
 Confirmar la bandera ordena **parar**: no requiere permiso para girar. El barrido
 comprueba sus distancias después del reposo. Si muestra «Barrido bloqueado»,
 mantiene cero y permite seguir reconociendo el rostro y QR que estén a la vista.
-El mensaje indica, por ejemplo, `distancia al centro=0.240m <= radio+margen=0.250m`, y
+El mensaje indica, por ejemplo, `distancia al centro=0.240m <= radio+margen=0.240m`, y
 `giro.bloqueo_giro` detalla el mínimo al centro y su límite, o el cuadrante sin
 cobertura. El radio del cuerpo sigue siendo una estimación del usuario; tampoco
 se cancelan las guardas de llegada.
@@ -329,7 +351,7 @@ permanece detenido y explica el bloqueo. Esta revisión amplía la memoria a
 **Sin flecha ni aproximación a meta:** la evasión empieza desde 0.45 m y conserva el lado elegido
 durante el giro frontal; diferencias pequeñas entre lados ya no lo invierten
 cada ciclo. Exige frente >0.49 m y recorrido protegido para terminar, sin tope de 90°.
-Publica un ciclo cero y luego puede avanzar. Si el contorno invade radio+margen (0.25 m), se detiene sin
+Publica un ciclo cero y luego puede avanzar. Si el contorno invade radio+margen (0.24 m), se detiene sin
 cambiar de sentido. Incluye obstáculos detrás y correcciones laterales. Sin salida tras 12 s queda en FALLO; no gira indefinidamente.
 Esto corrige un vaivén reproducido con los mínimos del registro, sin asegurar
 alineación paralela a una pared ni resolver cualquier laberinto. `giro.evasion`
@@ -342,7 +364,7 @@ ensayo: el radio de 0.22 m fue estimado por el usuario, sin verificación indepe
 y el retorno frontal LiDAR no mide necesariamente distancia al cartel.
 
 **Holgura de giro de misión:** [config/mision_guiada.json](config/mision_guiada.json)
-usa radio **0.22 m indicado por el usuario**, más **0.03 m de margen**, alrededor
+usa radio **0.22 m indicado por el usuario**, más **0.02 m de margen**, alrededor
 de base_link. No se asume que el LiDAR esté centrado: cada retorno se transforma
 con x/y/yaw del TF. Se comprueba el contorno completo, también detrás. Requiere
 scan 360°, cobertura de al menos 30 % y tres retornos por cuadrante, errores
@@ -350,7 +372,7 @@ NaN/fuera <=10 %, TF plano válido y edad <=0.6 s. Sectores desconocidos,
 -inf/bajo rango o TF ausente detienen; +inf no es espacio libre. Una inclinación
 TF mayor de 5° se rechaza. `giro.distancia_centro_m` es el mínimo transformado;
 `frente_m`/laterales siguen siendo rangos desde el sensor. La rotación exige
-mínimo al centro >0.25 m. Los márgenes y el radio deben comprobarse físicamente.
+mínimo al centro >0.24 m. Los márgenes y el radio deben comprobarse físicamente.
 
 La parada **general de avance sigue en 0.32 m**. La aproximación coordinada
 a una flecha y la salida adaptable conservan avance lento protegido por huella

@@ -9,7 +9,7 @@
   "velocidad_aproximacion_m_s": 0.05,
   "margen_salida_evasion_m": 0.04,
   "radio_giro_m": 0.22,
-  "margen_giro_m": 0.03,
+  "margen_giro_m": 0.02,
   "margen_aproximacion_m": 0.02,
   "tolerancia_disparo_m": 0.005
 }

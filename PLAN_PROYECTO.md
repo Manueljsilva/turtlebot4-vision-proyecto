@@ -2,7 +2,15 @@
 
 Actualizado el 21 de noviembre de 2026. Fuente base: las cinco páginas de [Computer_vision_proyectos.pdf](Computer_vision_proyectos.pdf), revisadas completas. Las indicaciones del usuario del 13 y 17 de noviembre **prevalecen para Task 1**. Se distinguen los requisitos confirmados, las decisiones propuestas y los componentes realmente implementados en [ESTADO_PROYECTO.md](ESTADO_PROYECTO.md).
 
-**Prioridad actual (21/11): misión completa con giros hasta salida libre.**
+**Prioridad actual (21/11): misión completa con paso protegido entre laterales y giros hasta salida libre.**
+Margen circular autorizado de 2 cm con radio estimado 22 cm: límite 24 cm.
+Con frontal >0.45 m y sin maniobra activa, comprobar trayectoria recta antes de
+parar/corregir solo por laterales próximos. Si cabe, usar **0.10 m/s**, la velocidad
+normal actual; conservar margen longitudinal dinámico, sensores y paradas reales.
+Aproximaciones a señal/meta y salida adaptable siguen <=0.05 m/s. **318 tests Task 1**.
+El usuario desea máxima velocidad en competición; aumento/frenado y recepción
+requieren validación posterior, no se activan como parte de este ajuste.
+
 El usuario confirma quitar el giro fijo de 90° de las flechas y el tope angular
 de evasión. La flecha memoriza el lado, aproxima al umbral y gira sobre el sitio
 hasta frontal >0.49 m y trayectoria protegida; evasión usa el mismo criterio.
@@ -11,7 +19,7 @@ máximo 12 s incluidos frenado/pausas y fallo por odometría incoherente/giro co
 Guardar el rumbo real al terminar; no corregir hacia el antiguo objetivo de 90°.
 El retorno deliberado entrada B+180° y las fases meta/rostro/QR no cambian.
 Salida adaptable sin 40 cm y una ejecución por ID con rearme visual continúan.
-**311 tests Task 1**; no ejecutar suite Task 2 durante estos cambios, según el
+**318 tests Task 1**; no ejecutar suite Task 2 durante estos cambios, según el
 usuario. No proponer ensayos físicos aislados como siguiente paso: solo recorrido
 completo. El usuario mantiene diagnóstico/propuesta y aprobación antes de nuevos
 cambios; este ajuste ya está expresamente autorizado.

@@ -6,7 +6,7 @@ rostro objetivo/QR propio → rojo/evasión → meta A. A también lleva bandera
 mirando al robot cuando regrese. Al confirmar meta A y reposo, aparece un panel
 grande con la palabra y el robot queda detenido. El regreso completo aún no está
 validado físicamente. Guía vigente: [PRUEBA_MISION_GUIADA.md](PRUEBA_MISION_GUIADA.md),
-bloque 18 de [COMANDOS.txt](COMANDOS.txt); 311 tests locales de Task 1; no se ejecutó Task 2. Flecha guardada
+bloque 18 de [COMANDOS.txt](COMANDOS.txt); 318 tests locales de Task 1; no se ejecutó Task 2. Flecha guardada
 hasta disparo <=0.305 m (máximo 30 s), también en rojo; meta exige frontal <=0.40 m
 con acercamiento lento protegido antes de frenar/barrer. Revisión sobre main ca5d880: protección de avance ante diagonales, memoria de
 flecha hasta el umbral y recuperación QR con rechazo explícito, sin renovar marcas.
@@ -16,6 +16,8 @@ a Salir, detiene y espera reposo antes de permitir otra persona en la misma
 ventana; el nuevo Buscar vuelve a registrar A. Reinicio aún pendiente en hardware.
 Las descripciones
 históricas de tres confirmaciones de abajo se sustituyen por una imagen nueva válida.
+
+**Laterales cercanos (21/11):** solo misión guiada comprueba el recorrido recto antes de parar o corregir por proximidad lateral. Con frente >0.45 m y huella/trayectoria libres, continúa a **0.10 m/s**, la velocidad normal de pruebas. Margen circular **2 cm** + radio estimado **22 cm** = límite **24 cm**. Mantiene margen longitudinal dinámico y paradas por obstáculos/datos caducados. Aproximaciones a flecha/meta y salida adaptable siguen <=0.05 m/s. El aumento para competición queda pendiente de validación física.
 
 **Continuidad y meta:** deriva pequeña puede corregir rumbo con reposo/holgura; evasión al límite puede terminar con salida recta segura. El último registro confirma meta B y barrido, sin objetivo facial aceptado. `[META VISUAL]` distingue detector/resolución de llegada. Pruebas físicas siguientes: solo misión completa, según el usuario.
 

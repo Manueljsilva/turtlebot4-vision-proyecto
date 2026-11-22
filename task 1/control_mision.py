@@ -33,7 +33,7 @@ class ConfigMision:
     velocidad_aproximacion_m_s: float = .05
     margen_salida_evasion_m: float = .04
     radio_giro_m: float = .22
-    margen_giro_m: float = .03
+    margen_giro_m: float = .02
     margen_aproximacion_m: float = .02
     tolerancia_disparo_m: float = .005
 
@@ -379,8 +379,11 @@ class ControlMision:
                 recorrido_libre_m=recorrido,margen_recorrido_m=margen)
             return 0.,0.,etiqueta+': margen de aproximacion insuficiente; '+motivo
         self.bloqueo_aproximacion=None
-        accion=('avanzar recto con holgura; salida adaptable' if etiqueta == 'Salida tras flecha'
-                else 'aproximar recto hasta el umbral; sin giro evasivo')
+        if etiqueta == 'Paso entre laterales':
+            accion=f'avance recto protegido a {velocidad:.2f}m/s; sin correccion lateral innecesaria'
+        else:
+            accion=('avanzar recto con holgura; salida adaptable' if etiqueta == 'Salida tras flecha'
+                    else 'aproximar recto hasta el umbral; sin giro evasivo')
         return velocidad,0.,etiqueta+': '+accion
 
     def salir_de_flecha(self, ahora, pose, pose_ns, lidar, cfg, solo_reposo=False):
@@ -478,6 +481,14 @@ class ControlMision:
             self.evasion=dict(sentido=1. if lidar.dist_izquierda >= lidar.dist_derecha else -1.,
                               inicio_ns=ahora, yaw=self.yaw_total)
         if self.evasion is None:
+            if vx <= 0:
+                # Con frontal fuera de precaución, una pared lateral puede
+                # quedar cerca sin invadir el disco trasladado hacia delante.
+                # Comprobar ese recorrido a la velocidad normal de pruebas,
+                # incluyendo su margen longitudinal, antes de parar o girar.
+                recto=self.aproximar(ahora,lidar,cfg,'Paso entre laterales')
+                if recto[0] > 0 or not wz:
+                    return recto
             if wz and not self.libre(lidar,cfg):
                 return 0.,0.,'Correccion lateral bloqueada: '+self.bloqueo_giro(lidar,cfg)
             if vx > 0:
@@ -487,7 +498,7 @@ class ControlMision:
                 return vx, 0., 'Avance recto con evasion'
             if wz:
                 return 0., wz, 'Correccion lateral sobre el sitio'
-            return 0., 0., 'Evasion detenida: ambos laterales cercanos'
+            return 0., 0., 'Evasion detenida: sin trayectoria recta protegida'
         e=self.evasion
         avance=e['sentido']*(self.yaw_total-e['yaw'])
         agotado = ahora-e['inicio_ns'] > self.cfg_senales.tiempo_maximo_giro_s*1e9

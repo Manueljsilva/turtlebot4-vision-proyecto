@@ -1,8 +1,18 @@
 # Estado del proyecto
 
-Actualizado: **21 de noviembre de 2026**. El usuario autoriza giro por salida libre en misión integrada: la flecha fija el lado; ya no exige 90° ni la evasión falla al alcanzar ese ángulo. Termina con frontal >0.49 m y trayectoria protegida. Mantiene reposo, sensores/huella y máximo 12 s. **311 tests Task 1**, sin ejecutar suite Task 2 por preferencia del usuario. Recorrido físico completo/retorno aún pendientes.
+Actualizado: **21 de noviembre de 2026**. Misión integrada: giro por salida libre y paso recto protegido entre laterales cercanos. Margen circular reducido por autorización a **2 cm** (radio estimado 22 cm; límite 24 cm). Avance normal **0.10 m/s**, aproximaciones/salida adaptable <=0.05. **318 tests Task 1**, sin suite Task 2. Recorrido físico completo/retorno, geometría y velocidad final pendientes.
 
-## Giro hasta salida libre autorizado (21 de noviembre, vigente)
+## Paso entre laterales cercanos (21 de noviembre, vigente)
+
+El registro facd3a29 tiene 32 estados completos, todos IDA: 26 paradas laterales, cuatro por recuperación odométrica y dos por cámara; ninguna FALLO. Con frente ~0.74–0.78 m, izquierda ~0.258 m y derecha ~0.314 m, la heurística detiene porque un lateral está bajo 0.28 y el opuesto no supera 0.32. No significa necesariamente ambos lados <0.28 ni un fallo del giro de flecha. No se aportan los puntos del escaneo, de modo que esas cifras por sí solas no prueban espacio de avance.
+
+Autorizado: solo --mision-guiada reduce margen circular **0.03→0.02 m**, conservando radio estimado 0.22 y margen longitudinal 0.02+v×(edad scan+0.1). El límite de huella/giro pasa a **0.24 m**. Con frente >0.45 m y sin maniobra frontal/flecha activa, una propuesta de parada/corrección lateral evalúa primero el disco trasladado hacia delante: si hay recorrido protegido, avanza recto a **0.10 m/s**, la velocidad normal actual de pruebas. No impone la propuesta inicial de 0.05 m/s para ese corredor. Contorno ocupado/TF/sectores o datos caducados y diagonales sin distancia de frenado siguen deteniendo. Si recto no cabe pero la corrección lateral original tiene holgura, puede girar sobre el sitio; sin ello explica el bloqueo concreto. Sin puntos conserva el veto radial conservador.
+
+Aproximaciones a flecha/meta y salida adaptable siguen <=0.05 m/s; giro hasta salida libre, frontal de salida >0.49 m, reposos y máximo 12 s intactos. No cambia Task 2, percepción, cámara, galería ni snapshots. El usuario quiere la máxima velocidad posible para la competición; queda pendiente parametrizar y validar aumento con frenado/recepción reales, sin activarlo ni prometer un máximo validado ahora.
+
+**318 pruebas locales Task 1**, sin Task 2 ni movimiento físico del asistente. Regresiones previas fallaban con parada y corrección lateral innecesaria; ahora pasan corredor en ida/vuelta a 0.10, ambos lados 0.245 frente al borde 0.240, diagonal fuera del disco actual pero dentro del recorrido, margen a velocidad/edad reales, cámara/odom/contorno desconocidos. Continúan las secuencias integradas simuladas de flecha/meta/QR/regreso, sin certificar el circuito físico. Siguiente prueba: cerrar/relanzar una vez para cargar código/perfil y realizar **misión completa**, sin ensayos físicos aislados. Preservar cambios ajenos y exclusiones al publicar sobre 3e4f676.
+
+## Giro hasta salida libre autorizado (21 de noviembre; margen actualizado arriba)
 
 Registro 6b3dee8b: 50 estados completos, 21 IDA y 29 FALLO; ninguna flecha recibida/activa. Evasión IZQUIERDA alcanza **90.5°** con frente **0.402 m**, mínimo al centro **~0.347 m** y bloqueo de giro nulo. La causa terminal es «Evasion sin salida: limite angular alcanzado». Hubo cuatro muestras de pausa por cámara/recuperación odométrica, pero la parada definitiva viene del límite angular. No atribuir este fragmento a la flecha ni al antiguo rearme de 40 cm.
 
