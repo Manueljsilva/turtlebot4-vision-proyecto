@@ -1,8 +1,10 @@
 # Plan del proyecto con TurtleBot 4 Lite
 
-Actualizado el 21 de noviembre de 2026. Fuente base: las cinco páginas de [Computer_vision_proyectos.pdf](Computer_vision_proyectos.pdf), revisadas completas. Las indicaciones del usuario del 13 y 17 de noviembre **prevalecen para Task 1**. Se distinguen los requisitos confirmados, las decisiones propuestas y los componentes realmente implementados en [ESTADO_PROYECTO.md](ESTADO_PROYECTO.md).
+Actualizado el 24 de noviembre de 2026 (informe; control del 21/11). Fuente base: las cinco páginas de [Computer_vision_proyectos.pdf](Computer_vision_proyectos.pdf), revisadas completas. Las indicaciones del usuario del 13 y 17 de noviembre **prevalecen para Task 1**. Se distinguen los requisitos confirmados, las decisiones propuestas y los componentes realmente implementados en [ESTADO_PROYECTO.md](ESTADO_PROYECTO.md).
 
-**Prioridad actual (21/11): misión completa con paso protegido entre laterales y giros hasta salida libre.**
+**Prioridad documental (24/11):** corregir contradicciones de comportamiento y validación del informe, recompilar y señalar secciones/páginas/líneas. Conservar el desarrollo del usuario; no cambiar código del robot ni ejecutar suites Task 2. La integración existe, pero el recorrido físico completo y último ajuste lateral siguen pendientes. Después: completar detalles rostro/QR, mediciones y referencias, sin inventar resultados.
+
+**Próxima validación física (control del 21/11): misión completa con paso protegido entre laterales y giros hasta salida libre.**
 Margen circular autorizado de 2 cm con radio estimado 22 cm: límite 24 cm.
 Con frontal >0.45 m y sin maniobra activa, comprobar trayectoria recta antes de
 parar/corregir solo por laterales próximos. Si cabe, usar **0.10 m/s**, la velocidad

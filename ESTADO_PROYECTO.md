@@ -1,6 +1,15 @@
 # Estado del proyecto
 
-Actualizado: **21 de noviembre de 2026**. Misión integrada: giro por salida libre y paso recto protegido entre laterales cercanos. Margen circular reducido por autorización a **2 cm** (radio estimado 22 cm; límite 24 cm). Avance normal **0.10 m/s**, aproximaciones/salida adaptable <=0.05. **318 tests Task 1**, sin suite Task 2. Recorrido físico completo/retorno, geometría y velocidad final pendientes.
+Actualizado: **24 de noviembre de 2026** (informe; control vigente desde el 21/11). Misión integrada: giro por salida libre y paso recto protegido entre laterales cercanos. Margen circular reducido por autorización a **2 cm** (radio estimado 22 cm; límite 24 cm). Avance normal **0.10 m/s**, aproximaciones/salida adaptable <=0.05. **318 tests Task 1**, sin suite Task 2. Recorrido físico completo/retorno, geometría y velocidad final pendientes.
+
+
+## Informe: contradicciones prioritarias corregidas (24 de noviembre)
+
+El usuario pidió corregir primero comportamiento y estado de validación, e indicar dónde leerlo. Se trabaja sobre su `informe/main.tex` local de 1024 líneas y sus seis diagramas, conservando su portada/desarrollo matemático. Resumen, tabla de subsistemas, reconocimiento, navegación, resultados, limitaciones y apéndices ahora distinguen una imagen nueva válida de las >=3 poses/0.7 s de reposo; giros hasta salida libre sin tope de 90°, sin rearme obligatorio de 40 cm; radio 22 cm + margen 2 cm, trayectoria protegida a velocidad normal 0.10 y aproximaciones/salida adaptable <=0.05 m/s. Aclara que el último ajuste lateral aún no fue probado físicamente. La máquina A-B-A/QR está implementada; validación física integral pendiente, no implementación futura. Recuento: 318 pruebas Task 1 registradas el 21/11 y 51 Task 2 históricas, sin sumar como corrida reciente ni repetir suites en esta revisión documental.
+
+Se separa detector original (STOP, dos hilos/alternancia cada tres fotogramas) de misión ejecutada en laptop y por etapas. Se conserva su explicación matemática/diagramas como aporte original; STOP no es una orden de misión. Se aclaran recortes faciales individuales frente a escena con varias fotos, límites del bloqueo de publicadores y de la medición local de recepción. Corrige pie/amplía diagrama de estados, configura porcentajes compatibles con Babel y elimina texto desbordado. El límite de 900 s se identifica como interno, no tiempo oficial de competición. No se modifica código del robot, modelos, galería ni Task 2.
+
+PDF actualizado de **22 páginas**, compilado con pdfLaTeX dos pasadas, sin advertencias/referencias pendientes/desbordamientos en la pasada final y revisado visualmente; auxiliares solo en /tmp. `output/pdf/informe_proyecto_borrador.pdf` es la copia versionada y `informe/main.pdf` su copia de lectura local. Publicar fuente, PDF y seis diagramas necesarios bajo autorización previa del informe; no incluir PNG/QR de `señales`, presentaciones, datos personales ni la eliminación local del Markdown anterior. Quedan para otra revisión ampliación metodológica rostro/QR, protocolo cuantitativo de evaluación, referencias y mediciones físicas; no inventar resultados ni afirmar prueba del último ajuste lateral.
 
 ## Paso entre laterales cercanos (21 de noviembre, vigente)
 
