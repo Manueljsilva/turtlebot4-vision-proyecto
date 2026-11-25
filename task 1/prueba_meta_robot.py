@@ -16,7 +16,7 @@ import cv2
 
 from busqueda_robot import EntradaBusqueda, PuenteBusqueda, preparar_movimiento
 from control_busqueda import CONFIRMACIONES_VISUALES, EDAD_CAMARA_NS, reciente
-from control_meta import SesionPruebaB
+from control_meta import SesionPruebaB, misma_caja
 from evasion_lidar import cargar_config
 from interfaz_facial import BUSCAR, dibujar_interfaz, escribir
 from percepcion_meta_qr import (DetectorMetaQR, analizar_candidatos, asociar_qr,
@@ -56,6 +56,54 @@ class EnsayoB:
         self.estado_qr = 'Esperando meta, reposo y persona objetivo'
         self.qr_asociado = None
         self.tamano_imagen = None
+        self.inspeccionando = False
+        self._pausa_inicio_ns = None
+        self._pausa_bloqueada_hasta_ns = None
+        self._caja_inspeccionada = None
+
+    def _rostro_centrado(self, cara, margen=0.22):
+        if not self.tamano_imagen or self.tamano_imagen[0] <= 0:
+            return True
+        x, _, w, _ = cara['caja']
+        centro_x = (x + w * 0.5) / self.tamano_imagen[0]
+        return abs(centro_x - 0.5) <= margen
+
+    def _actualizar_inspeccion(self, ahora, objetivos, pausar):
+        if objetivos:
+            self.inspeccionando = False
+            self._pausa_inicio_ns = None
+            self._caja_inspeccionada = None
+            if pausar:
+                pausar()  # Parar antes de la decodificación QR, que puede tardar.
+            return
+        # Evitar gastar pausa al entrar por un borde o repetir sobre la misma foto lado a lado.
+        margen = 0.28 if self._pausa_inicio_ns is not None else 0.22
+        pendientes = [c for c in self.caras if not c['aceptado'] and self._rostro_centrado(c, margen)]
+        if self._caja_inspeccionada is not None and self._pausa_inicio_ns is None:
+            for c in self.caras:
+                if not c['aceptado'] and misma_caja(c['caja'], self._caja_inspeccionada):
+                    self._caja_inspeccionada = list(c['caja'])
+                    break
+            pendientes = [c for c in pendientes if not misma_caja(c['caja'], self._caja_inspeccionada)]
+        if not pendientes:
+            self.inspeccionando = False
+            self._pausa_inicio_ns = None
+            return
+        if self._pausa_bloqueada_hasta_ns is not None and ahora < self._pausa_bloqueada_hasta_ns:
+            self.inspeccionando = False
+            self._pausa_inicio_ns = None
+            return
+        if self._pausa_inicio_ns is None:
+            self._pausa_inicio_ns = ahora
+        if ahora - self._pausa_inicio_ns < 900_000_000:
+            self.inspeccionando = True
+            if pausar:
+                pausar()
+        else:
+            self.inspeccionando = False
+            self._pausa_inicio_ns = None
+            self._caja_inspeccionada = list(pendientes[0]['caja'])
+            self._pausa_bloqueada_hasta_ns = ahora + 400_000_000
 
     def recibir_control(self, estado, ahora):
         if not estado or not reciente(estado.get('recibido_ns'), ahora, EDAD_CAMARA_NS):
@@ -72,6 +120,8 @@ class EnsayoB:
             self.tamano_imagen = None
             self.caras, self.percepcion = [], dict(meta=None, codigos=[])
             self.qr_asociado = None
+            self.inspeccionando = False
+            self._pausa_inicio_ns = None
             if s.palabra is None:
                 self.estado_qr = 'Esperando imagen reciente para leer QR'
             s.actualizar(self.percepcion, [], None, '', None, ahora)
@@ -82,18 +132,23 @@ class EnsayoB:
                 or s.orden in ('PARAR', 'QR_LISTO')):
             if s.orden == 'QR_LISTO' and marca != self.ultima_marca:
                 self.caras, self.percepcion, self.qr_asociado = [], dict(meta=None, codigos=[]), None
+            if s.orden in ('PARAR', 'QR_LISTO'):
+                self.inspeccionando = False
+                self._pausa_inicio_ns = None
             return imagen
         self.ultima_marca = marca
         if s.meta_confirmada and (s.busqueda_desde_ns is None or marca <= s.busqueda_desde_ns):
             self.caras, self.percepcion = [], dict(meta=None, codigos=[])
+            self.inspeccionando = False
+            self._pausa_inicio_ns = None
             s.motivo = ('Meta confirmada; esperando reposo para habilitar rostros' if s.busqueda_desde_ns is None
                         else 'Esperando imagen nueva posterior al frenado')
             self.estado_qr, self.qr_asociado = 'Esperando reposo e imagen posterior', None
             return imagen
         self.caras = analizar_candidatos(imagen, self.sistema) if s.meta_confirmada else []
         objetivos = [c for c in self.caras if c['aceptado'] and c['nombre'] == s.nombre]
-        if pausar and objetivos:
-            pausar()  # Parar antes de la decodificación QR, que puede tardar.
+        if s.meta_confirmada:
+            self._actualizar_inspeccion(ahora, objetivos, pausar)
         if not s.meta_confirmada:
             self.percepcion = self.detector.detectar(imagen, leer_qr=False, buscar_meta=True)
         elif len(objetivos) == 1:
@@ -123,6 +178,10 @@ class EnsayoB:
         self.sesion.reiniciar_lectura_qr()
         self.caras, self.percepcion = [], dict(meta=None, codigos=[])
         self.qr_asociado = None
+        self.inspeccionando = False
+        self._pausa_inicio_ns = None
+        self._pausa_bloqueada_hasta_ns = None
+        self._caja_inspeccionada = None
         self.estado_qr = 'Confirmacion QR caducada antes de acuse; esperando imagen nueva'
 
     def resumen_qr(self):
@@ -218,60 +277,119 @@ def dibujar_prueba(imagen, estado_camara, entrada, ensayo, estado_ros, mover):
     return panel
 
 
+def _preparar_frame_preview(frame, lado=250):
+    alto, ancho = frame.shape[:2]
+    menor = min(alto, ancho)
+    y0, x0 = (alto - menor) // 2, (ancho - menor) // 2
+    recorte = frame[y0:y0 + menor, x0:x0 + menor]
+    if lado > 0 and menor != lado:
+        recorte = cv2.resize(recorte, (lado, lado), interpolation=cv2.INTER_AREA)
+    return recorte
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--ip', required=True)
-    parser.add_argument('--dominio', type=int, required=True)
+    parser.add_argument('--ip')
+    parser.add_argument('--dominio', type=int)
     parser.add_argument('--contenedor', default='proyecto2-sim')
     parser.add_argument('--config', type=Path, default=TAREA/'config/evasion_lidar.json')
     parser.add_argument('--topico-camara', default=TOPICO)
     parser.add_argument('--nombre')
     parser.add_argument('--mover', action='store_true')
     parser.add_argument('--avanzar-hasta-meta', action='store_true', help='Evasion previa a la bandera; despues solo giro')
+    parser.add_argument('--webcam', action='store_true', help='Prueba local con webcam sin robot ni ROS')
+    parser.add_argument('--camara-local', type=int, default=0)
+    parser.add_argument('--lado-preview', type=int, default=250)
+    parser.add_argument('--sin-meta', action='store_true', help='Con --webcam, habilita de frente rostro y QR')
     args = parser.parse_args(argv)
-    video = puente = None
+    if args.webcam:
+        if args.mover or args.avanzar_hasta_meta or args.ip is not None or args.dominio is not None:
+            parser.error('--webcam es solo prueba local sin robot, --ip, --dominio ni --mover')
+    else:
+        if args.sin_meta:
+            parser.error('--sin-meta solo aplica junto a --webcam')
+        if not args.ip or args.dominio is None:
+            parser.error('Indica --ip y --dominio, o usa --webcam para prueba local')
+    video = puente = captura = None
     abierta = False
     ventana = 'Task 1 - prueba meta B, rostro y QR'
     try:
-        if not (os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY')):
+        if os.name != 'nt' and not (os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY')):
             raise ValueError('Abrir desde una terminal de Ubuntu con interfaz grafica')
-        cargar_config(args.config)
+        if not args.webcam:
+            cargar_config(args.config)
         cv2.setNumThreads(1)
         sistema = cargar_sistema()
         ensayo = EnsayoB(sistema, args.avanzar_hasta_meta)
         entrada = EntradaMeta(ConsultaEnVivo(sistema, args.nombre), ensayo.sesion)
-        comando = preparar_camara(args.ip, args.dominio, args.contenedor, args.topico_camara)
-        control = preparar_barrido(comando, args.contenedor, args.config, args.mover, args.avanzar_hasta_meta)
-        video = cargar_transporte()(subprocess.Popen(comando, stdin=subprocess.PIPE, stdout=subprocess.PIPE))
-        puente = PuenteBusqueda(control)
+        if args.webcam:
+            captura = cv2.VideoCapture(args.camara_local)
+            if not captura.isOpened():
+                raise RuntimeError('No se pudo abrir la webcam local')
+        else:
+            comando = preparar_camara(args.ip, args.dominio, args.contenedor, args.topico_camara)
+            control = preparar_barrido(comando, args.contenedor, args.config, args.mover, args.avanzar_hasta_meta)
+            video = cargar_transporte()(subprocess.Popen(comando, stdin=subprocess.PIPE, stdout=subprocess.PIPE))
+            puente = PuenteBusqueda(control)
         cv2.namedWindow(ventana, cv2.WINDOW_NORMAL | cv2.WINDOW_GUI_NORMAL)
         abierta = True
         cv2.resizeWindow(ventana, 960, 708)
         cv2.setMouseCallback(ventana, entrada.raton)
-        print(('ENSAYO: evasion hasta ver meta, frenar y girar para buscar persona/QR. ' if args.avanzar_hasta_meta else
-               'ENSAYO CERCA DE B: esperar meta, frenar y girar para buscar persona/QR. ')+
-              'Cerrar otros controles. No registra A ni regresa. Esc detiene y sale.', flush=True)
+        if args.webcam:
+            print(f'PRUEBA LOCAL WEBCAM ({args.lado_preview}x{args.lado_preview}px): sin robot. '
+                  + ('Rostro + QR activos desde Buscar.' if args.sin_meta else 'Espera meta antes de rostro + QR.')
+                  + ' Esc detiene y sale.', flush=True)
+        else:
+            print(('ENSAYO: evasion hasta ver meta, frenar y girar para buscar persona/QR. ' if args.avanzar_hasta_meta else
+                   'ENSAYO CERCA DE B: esperar meta, frenar y girar para buscar persona/QR. ')+
+                  'Cerrar otros controles. No registra A ni regresa. Esc detiene y sale.', flush=True)
         guardado, ultimo_log, ultimo_qr = False, 0, None
         while True:
-            puente.comprobar()
-            if video.proceso.poll() is not None:
-                raise RuntimeError('Termino el receptor de camara')
-            imagen, estado_camara = video.fotograma()
-            marca = video._decodificado['recibido_ns'] if imagen is not None else None
-            ahora = time.monotonic_ns()
-            estado_ros = puente.ultimo_estado(ahora)
-            ensayo.recibir_control(estado_ros, ahora)
-            imagen = ensayo.actualizar(imagen, marca, ahora,
-                lambda: puente.actualizar('VERIFICAR', time.monotonic_ns(), marca))
-            ahora = time.monotonic_ns()
-            if (not reciente(marca, ahora, EDAD_CAMARA_NS) or
-                    (ensayo.sesion.inicio_ns is not None and marca <= ensayo.sesion.inicio_ns)):
-                imagen, marca = None, None
-            puente.actualizar(ensayo.sesion.orden, ahora, marca)
+            if args.webcam:
+                ok, frame = captura.read()
+                imagen = _preparar_frame_preview(frame, args.lado_preview) if ok and frame is not None else None
+                estado_camara = f'Webcam local {args.lado_preview}x{args.lado_preview}' if imagen is not None else 'Sin fotograma de webcam'
+                marca = time.monotonic_ns() if imagen is not None else None
+                ahora = time.monotonic_ns()
+                estado_ros = dict(recibido_ns=ahora, estado='Webcam local (sin ROS)',
+                                  busqueda_desde_ns=ensayo.sesion.inicio_ns)
+                if (args.sin_meta and ensayo.sesion.inicio_ns is not None
+                        and not ensayo.sesion.meta_confirmada):
+                    ensayo.sesion.meta_confirmada, ensayo.sesion.orden = True, 'BARRER'
+                    ensayo.sesion.habilitar_busqueda(ensayo.sesion.inicio_ns)
+                elif (not args.sin_meta and ensayo.sesion.meta_confirmada
+                      and ensayo.sesion.busqueda_desde_ns is None and marca is not None):
+                    ensayo.sesion.habilitar_busqueda(marca)
+                imagen = ensayo.actualizar(imagen, marca, ahora)
+                ahora = time.monotonic_ns()
+                if (not reciente(marca, ahora, EDAD_CAMARA_NS) or
+                        (ensayo.sesion.inicio_ns is not None and marca <= ensayo.sesion.inicio_ns)):
+                    imagen, marca = None, None
+            else:
+                puente.comprobar()
+                if video.proceso.poll() is not None:
+                    raise RuntimeError('Termino el receptor de camara')
+                imagen, estado_camara = video.fotograma()
+                marca = video._decodificado['recibido_ns'] if imagen is not None else None
+                ahora = time.monotonic_ns()
+                estado_ros = puente.ultimo_estado(ahora)
+                ensayo.recibir_control(estado_ros, ahora)
+                imagen = ensayo.actualizar(imagen, marca, ahora,
+                    lambda: puente.actualizar('VERIFICAR', time.monotonic_ns(), marca))
+                ahora = time.monotonic_ns()
+                if (not reciente(marca, ahora, EDAD_CAMARA_NS) or
+                        (ensayo.sesion.inicio_ns is not None and marca <= ensayo.sesion.inicio_ns)):
+                    imagen, marca = None, None
+                orden_control = ('VERIFICAR' if ensayo.inspeccionando and ensayo.sesion.orden != 'QR_LISTO'
+                                 else ensayo.sesion.orden)
+                puente.actualizar(orden_control, ahora, marca)
             if ensayo.sesion.orden == 'QR_LISTO' and not guardado:
-                archivo = guardar_resultado(ensayo.sesion, TAREA/'datos/sesiones')
                 guardado = True
-                print(f'QR de {ensayo.sesion.nombre}: {ensayo.sesion.palabra}\nGuardado en {archivo}', flush=True)
+                if args.webcam:
+                    print(f'[WEBCAM QR] {ensayo.sesion.nombre}: {ensayo.sesion.palabra}', flush=True)
+                else:
+                    archivo = guardar_resultado(ensayo.sesion, TAREA/'datos/sesiones')
+                    print(f'QR de {ensayo.sesion.nombre}: {ensayo.sesion.palabra}\nGuardado en {archivo}', flush=True)
             if ahora-ultimo_log >= 1_000_000_000:
                 control_texto = estado_ros['estado'] if estado_ros else 'Esperando nodo ROS: detenido'
                 print(f'[PRUEBA B] {ensayo.sesion.orden}: {ensayo.sesion.motivo} | '
@@ -298,6 +416,8 @@ def main(argv=None):
             try:
                 if video is not None:
                     video.cerrar()
+                if captura is not None:
+                    captura.release()
             finally:
                 if abierta:
                     cv2.destroyAllWindows()

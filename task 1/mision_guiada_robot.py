@@ -461,7 +461,8 @@ def main(argv=None):
             orden = 'ESPERAR' if sesion.inicio_ns is None or estado is None else (
                 'INICIAR' if estado['fase'] == 'ESPERAR' else 'OBSERVAR')
             if estado and estado['fase'] == 'BUSCAR_B':
-                orden = 'QR_LISTO' if b.palabra is not None else ('VERIFICAR' if b.orden == 'VERIFICAR' else 'OBSERVAR')
+                orden = ('QR_LISTO' if b.palabra is not None else
+                         ('VERIFICAR' if b.orden == 'VERIFICAR' or vision.ensayo.inspeccionando else 'OBSERVAR'))
             if estado and estado.get('a') and sesion.inicio_ns is not None:
                 clave = (estado['fase'], b.palabra)
                 if clave != guardado:

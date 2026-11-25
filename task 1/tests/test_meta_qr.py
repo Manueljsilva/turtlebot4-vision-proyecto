@@ -127,6 +127,86 @@ class AsociacionTests(unittest.TestCase):
         resultado, _ = asociar_qr([c], [q], 'Persona A', regiones)
         self.assertEqual(resultado['texto'], 'PAPEL')
 
+    def test_qr_debajo_del_rostro_se_asocia_sin_contorno_y_rechaza_ambiguedad(self):
+        c = dict(caja=[100, 40, 40, 40], aceptado=True, nombre='Persona A')
+        q = dict(caja=[102, 90, 36, 36], texto='ABAJO')
+        resultado, motivo = asociar_qr([c], [q], 'Persona A')
+        self.assertEqual(resultado['texto'], 'ABAJO')
+        self.assertIn('vecindad', motivo)
+        c2 = dict(caja=[115, 42, 40, 40], aceptado=True, nombre='Persona B')
+        self.assertIsNone(asociar_qr([c, c2], [q], 'Persona A')[0])
+
+    def test_rostros_pequenos_en_250x250_amplian_y_usan_landmarks_si_falla_recorte(self):
+        extractor = NS(lado_maximo=960, cara_minima=28, detector=NS(), reconocedor=NS())
+        tamanos = []
+        extractor.detector.setInputSize = lambda s: tamanos.append(s)
+        # En escena ampliada 2.88x (720x720), un rostro nativo ~14 px mide ~40 px (>=28).
+        cara_peq = [100., 120., 40., 44., 112., 136., 128., 136., 120., 145., 113., 155., 127., 155., 0.9]
+        extractor.detector.detect = lambda im: (None, np.array([cara_peq], dtype=np.float32) if im.shape[:2] == (720, 720) else None)
+        extractor.analizar_imagen = lambda im: NS(estado='ROSTRO_NO_UTIL', descriptor=None)
+        extractor.reconocedor.alignCrop = lambda im, c: im[:112, :112]
+        extractor.reconocedor.feature = lambda im: np.array([[1., 0.]], dtype=np.float32)
+        sistema = SistemaFacial(extractor, Galeria([[1, 0], [0, 1]], ['Persona A', 'Persona B']), Criterio(.5, .1))
+        candidatos = analizar_candidatos(np.zeros((250, 250, 3), np.uint8), sistema)
+        self.assertEqual(tamanos, [(250, 250), (500, 500), (720, 720)])
+        self.assertEqual(len(candidatos), 1)
+        self.assertTrue(candidatos[0]['aceptado'])
+        self.assertEqual(candidatos[0]['nombre'], 'Persona A')
+        self.assertLess(candidatos[0]['caja'][2], 20.0)
+
+    def test_conserva_mejor_identidad_entre_escala_nativa_y_ampliada_en_250x250(self):
+        extractor = NS(lado_maximo=960, cara_minima=28, detector=NS(), reconocedor=NS())
+        extractor.detector.setInputSize = lambda *a: None
+        base = np.array([80., 60., 44., 52., 92., 76., 110., 76., 101., 86., 94., 98., 108., 98., 0.95], dtype=np.float32)
+        def detectar(im):
+            s = im.shape[0] / 250.
+            c = base.copy()
+            c[:-1] *= s
+            return None, np.array([c], dtype=np.float32)
+        extractor.detector.detect = detectar
+        extractor.reconocedor.alignCrop = lambda im, c: im[:112, :112] if im.shape[0] == 250 else np.ones((112, 112, 3), np.uint8)
+        extractor.reconocedor.feature = lambda im: np.array([[1., 0.] if im[0, 0, 0] == 0 else [0.2, 0.98]], dtype=np.float32)
+        sistema = SistemaFacial(extractor, Galeria([[1, 0], [0, 1]], ['Persona A', 'Persona B']), Criterio(.6, .2))
+        candidatos = analizar_candidatos(np.zeros((250, 250, 3), np.uint8), sistema)
+        self.assertEqual(len(candidatos), 1)
+        self.assertTrue(candidatos[0]['aceptado'])
+        self.assertEqual(candidatos[0]['nombre'], 'Persona A')
+
+    def test_no_omite_rostro_menor_28px_cuando_hay_otro_rostro_grande_aceptado(self):
+        extractor = NS(lado_maximo=960, cara_minima=28, detector=NS(), reconocedor=NS())
+        extractor.detector.setInputSize = lambda *a: None
+        grande = np.array([20., 40., 44., 52., 32., 56., 50., 56., 41., 66., 34., 78., 48., 78., 0.95], dtype=np.float32)
+        peq_720 = np.array([450., 220., 40., 48., 462., 236., 478., 236., 470., 246., 463., 258., 477., 258., 0.95], dtype=np.float32)
+        def detectar(im):
+            if im.shape[0] == 250:
+                return None, np.array([grande], dtype=np.float32)
+            if im.shape[0] == 500:
+                c = grande.copy(); c[:-1] *= 2.
+                return None, np.array([c], dtype=np.float32)
+            g3 = grande.copy(); g3[:-1] *= (720. / 250.)
+            return None, np.array([g3, peq_720], dtype=np.float32)
+        extractor.detector.detect = detectar
+        extractor.reconocedor.alignCrop = lambda im, c: np.full((112, 112, 3), 0 if c[0] < 300 else 1, np.uint8)
+        extractor.reconocedor.feature = lambda im: np.array([[0., 1.] if im[0, 0, 0] == 0 else [1., 0.]], dtype=np.float32)
+        sistema = SistemaFacial(extractor, Galeria([[1, 0], [0, 1]], ['Persona A', 'Persona B']), Criterio(.6, .2))
+        candidatos = analizar_candidatos(np.zeros((250, 250, 3), np.uint8), sistema)
+        self.assertEqual(len(candidatos), 2)
+        nombres = {c['nombre'] for c in candidatos if c['aceptado']}
+        self.assertEqual(nombres, {'Persona A', 'Persona B'})
+
+    def test_solape_de_caras_no_omite_rechazo_en_respaldo_de_landmarks(self):
+        extractor = NS(lado_maximo=960, cara_minima=28, detector=NS(), reconocedor=NS())
+        extractor.detector.setInputSize = lambda *a: None
+        c1 = [100., 100., 40., 40., 110., 115., 130., 115., 120., 122., 112., 132., 128., 132., 0.9]
+        c2 = [135., 100., 40., 40., 145., 115., 165., 115., 155., 122., 147., 132., 163., 132., 0.9]
+        extractor.detector.detect = lambda im: (None, np.array([c1, c2], dtype=np.float32))
+        extractor.analizar_imagen = lambda im: NS(estado='SIN_ROSTRO', descriptor=None)
+        extractor.reconocedor.alignCrop = lambda *a: (_ for _ in ()).throw(AssertionError('No debe alinear con solape'))
+        extractor.reconocedor.feature = lambda *a: None
+        sistema = SistemaFacial(extractor, Galeria([[1, 0], [0, 1]], ['Persona A', 'Persona B']), Criterio(.5, .1))
+        candidatos = analizar_candidatos(np.zeros((250, 250, 3), np.uint8), sistema)
+        self.assertTrue(all(not c['aceptado'] for c in candidatos))
+
 
 class DetectorTests(unittest.TestCase):
     def test_qr_generado_se_lee_y_no_es_meta(self):
@@ -163,6 +243,15 @@ class DetectorTests(unittest.TestCase):
         with patch.object(detector, 'qr_recorte') as recorte:
             self.assertIsNone(detector._leer_recorte(np.zeros((40,40),np.uint8), [[1,1],[5,1],[5,5],[1,5]]))
             recorte.detectAndDecode.assert_not_called()
+
+    def test_qr_pequeno_en_escena_250x250_se_decodifica(self):
+        qr = cv2.QRCodeEncoder_create().encode('PRUEBA')
+        qr = cv2.copyMakeBorder(qr, 4, 4, 4, 4, cv2.BORDER_CONSTANT, value=255)
+        qr_bgr = cv2.cvtColor(qr, cv2.COLOR_GRAY2BGR)
+        escena = np.full((250, 250, 3), 235, np.uint8)
+        escena[140:185, 100:145] = cv2.resize(qr_bgr, (45, 45), interpolation=cv2.INTER_AREA)
+        resultado = DetectorMetaQR().detectar(escena, leer_qr=True, buscar_meta=False)
+        self.assertTrue(any(q['texto'] == 'PRUEBA' for q in resultado['codigos']))
 
     @unittest.skipUnless(shutil.which('pdftoppm'), 'Referencia PDF requiere Poppler')
     def test_bandera_real_positiva_y_las_tres_paginas_qr_negativas(self):
@@ -291,7 +380,7 @@ class BarridoTests(unittest.TestCase):
                    dict(lidar=NS(**dict(vars(LIBRE), dist_derecha=.2)))):
             self.assertEqual(self.decidir(**kw)[:2], (0, 0))
         self.arrancar_barrido()
-        self.assertEqual(self.decidir()[:2], (0, .25))
+        self.assertEqual(self.decidir()[:2], (0, .14))
         self.assertFalse(hasattr(self.c, 'punto_a'))
 
     def test_actividad_caducada_se_detiene_aunque_llegue_latido(self):
@@ -345,7 +434,7 @@ class BarridoTests(unittest.TestCase):
             self.orden(camara=False)
             self.assertEqual(self.decidir()[:2], (0., 0.))
         self.orden()
-        self.assertEqual(self.decidir()[:2], (0., .25))
+        self.assertEqual(self.decidir()[:2], (0., .14))
         self.assertFalse(self.c.terminado)
 
     def test_pausa_de_inferencia_mantiene_odometria_y_reanuda_solo_con_actividad(self):
@@ -356,7 +445,7 @@ class BarridoTests(unittest.TestCase):
         self.assertFalse(self.c.terminado)
         self.assertEqual(self.decidir()[:2], (0., 0.))
         self.orden()
-        self.assertEqual(self.decidir()[:2], (0., .25))
+        self.assertEqual(self.decidir()[:2], (0., .14))
 
     def test_primer_motivo_de_fallo_no_se_sustituye_por_parar(self):
         self.c.finalizar('Odometria discontinua: cerrar y revisar')
@@ -376,7 +465,7 @@ class BarridoTests(unittest.TestCase):
         self.orden('NAVEGAR')
         self.assertEqual(self.decidir()[:2], (0., 0.))
         self.arrancar_barrido()
-        self.assertEqual(self.decidir()[:2], (0., .25))
+        self.assertEqual(self.decidir()[:2], (0., .14))
 
     def test_no_gira_hasta_frenar_segun_odometria_y_esperar_07_s(self):
         for _ in range(12):
@@ -423,7 +512,7 @@ class BarridoTests(unittest.TestCase):
         self.assertFalse(self.c.recuperando_odom)
         self.assertFalse(self.c.terminado)
         self.arrancar_barrido()
-        self.assertEqual(self.decidir()[:2], (0., .25))
+        self.assertEqual(self.decidir()[:2], (0., .14))
 
     def test_reposo_no_se_confirma_repitiendo_el_mismo_paquete(self):
         r = ReposoOdometria()
@@ -456,7 +545,7 @@ class BarridoTests(unittest.TestCase):
         self.assertFalse(self.c.terminado)
         self.assertAlmostEqual(self.c.angulo, .1)
         self.arrancar_barrido()
-        self.assertEqual(self.decidir()[:2], (0., .25))
+        self.assertEqual(self.decidir()[:2], (0., .14))
         self.t += 2_100_000_000
         self.orden()
         self.assertEqual(self.decidir()[:2], (0., 0.))
@@ -522,7 +611,7 @@ class IntegracionTests(unittest.TestCase):
             if mover:
                 ms = n.publicadores[0].mensajes
                 self.assertTrue(all(m.twist.linear.x == 0 for m in ms))
-                self.assertEqual([m.twist.angular.z for m in ms[-3:]], [.25, 0., 0.])
+                self.assertEqual([m.twist.angular.z for m in ms[-3:]], [.14, 0., 0.])
 
     def test_percepcion_no_analiza_caras_antes_de_meta_y_caducidad_invalida_inferencia(self):
         ensayo = app.EnsayoB(None)
@@ -656,6 +745,15 @@ class IntegracionTests(unittest.TestCase):
         self.assertIn('detectados=2, legibles=1', resumen)
         self.assertIn('QR sin asociar', resumen)
         self.assertIn('confirmacion=0/1', resumen)
+
+    def test_preview_webcam_recorta_cuadrado_y_valida_banderas_locales(self):
+        recorte = app._preparar_frame_preview(np.zeros((480, 640, 3), np.uint8), 250)
+        self.assertEqual(recorte.shape, (250, 250, 3))
+        for bad in (['--webcam', '--mover'], ['--sin-meta', '--ip', '1.2.3.4', '--dominio', '1'], ['--ip', '1.2.3.4']):
+            buf = io.StringIO()
+            with contextlib.redirect_stderr(buf), self.assertRaises(SystemExit) as cm:
+                app.main(bad)
+            self.assertEqual(cm.exception.code, 2)
 
 
 if __name__ == '__main__':

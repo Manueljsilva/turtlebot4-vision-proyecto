@@ -10,6 +10,8 @@
   "margen_salida_evasion_m": 0.04,
   "radio_giro_m": 0.22,
   "margen_giro_m": 0.02,
+  "radio_pasillo_m": 0.20,
   "margen_aproximacion_m": 0.02,
-  "tolerancia_disparo_m": 0.005
+  "tolerancia_disparo_m": 0.005,
+  "velocidad_barrido_rad_s": 0.14
 }

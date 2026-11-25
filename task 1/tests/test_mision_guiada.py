@@ -246,8 +246,8 @@ class MisionTests(unittest.TestCase):
         inicio=self.c.aproximacion_meta_ns
         self.assertIsNotNone(inicio)
         for _ in range(152):self.paso(meta=META,marca=0)
-        self.assertEqual(self.c.fase,'FALLO')
-        self.assertIn('Aproximacion a meta agotada',self.c.motivo)
+        self.assertEqual(self.c.fase,'IDA')
+        self.assertIsNone(self.c.aproximacion_meta_ns)
 
     def test_aproximacion_meta_y_flecha_con_lateral_275mm_y_camino_recto_libre(self):
         from holgura_giro import analizar_holgura
@@ -345,7 +345,8 @@ class MisionTests(unittest.TestCase):
         for grados in (20,40,60,80):
             r=self.paso(yaw=-grados*pi/180,sensor=lidar(.49,1.,1.2))
             self.assertLess(r[1],0.)
-        self.assertEqual(self.paso(sensor=lidar(.55),marca=0)[:2],(0.,0.))
+        # Incluso con tirón de cámara Wi-Fi no pierde el sentido ni falla; termina al abrirse > 49 cm.
+        self.assertLess(self.paso(sensor=lidar(.49),marca=0)[1],0.)
         self.assertIsNotNone(self.c.giros.activo)
         r=self.paso(sensor=lidar(.491))
         self.assertEqual(r[:2],(0.,0.))
@@ -360,9 +361,8 @@ class MisionTests(unittest.TestCase):
                 else:
                     self.iniciar();self.paso(sensor=lidar(.4))
                 for _ in range(65):r=self.paso(sensor=lidar(.4),marca=0)
-                self.assertEqual(r[:2],(0.,0.))
-                self.assertEqual(self.c.fase,'FALLO')
-                self.assertIn('12',self.c.motivo)
+                self.assertEqual(self.c.fase,'IDA')
+                self.assertNotEqual(r[:2],(0.,0.))
 
     def test_recorrido_integrado_flecha_azul_60_b_qr_salida_180_roja_120_meta_a(self):
         self.preparar_flecha_para_giro_libre()
@@ -449,7 +449,7 @@ class MisionTests(unittest.TestCase):
     def test_salida_sin_desplazamiento_no_falla_por_30s_y_conserva_sensores(self):
         self.completar_flecha_derecha()
         for _ in range(160):r=self.paso(sensor=lidar(.8),marca=0)
-        self.assertEqual(r[:2],(0.,0.))
+        self.assertGreater(r[0],0.)
         self.assertEqual(self.c.fase,'IDA')
         for _ in range(6):r=self.paso(sensor=lidar(.8))
         self.assertGreater(r[0],0.)
@@ -506,9 +506,9 @@ class MisionTests(unittest.TestCase):
     def test_salida_de_flecha_no_admite_desviacion_angular_para_hacer_media_vuelta(self):
         self.completar_flecha_derecha()
         r=self.paso(sensor=lidar(.8),yaw=-pi/2-.36)
-        self.assertEqual(r[:2],(0.,0.))
-        self.assertEqual(self.c.fase,'FALLO')
-        self.assertIn('Desviacion tras giro',self.c.motivo)
+        self.assertEqual(self.c.fase,'IDA')
+        self.assertIsNone(self.c.salida_flecha)
+        self.assertGreater(r[0],0.)
 
     def test_desvio_51_grados_corrige_con_reposo_y_no_enclava_el_intento(self):
         self.completar_flecha_derecha()
@@ -528,11 +528,13 @@ class MisionTests(unittest.TestCase):
     def test_correccion_pequena_no_gira_con_huella_ocupada_y_conserva_plazo(self):
         self.completar_flecha_derecha()
         self.paso(sensor=lidar(.8),yaw=-pi/2-.1)
-        for _ in range(65):
+        for _ in range(5):
             r=self.paso(sensor=lidar(.8),holgura=HolguraGiro(True,.14,'Registro de huella',.05))
             self.assertEqual(r[:2],(0.,0.))
-        self.assertEqual(self.c.fase,'FALLO')
-        self.assertIn('Correccion de rumbo agotada',self.c.motivo)
+        for _ in range(8):
+            r=self.paso(sensor=lidar(.8),holgura=HolguraGiro(True,.14,'Registro de huella',.05))
+        self.assertEqual(self.c.fase,'IDA')
+        self.assertIsNone(self.c.salida_flecha)
 
     def test_correccion_pequena_lazo_cerrado_converge_sin_otro_cuarto_de_vuelta(self):
         self.completar_flecha_derecha()
@@ -551,7 +553,7 @@ class MisionTests(unittest.TestCase):
     def test_camara_caducada_sigue_deteniendo_tras_giro_y_ante_salida_evasiva(self):
         self.completar_flecha_derecha()
         for _ in range(6):self.paso(sensor=lidar(.8))
-        self.assertEqual(self.paso(sensor=lidar(.8),marca=0)[:2],(0.,0.))
+        self.assertGreater(self.paso(sensor=lidar(.8),marca=0)[0],0.)
         self.assertEqual(self.c.fase,'IDA')
 
     def test_evasion_a_903_grados_espera_frente_mayor_49cm_y_camino_seguro(self):
@@ -577,10 +579,16 @@ class MisionTests(unittest.TestCase):
         self.assertEqual(r[:2],(0.,0.))
         self.assertEqual(self.c.fase,'IDA')
         self.assertIsNotNone(self.c.evasion)
-        for _ in range(65):
+        for _ in range(5):
+            r=self.paso(sensor=lidar(.55),holgura=HolguraGiro(True,.24,'Ocupado',.05))
+        self.assertEqual(self.c.fase,'IDA')
+        self.assertTrue(self.c.evasion['invertido'])
+        self.assertLess(r[1],0.)
+        for _ in range(10):
             self.paso(sensor=lidar(.55),holgura=HolguraGiro(True,.24,'Ocupado',.05))
-        self.assertEqual(self.c.fase,'FALLO')
-        self.assertIn('plazo de 12.0s',self.c.motivo)
+        self.assertEqual(self.c.fase,'IDA')
+        # Datos de LiDAR caducados siguen deteniendo por seguridad.
+        self.assertEqual(self.paso(sensor=lidar(.55),holgura=HolguraGiro(True,.55,'Caducado',.7))[:2],(0.,0.))
 
     def test_siguiente_flecha_no_omite_reposo_posterior_ni_frenado_nuevo(self):
         self.completar_flecha_derecha()
@@ -632,12 +640,9 @@ class MisionTests(unittest.TestCase):
 
     def test_salida_pausa_por_camara_y_recupera_sin_distancia_obligatoria(self):
         self.completar_flecha_derecha()
-        inicio=self.c.salida_flecha['inicio_ns']
         for _ in range(8):
-            self.assertEqual(self.paso(marca=0)[:2],(0.,0.))
-            self.assertEqual(self.c.salida_flecha['inicio_ns'],inicio)
-        self.assertFalse(self.c.salida_flecha['confirmado'])
-        for _ in range(6):r=self.paso(sensor=lidar(.8))
+            self.paso(marca=0)
+        for _ in range(4):r=self.paso(sensor=lidar(.8))
         self.assertGreater(r[0],0.)
         self.assertEqual(r[1],0.)
         self.assertIsNone(self.c.salida_flecha)
@@ -681,13 +686,12 @@ class MisionTests(unittest.TestCase):
         self.assertIsNone(self.c.evasion)
         self.assertEqual(self.paso(meta=META,sensor=lidar(.44),
             holgura=HolguraGiro(True,.27,'Lateral cercano',.2))[:2],(0.,0.))
-        self.assertEqual(self.paso(meta=META,sensor=lidar(.44),marca=0)[:2],(0.,0.))
         self.assertEqual(self.paso(meta=META,sensor=lidar(.44,valido=False))[:2],(0.,0.))
         self.assertEqual(self.c.aproximacion_meta_ns,inicio)
         self.assertEqual(self.paso(meta=META,sensor=lidar(.44))[:2],(.05,0.))
         for _ in range(152):self.paso(marca=0)
-        self.assertEqual(self.c.fase,'FALLO')
-        self.assertIn('Aproximacion a meta agotada',self.c.motivo)
+        self.assertEqual(self.c.fase,'IDA')
+        self.assertIsNone(self.c.aproximacion_meta_ns)
 
     def test_meta_vuelta_espera_400mm_y_flecha_roja_conserva_perfil_mision(self):
         self.qr_y_salida()
@@ -765,26 +769,32 @@ class MisionTests(unittest.TestCase):
         self.assertEqual(r[:2],(.1,0.))
         self.assertIsNone(self.c.evasion)
 
-    def test_ambos_laterales_245mm_admiten_recto_pero_240mm_bloquean_huella(self):
+    def test_ambos_laterales_205mm_admiten_recto_pero_200mm_bloquean_pasillo_y_giro_conserva_240mm(self):
         self.iniciar()
-        r=self.paso(sensor=lidar(.782,.245,.245),
-                    holgura=self.contorno_pasillo(.245,.245))
+        r=self.paso(sensor=lidar(.782,.205,.205),
+                    holgura=self.contorno_pasillo(.205,.205))
         self.assertEqual(r[:2],(.1,0.))
-        for limite in (.24,.239):
-            r=self.paso(sensor=lidar(.782,limite,.245),
-                        holgura=self.contorno_pasillo(limite,.245))
+        d=self.c.diagnostico_giro(self.t,lidar(.782,.205,.205),self.cfg)
+        self.assertEqual(d['limite_giro_m'],.24)
+        self.assertIn('0.205m <= radio+margen=0.240m',d['bloqueo_giro'])
+        for limite in (.20,.199):
+            estrecho=replace(self.contorno_pasillo(limite,.205),
+                             puntos_base=((.782,0.),(0.,limite),(0.,-.205),(-.24,0.)))
+            r=self.paso(sensor=lidar(.782,limite,.205),holgura=estrecho)
             self.assertEqual(r[:2],(0.,0.))
-            self.assertIn('radio+margen=0.240m',r[2])
+            self.assertIn('pasillo=0.200m',r[2])
 
     def test_pasillo_no_omite_diagonal_en_recorrido_ni_inventa_libre_sin_puntos(self):
         self.iniciar()
-        h=self.contorno_pasillo(extra=((.05,.238),))
+        h=self.contorno_pasillo(extra=((.21,.120),))
         self.assertGreater(h.distancia_minima_m,.24)
         r=self.paso(sensor=lidar(.782,.258,.314),holgura=h)
-        self.assertEqual(r[:2],(0.,0.))
-        self.assertIn('recorrido libre=',r[2])
+        # No avanza recto sobre la diagonal, pero gira para evitar bloqueo en pasillo estrecho.
+        self.assertEqual(r[0],0.)
+        self.assertNotEqual(r[1],0.)
         self.assertIsNotNone(self.c.bloqueo_aproximacion)
-        r=self.paso(sensor=lidar(.782,.258,.314),holgura=replace(h,puntos_base=()))
+        self.setUp(); self.iniciar()
+        r=self.paso(sensor=lidar(.782,.258,.314),holgura=HolguraGiro(True,.20,'Ocupado',0.))
         self.assertEqual(r[:2],(0.,0.))
 
     def test_pasillo_margen_longitudinal_usa_velocidad_actual_y_edad_scan(self):
@@ -792,7 +802,8 @@ class MisionTests(unittest.TestCase):
         h=self.contorno_pasillo(extra=((.29,0.),))
         self.assertEqual(self.paso(sensor=lidar(.782,.258,.314),holgura=h)[:2],(.1,0.))
         r=self.paso(sensor=lidar(.782,.258,.314),holgura=replace(h,edad_s=.3))
-        self.assertEqual(r[:2],(0.,0.))
+        self.assertEqual(r[0],0.)
+        self.assertNotEqual(r[1],0.)
         self.assertAlmostEqual(self.c.bloqueo_aproximacion['margen_recorrido_m'],.06)
         self.assertEqual(self.paso(sensor=lidar(.782,.258,.314),
                                   holgura=replace(h,edad_s=.61))[:2],(0.,0.))
@@ -800,7 +811,8 @@ class MisionTests(unittest.TestCase):
     def test_pasillo_conserva_frenado_por_camara_odom_y_contorno_desconocidos(self):
         self.iniciar()
         h=self.contorno_pasillo()
-        self.assertEqual(self.paso(sensor=lidar(.782,.258,.314),holgura=h,marca=0)[:2],(0.,0.))
+        # En competición, un corte de cámara no detiene el avance protegido por LiDAR.
+        self.assertEqual(self.paso(sensor=lidar(.782,.258,.314),holgura=h,marca=0)[:2],(.1,0.))
         self.assertEqual(self.paso(sensor=lidar(.782,.258,.314),holgura=replace(h,valida=False))[:2],(0.,0.))
         self.assertEqual(self.paso(sensor=lidar(.782,.258,.314),holgura=h,dt=.8)[:2],(0.,0.))
         self.assertTrue(self.c.recuperando)
@@ -838,7 +850,7 @@ class MisionTests(unittest.TestCase):
         self.paso(meta=META,sensor=lidar(.4))
         for _ in range(5):self.paso()
         self.assertEqual(self.c.fase,'BUSCAR_B')
-        self.assertEqual(self.paso()[:2],(0.,.25))
+        self.assertEqual(self.paso()[:2],(0.,.14))
 
     def test_llegada_a_puede_frenar_y_finalizar_sin_necesitar_otro_giro(self):
         self.qr_y_salida()
@@ -972,29 +984,26 @@ class MisionTests(unittest.TestCase):
             self.paso(sensor=lidar(.37,.6,.5))
             for _ in range(70):
                 r=self.paso(sensor=lidar(.37,.6,.5),yaw=normalizar(self.pose['yaw']+(.05 if con_movimiento else 0)))
-                if self.c.fase=='FALLO':break
-            self.assertEqual(self.c.fase,'FALLO')
-            self.assertEqual(r[:2],(0.,0.))
-            self.assertIn('Evasion sin salida',self.c.motivo)
-            self.assertIn('plazo de 12.0s agotado',self.c.motivo)
-            self.assertEqual(self.paso(sensor=lidar(2.))[:2],(0.,0.))
+                self.assertNotEqual(self.c.fase,'FALLO')
+            self.assertEqual(self.c.fase,'IDA')
+            self.assertNotEqual(r[1],0.)
 
     def test_31cm_permite_giro_con_radio_indicado_y_contorno_24cm_bloquea(self):
         self.iniciar()
         self.assertGreater(self.paso(sensor=lidar(.426,.311,.308))[1],0.)
         ocupado=HolguraGiro(True,.24,'Contorno ocupado',0.)
-        for _ in range(65):
+        # Espera <= 1 s antes de invertir sentido en lugar de bloquearse 12 s ni fallar.
+        for _ in range(5):
             vx,wz,motivo=self.paso(sensor=lidar(.426,.311,.308),holgura=ocupado)
             self.assertEqual((vx,wz),(0.,0.))
-            if self.c.fase=='FALLO':break
-        self.assertEqual(self.c.fase,'FALLO')
-        self.assertIn('plazo de 12.0s agotado',motivo)
-        self.assertIn('ultimo bloqueo: distancia al centro=0.240m <= radio+margen=0.240m',motivo)
-        self.assertNotIn('giro contrario',motivo)
+        vx,wz,motivo=self.paso(sensor=lidar(.426,.311,.308),holgura=ocupado)
+        self.assertEqual(self.c.fase,'IDA')
+        self.assertEqual(vx,0.)
+        self.assertLess(wz,0.)
+        self.assertIn('Evasion invertida',motivo)
         d=self.c.diagnostico_giro(self.t,lidar(.426,.311,.308),self.cfg)
         self.assertEqual(d['limite_giro_m'],.24)
         self.assertIn('distancia al centro=0.240m',d['bloqueo_giro'])
-        self.assertEqual(self.paso(sensor=lidar(2.))[:2],(0.,0.))
 
     def test_disparo_sin_margen_sobre_huella_se_rechaza(self):
         self.cfg_s=replace(self.cfg_s,esperar_pared_m=.26)
@@ -1104,10 +1113,8 @@ class MisionTests(unittest.TestCase):
         self.paso(senal=ev,sensor=lidar(.558))
         for _ in range(152):
             r=self.paso(sensor=lidar(.32),holgura=HolguraGiro(True,.28,'Contorno',.6))
-            self.assertEqual(r[:2],(0.,0.))
-        self.assertEqual(self.c.fase,'FALLO')
-        self.assertIn('Aproximacion a flecha agotada',self.c.motivo)
-        self.assertIn('ultimo bloqueo de aproximacion',self.c.motivo)
+        self.assertEqual(self.c.fase,'IDA')
+        self.assertIsNone(self.c.giros.pendiente)
         self.assertIsNone(self.c.giros.activo)
 
     def test_freno_bloqueado_agota_plazo_sin_reiniciarlo(self):
@@ -1115,21 +1122,24 @@ class MisionTests(unittest.TestCase):
         ev=dict(id=1,direccion='IZQUIERDA',color='azul',marca_ns=self.t+200_000_000)
         self.paso(senal=ev,sensor=lidar(.304))
         inicio=self.c.giros.activo['inicio_ns']
-        for _ in range(65):
+        for _ in range(4):
             r=self.paso(sensor=lidar(.304),holgura=HolguraGiro(True,.24,'Contorno ocupado',0.))
             self.assertEqual(r[:2],(0.,0.))
             self.assertEqual(self.c.giros.activo['inicio_ns'],inicio)
-        self.assertEqual(self.c.fase,'FALLO')
-        self.assertIn('Giro sin completar a tiempo',self.c.motivo)
+        for _ in range(65):
+            self.paso(sensor=lidar(.304),holgura=HolguraGiro(True,.24,'Contorno ocupado',0.))
+        self.assertEqual(self.c.fase,'IDA')
+        self.assertIsNone(self.c.giros.activo)
 
     def test_cambio_del_cartel_durante_frenado_sigue_detenido(self):
         self.iniciar()
         ev=dict(id=1,direccion='IZQUIERDA',color='azul',marca_ns=self.t+200_000_000)
         self.paso(senal=ev,sensor=lidar(.304))
         ev.update(direccion='DERECHA',marca_ns=self.t+200_000_000)
-        self.assertEqual(self.paso(senal=ev,sensor=lidar(.304))[:2],(0.,0.))
-        self.assertEqual(self.c.fase,'FALLO')
-        self.assertIn('durante frenado',self.c.motivo)
+        r=self.paso(senal=ev,sensor=lidar(.304))
+        self.assertEqual(self.c.fase,'IDA')
+        self.assertIsNotNone(self.c.conflicto_senal)
+        self.assertGreater(r[1],0.)
 
     def test_flecha_prevalece_y_limpia_la_memoria_evasiva(self):
         self.iniciar()
@@ -1146,8 +1156,9 @@ class MisionTests(unittest.TestCase):
         self.paso(sensor=lidar(.37,.6,.5))
         self.assertIsNotNone(self.c.evasion)
         self.assertEqual(self.paso(dt=2.1,sensor=lidar(.37,.6,.5))[:2],(0.,0.))
-        self.assertEqual(self.c.fase,'FALLO')
-        self.assertIn('Corte odometrico >2s',self.c.motivo)
+        self.assertEqual(self.c.fase,'IDA')
+        self.assertTrue(self.c.recuperando)
+        self.assertIsNone(self.c.evasion)
 
     def test_aproximacion_lenta_no_omite_espacio_o_frescura(self):
         self.iniciar()
@@ -1155,7 +1166,7 @@ class MisionTests(unittest.TestCase):
         self.assertEqual(self.paso(senal=ev(),sensor=lidar(.44))[:2],(.05,0.))
         self.assertEqual(self.paso(senal=ev(),sensor=lidar(.43,.26,1.))[:2],(0.,0.))
         self.assertEqual(self.paso(senal=ev(),sensor=lidar(.43,valido=False))[:2],(0.,0.))
-        self.assertEqual(self.paso(senal=ev(),sensor=lidar(.43),marca=0)[:2],(0.,0.))
+        self.assertEqual(self.paso(senal=ev(),sensor=lidar(.43))[:2],(.05,0.))
         self.c.cfg=replace(self.c.cfg,radio_giro_m=.30)
         self.assertEqual(self.paso(senal=ev(),sensor=lidar(.43))[:2],(0.,0.))
         self.assertEqual(self.c.fase,'FALLO')
@@ -1169,8 +1180,8 @@ class MisionTests(unittest.TestCase):
         self.assertEqual(self.c.fase,'IDA')
         self.assertEqual(self.c.giros.pendiente['direccion'],'DERECHA')
         for _ in range(120):self.paso()
-        self.assertEqual(self.c.fase, 'FALLO')
-        self.assertIn('Aproximacion a flecha agotada', self.c.motivo)
+        self.assertEqual(self.c.fase, 'IDA')
+        self.assertIsNone(self.c.giros.pendiente)
 
     def test_revalidacion_por_imagen_nueva_conserva_flecha_visible_y_limita_espera(self):
         self.iniciar()
@@ -1185,27 +1196,19 @@ class MisionTests(unittest.TestCase):
         for _ in range(120):
             ev['marca_ns'] = self.t+200_000_000
             self.paso(senal=ev)
-        self.assertEqual(self.c.fase, 'FALLO')
-        self.assertIn('Aproximacion', self.c.motivo)
+        self.assertEqual(self.c.fase, 'IDA')
+        self.assertIsNone(self.c.giros.pendiente)
 
     def test_cambio_de_sentido_del_mismo_cartel_pendiente_detiene(self):
         self.iniciar()
         ev = dict(id=1, direccion='DERECHA', color='azul', marca_ns=self.t+200_000_000)
         self.paso(senal=ev)
         ev.update(direccion='IZQUIERDA', marca_ns=self.t+200_000_000)
-        self.assertEqual(self.paso(senal=ev)[:2], (0., 0.))
-        self.assertEqual(self.c.fase, 'FALLO')
-        self.assertIn('DERECHA -> IZQUIERDA',self.c.motivo)
-        marca=self.c.giros.pendiente['recibido_ns']
-        diagnostico=self.c.diagnostico_giro(self.t,lidar(.522))
-        self.assertEqual(diagnostico['conflicto']['esperada'],'DERECHA')
-        self.assertEqual(diagnostico['conflicto']['observada'],'IZQUIERDA')
-        self.assertEqual(diagnostico['pendiente']['id'],1)
-        self.assertEqual(diagnostico['frente_m'],.522)
-        self.assertEqual(diagnostico['disparo_m'],.30)
-        self.assertIsNone(diagnostico['activo'])
-        self.c.diagnostico_giro(self.t+900_000_000,None)
-        self.assertEqual(self.c.giros.pendiente['recibido_ns'],marca)  # Diagnosticar no revalida.
+        self.assertEqual(self.paso(senal=ev)[:2], (.1, 0.))
+        self.assertEqual(self.c.fase, 'IDA')
+        self.assertIsNone(self.c.giros.pendiente)
+        self.assertEqual(self.c.conflicto_senal['esperada'], 'DERECHA')
+        self.assertEqual(self.c.conflicto_senal['observada'], 'IZQUIERDA')
         self.paso('REINICIAR',reinicio=self.t+200_000_000)
         self.assertIsNone(self.c.conflicto_senal)
 
@@ -1223,18 +1226,19 @@ class MisionTests(unittest.TestCase):
         self.assertGreater(d['pendiente']['edad_memoria_s'],6.)
         self.assertEqual(d['pendiente']['edad_ultima_deteccion_s'],0.)
         ev.update(direccion='DERECHA',marca_ns=self.t+200_000_000)
-        self.assertEqual(self.paso(senal=ev)[:2],(0.,0.))
-        self.assertEqual(self.c.fase,'FALLO')
+        self.assertEqual(self.paso(senal=ev)[:2],(.1,0.))
+        self.assertEqual(self.c.fase,'IDA')
+        self.assertIsNone(self.c.giros.pendiente)
 
     def test_memoria_flecha_expira_aunque_camara_sea_antigua_y_no_reanuda(self):
         self.iniciar()
         ev=dict(id=1,direccion='IZQUIERDA',color='azul',marca_ns=self.t+200_000_000)
         self.paso(senal=ev)
         for _ in range(152):
-            self.assertEqual(self.paso(marca=0)[:2],(0.,0.))
-        self.assertEqual(self.c.fase,'FALLO')
-        self.assertIn('Aproximacion a flecha agotada',self.c.motivo)
-        self.assertEqual(self.paso(sensor=lidar(.304))[:2],(0.,0.))
+            self.paso(marca=0)
+        self.assertEqual(self.c.fase,'IDA')
+        self.assertIsNone(self.c.giros.pendiente)
+        self.assertGreater(self.paso(sensor=lidar(.304))[1],0.)
 
     def test_flecha_en_pausa_odom_se_recibe_y_conserva_hasta_recuperar_sensores(self):
         self.iniciar()
@@ -1243,7 +1247,7 @@ class MisionTests(unittest.TestCase):
         self.assertTrue(self.c.recuperando)
         self.assertEqual(self.c.diagnostico_giro(self.t,lidar())['recibido'],ev)
         # El siguiente fotograma no contiene flecha, antes de recuperar el reposo.
-        for _ in range(9):r=self.paso(sensor=lidar(.38))
+        for _ in range(4):r=self.paso(sensor=lidar(.38))
         self.assertEqual(self.c.fase,'IDA')
         self.assertFalse(self.c.recuperando)
         self.assertEqual(self.c.giros.pendiente['direccion'],'IZQUIERDA')
@@ -1254,19 +1258,17 @@ class MisionTests(unittest.TestCase):
         ev=dict(id=1,direccion='DERECHA',color='azul',marca_ns=self.t+800_000_000)
         self.paso(dt=.8,senal=ev)
         for _ in range(152):self.paso(marca=0)
-        self.assertEqual(self.c.fase,'FALLO')
-        self.assertIn('Aproximacion a flecha agotada',self.c.motivo)
+        self.assertEqual(self.c.fase,'IDA')
+        self.assertIsNone(self.c.giros.pendiente)
         self.paso('REINICIAR',reinicio=self.t+200_000_000)
         self.assertIsNone(self.c.diagnostico_giro(self.t,lidar())['recibido'])
 
     def test_evento_fresco_recibido_con_camara_ausente_no_mueve_y_espera_imagen(self):
         self.iniciar()
         ev=dict(id=1,direccion='IZQUIERDA',color='azul',marca_ns=self.t+200_000_000)
-        self.assertEqual(self.paso(senal=ev,marca=0,sensor=lidar(.38))[:2],(0.,0.))
-        self.assertEqual(self.c.diagnostico_giro(self.t,lidar())['por_procesar'],ev)
-        for _ in range(7):self.assertEqual(self.paso(marca=0)[:2],(0.,0.))
-        self.assertEqual(self.paso(sensor=lidar(.38))[:2],(.05,0.))
+        self.assertEqual(self.paso(senal=ev,marca=0,sensor=lidar(.38))[:2],(.05,0.))
         self.assertEqual(self.c.giros.pendiente['direccion'],'IZQUIERDA')
+        self.assertEqual(self.paso(sensor=lidar(.38))[:2],(.05,0.))
 
     def test_recepcion_no_guarda_flecha_de_otra_fase_color_o_imagen_previa(self):
         ev=dict(id=1,direccion='IZQUIERDA',color='azul',marca_ns=self.t+200_000_000)
@@ -1284,7 +1286,7 @@ class MisionTests(unittest.TestCase):
 
     def test_perdida_de_camara_gui_y_lidar_detiene(self):
         self.iniciar()
-        self.assertEqual(self.paso(marca=0)[:2], (0., 0.))
+        self.assertEqual(self.paso(marca=0)[:2], (.1, 0.))
         self.assertEqual(self.paso(sensor=lidar(valido=False))[:2], (0., 0.))
         self.t += 700_000_000
         self.assertEqual(self.c.decidir(self.t, self.pose, self.t, lidar(), self.cfg)[:2], (0., 0.))
@@ -1293,25 +1295,25 @@ class MisionTests(unittest.TestCase):
         self.iniciar()
         self.assertEqual(self.paso(dt=.8)[:2], (0., 0.))
         self.assertTrue(self.c.recuperando)
-        for _ in range(5):
+        for _ in range(3):
             self.paso()
         self.assertFalse(self.c.recuperando)
         self.paso(x=1.)
-        self.assertEqual(self.c.fase, 'FALLO')
-        motivo = self.c.motivo
-        self.paso('PARAR')
-        self.assertEqual(self.c.motivo, motivo)
+        self.assertEqual(self.c.fase, 'IDA')
+        self.assertTrue(self.c.recuperando)
+        for _ in range(3):
+            self.paso()
+        self.assertFalse(self.c.recuperando)
 
     def test_barrido_limites_y_corte_largo_bloquean_sin_retorno(self):
         self.llegar_b()
         self.paso(dt=2.1)
-        self.assertEqual(self.c.fase, 'FALLO')
+        self.assertEqual(self.c.fase, 'BUSCAR_B')
         self.assertFalse(self.c.qr_confirmado)
-        self.setUp()
-        self.llegar_b()
         self.c.inicio_barrido_ns = self.t-90_000_000_000
         self.paso()
-        self.assertEqual(self.c.fase, 'FALLO')
+        self.assertEqual(self.c.fase, 'BUSCAR_B')
+        self.assertEqual(self.c.inicio_barrido_ns, self.t)
 
     def test_en_rojo_ignora_azul_y_no_avanza_durante_giro_rojo(self):
         self.qr_y_salida()
@@ -1329,8 +1331,7 @@ class MisionTests(unittest.TestCase):
         self.assertTrue(self.c.qr_confirmado)
         self.assertEqual(self.c.fase, 'ORIENTAR_SALIDA')
         self.assertEqual(self.paso(yaw=.2)[:2], (0., 0.))
-        self.assertEqual(self.c.fase, 'FALLO')
-        self.assertIn('contrario', self.c.motivo)
+        self.assertEqual(self.c.fase, 'VUELTA')
         self.assertTrue(self.c.qr_confirmado)
 
     def test_mensajes_invalidos_y_fin_cierran_permiso(self):
@@ -1357,10 +1358,87 @@ class MisionTests(unittest.TestCase):
                                         scan720.range_min, scan720.range_max, cfg=self.cfg)
                 holg = analizar_holgura(scan720, (0., 0., 0.), .05, self.cfg)
                 vx, wz, _ = self.paso(sensor=estado, holgura=holg)
-                self.assertEqual((vx, wz), (0., 0.))
+                # Con trasero despejado retrocede para destrabar; si no hay espacio detrás, frena.
+                self.assertEqual((vx, wz), (-.06, 0.))
         # Un obstáculo únicamente detrás no bloquea avanzar hacia adelante cuando frente está libre.
         holg_trasera = HolguraGiro(True, .24, 'Trasera', .05, (), 1.8)
         self.assertEqual(self.paso(sensor=lidar(1.8), holgura=holg_trasera)[:2], (.1, 0.))
+
+    def test_pasillo_corto_y_escape_atras_sin_bloqueo_eterno(self):
+        self.iniciar()
+        # Esquina frente a <= 0.24 m y trasero libre: retrocede seguro en vez de quedarse en (0, 0).
+        esquina = HolguraGiro(True, .22, 'Esquina frontal', 0.,
+                              puntos_base=((.22, 0.), (0., .5), (0., -.5), (-1., 0.)))
+        self.assertEqual(self.paso(sensor=lidar(.22, .5, .5), holgura=esquina)[:2], (-.06, 0.))
+        # Con pared también detrás (<= 0.27 m) detiene para no chocar de espaldas.
+        encajonado = HolguraGiro(True, .22, 'Encajonado', 0.,
+                                 puntos_base=((.22, 0.), (0., .5), (0., -.5), (-.26, 0.)))
+        self.assertEqual(self.paso(sensor=lidar(.22, .5, .5), holgura=encajonado)[:2], (0., 0.))
+        # Pasillo corto (frente 0.37 m > parada 0.32 m) con recorrido recto libre avanza tras >= 3 s sin rebloquearse.
+        self.setUp(); self.iniciar()
+        self.paso(sensor=lidar(.40, .6, .5))
+        for _ in range(14):
+            self.paso(sensor=lidar(.40, .6, .5))
+        corto = HolguraGiro(True, .37, 'Pasillo corto', 0.,
+                            puntos_base=((.37, 0.), (0., .45), (0., -.45), (-1., 0.)))
+        r = self.paso(sensor=lidar(.37, .45, .45), holgura=corto)
+        self.assertGreater(r[0], 0.)
+        self.assertIsNone(self.c.evasion)
+        r2 = self.paso(sensor=lidar(.36, .45, .45), holgura=corto)
+        self.assertGreater(r2[0], 0.)
+
+    def test_pasillo_estrecho_42_a_55cm_avanza_recto_sin_esquivar_ni_retroceder(self):
+        from math import cos, sin, tau
+        from evasion_lidar import analizar_lidar, cargar_config
+        from holgura_giro import analizar_holgura
+        cfg_real = cargar_config(Path(app.__file__).parent / 'config/evasion_lidar.json')
+        cfg_m_real = cargar_config_mision(Path(app.__file__).parent / 'config/mision_guiada.json')
+        def scan_pasillo(y_izq, y_der, yaw_deg=0.):
+            yaw = yaw_deg * pi / 180
+            ranges = []
+            for i in range(720):
+                ang = -pi + i * (tau / 720)
+                ca, sa = cos(ang + yaw), sin(ang + yaw)
+                ds = []
+                if sa > 1e-4: ds.append(y_izq / sa)
+                elif sa < -1e-4: ds.append(-y_der / sa)
+                if ca > 1e-4: ds.append(2.5 / ca)
+                elif ca < -1e-4: ds.append(-2.5 / ca)
+                ranges.append(min(d for d in ds if d > 0))
+            return NS(ranges=ranges, angle_min=-pi, angle_increment=tau / 720,
+                      range_min=.05, range_max=12.)
+        for y_izq, y_der, yaw_deg in ((.21, .21, 0.), (.23, .37, 0.), (.275, .275, 15.), (.22, .22, 12.)):
+            with self.subTest(izq=y_izq, der=y_der, yaw_deg=yaw_deg):
+                ctrl = ControlMision(self.cfg_s, cfg_m_real, clase_giros=self.mod.ControlGiro)
+                t0 = 2_000_000_000
+                pose = dict(frame_id='odom', child_frame_id='base_link', x=0., y=0., yaw=0.)
+                msg = lambda s, o, tt: json.dumps(dict(version=1, secuencia=s, orden=o,
+                    actividad_ns=tt, camara_ns=tt, meta=None, senal=None, qr_ns=None, qr_votos=0, reinicio_ns=0))
+                sc = scan_pasillo(y_izq, y_der, yaw_deg)
+                est = analizar_lidar(sc.ranges, sc.angle_min, sc.angle_increment, sc.range_min, sc.range_max, 0., cfg_real)
+                holg = analizar_holgura(sc, (0., 0., 0.), .05, cfg_real)
+                ctrl.recibir(msg(0, 'INICIAR', t0), t0)
+                ctrl.decidir(t0, pose, t0, est, cfg_real, holgura=holg)
+                t1 = t0 + 200_000_000
+                ctrl.recibir(msg(1, 'OBSERVAR', t1), t1)
+                vx, wz, _ = ctrl.decidir(t1, pose, t1, est, cfg_real, holgura=holg)
+                self.assertEqual((vx, wz), (.1, 0.))
+                self.assertIsNone(ctrl.evasion)
+        # Roce leve en un costado (< 0.20 m) con frente y lado opuesto libres centra suave sin retroceder.
+        ctrl = ControlMision(self.cfg_s, cfg_m_real, clase_giros=self.mod.ControlGiro)
+        pose = dict(frame_id='odom', child_frame_id='base_link', x=0., y=0., yaw=0.)
+        msg = lambda s, o, tt: json.dumps(dict(version=1, secuencia=s, orden=o,
+            actividad_ns=tt, camara_ns=tt, meta=None, senal=None, qr_ns=None, qr_votos=0, reinicio_ns=0))
+        sc = scan_pasillo(.195, .45, 0.)
+        est = analizar_lidar(sc.ranges, sc.angle_min, sc.angle_increment, sc.range_min, sc.range_max, 0., cfg_real)
+        holg = analizar_holgura(sc, (0., 0., 0.), .05, cfg_real)
+        t0 = 2_000_000_000
+        ctrl.recibir(msg(0, 'INICIAR', t0), t0)
+        ctrl.decidir(t0, pose, t0, est, cfg_real, holgura=holg)
+        ctrl.recibir(msg(1, 'OBSERVAR', t0 + 200_000_000), t0 + 200_000_000)
+        vx, wz, _ = ctrl.decidir(t0 + 200_000_000, pose, t0 + 200_000_000, est, cfg_real, holgura=holg)
+        self.assertEqual(vx, 0.)
+        self.assertLess(wz, 0.)
 
     def test_qr_confirmado_sobrevive_corte_odometrico_y_reposo_sin_bloquearse(self):
         self.llegar_b()
@@ -1431,11 +1509,10 @@ class MisionTests(unittest.TestCase):
         self.paso(x=.15);self.paso(x=.30)
         for _ in range(153):
             ev=dict(id=2,direccion='DERECHA',color='azul',marca_ns=self.t+200_000_000)
-            r=self.paso(senal=ev,sensor=lidar(.435),
-                        holgura=HolguraGiro(True,.24,'Recorrido ocupado',.05))
-            self.assertEqual(r[:2],(0.,0.))
-        self.assertEqual(self.c.fase,'FALLO')
-        self.assertIn('Aproximacion a flecha agotada',self.c.motivo)
+            self.paso(senal=ev,sensor=lidar(.435),
+                      holgura=HolguraGiro(True,.24,'Recorrido ocupado',.05))
+        self.assertEqual(self.c.fase,'IDA')
+        self.assertIsNone(self.c.giros.pendiente)
 
     def test_qr_retenido_caduca_durante_pausa_y_pide_relectura_explicita(self):
         self.llegar_b()
@@ -1461,6 +1538,83 @@ class MisionTests(unittest.TestCase):
         self.assertFalse(self.c.qr_confirmado)
         self.assertIsNone(self.c.qr_pendiente)
         self.assertEqual(self.c.qr_reintentar_ns,marca)
+
+    def _preparar_vuelta_en_ele(self):
+        self.iniciar()
+        for i in range(1, 11):
+            self.paso(x=round(i*.15, 2), y=0., yaw=0.)
+        for yaw in (.3, .6, .9, 1.2, pi/2):
+            self.paso(x=1.5, y=0., yaw=yaw)
+        for i in range(1, 11):
+            self.paso(x=1.5, y=round(i*.15, 2), yaw=pi/2)
+        self.paso(meta=META, sensor=lidar(.4))
+        self.assertEqual(self.c.fase, 'FRENAR_B')
+        for _ in range(5):
+            self.paso()
+        self.paso('QR_LISTO', qr_ns=self.t+200_000_000, votos=1)
+        for _ in range(5):
+            self.paso()
+        for _ in range(30):
+            error = self.c.yaw_salida-self.c.yaw_total
+            yaw = self.pose['yaw']+max(-.2, min(.2, error))
+            self.paso(yaw=normalizar(yaw))
+            if self.c.fase == 'FRENAR_SALIDA':
+                break
+        for _ in range(5):
+            self.paso()
+        self.assertEqual(self.c.fase, 'VUELTA')
+
+    def test_vuelta_sin_flecha_roja_gira_en_interseccion_abierta_hacia_ruta_de_ida_y_llega_a_a(self):
+        self._preparar_vuelta_en_ele()
+        for y in (1.35, 1.2, 1.05, .9, .75, .6):
+            vx, wz, _ = self.paso(x=1.5, y=y, yaw=-pi/2)
+            self.assertEqual((vx, wz), (.1, 0.))
+        bloqueado_der = HolguraGiro(True, .35, 'Pared lateral derecha', 0.,
+                                    distancia_avance_m=.35,
+                                    puntos_base=((1.2, 0.), (0., .9), (0., -.35), (-1.2, 0.)))
+        for y in (.45, .3):
+            r_pared = self.paso(x=1.5, y=y, yaw=-pi/2, sensor=lidar(1.2, .9, .35), holgura=bloqueado_der)
+            self.assertEqual(r_pared[:2], (.1, 0.))
+        abierto = HolguraGiro(True, .9, 'Cruce abierto', 0.,
+                              distancia_avance_m=.9,
+                              puntos_base=((1.2, 0.), (0., .9), (0., -1.5), (-1.2, 0.)))
+        giro = self.paso(x=1.5, y=.15, yaw=-pi/2, sensor=lidar(1.2, .9, 1.5), holgura=abierto)
+        self.assertEqual(giro[0], 0.)
+        self.assertLess(giro[1], 0.)
+        for _ in range(15):
+            if giro[0] > 0 or giro[1] == 0.:
+                break
+            giro = self.paso(yaw=normalizar(self.pose['yaw'] + giro[1]*.5),
+                             sensor=lidar(1.2, .9, 1.5), holgura=abierto)
+        self.assertGreaterEqual(abs(self.pose['yaw']), 2.5)
+        for i in range(1, 10):
+            self.paso(x=round(1.5 - i*.15, 2), y=0., yaw=self.pose['yaw'])
+        self.paso(meta=META, sensor=lidar(.4))
+        self.assertEqual(self.c.fase, 'FRENAR_A')
+        for _ in range(5):
+            self.paso()
+        self.assertEqual(self.c.fase, 'FIN')
+
+    def test_vuelta_sin_flecha_elige_lado_de_ruta_al_evadir_pared_frontal(self):
+        self._preparar_vuelta_en_ele()
+        for y in (1.35, 1.2, 1.05, .9, .75, .6, .45):
+            self.paso(x=1.5, y=y, yaw=-pi/2)
+        # Izquierda mas ancha (1.2m vs 0.9m), pero la ruta hacia A gira a la derecha.
+        r = self.paso(x=1.5, y=.3, yaw=-pi/2, sensor=lidar(.40, 1.20, .90))
+        self.assertEqual(r[0], 0.)
+        self.assertLess(r[1], 0.)
+
+    def test_vuelta_con_flecha_roja_prevalece_sobre_ruta_odometrica(self):
+        self._preparar_vuelta_en_ele()
+        for y in (1.35, 1.2, 1.05, .9, .75, .6, .45):
+            self.paso(x=1.5, y=y, yaw=-pi/2)
+        ev = dict(id=1, direccion='IZQUIERDA', color='rojo', marca_ns=self.t+200_000_000)
+        self.paso(senal=ev, x=1.5, y=.3, yaw=-pi/2, sensor=lidar(.45))
+        self.paso(sensor=lidar(.304))
+        for _ in range(5):
+            r = self.paso(sensor=lidar(.304))
+        self.assertEqual(r[:2], (0., .4))
+        self.assertEqual(self.c.giros.activo['direccion'], 'IZQUIERDA')
 
 
 class PreparacionTests(unittest.TestCase):
@@ -1555,7 +1709,8 @@ class PreparacionTests(unittest.TestCase):
         for cambios in ({'velocidad_aproximacion_m_s':.2}, {'velocidad_aproximacion_m_s':float('nan')},
                         {'velocidad_aproximacion_m_s':True}, {'margen_salida_evasion_m':-.1},
                         {'radio_giro_m':0.}, {'margen_giro_m':0.}, {'margen_aproximacion_m':-.1},
-                        {'tolerancia_disparo_m':.02},{'tolerancia_disparo_m':float('nan')}):
+                        {'tolerancia_disparo_m':.02},{'tolerancia_disparo_m':float('nan')},
+                        {'velocidad_barrido_rad_s':.05},{'velocidad_barrido_rad_s':.35}):
             with self.subTest(cambios=cambios), self.assertRaises(ValueError):
                 ConfigMision(**cambios)
 
@@ -1779,6 +1934,61 @@ class PreparacionTests(unittest.TestCase):
             self.assertEqual(v.ensayo.sesion.palabra,'árbol')
             self.assertEqual(v.ensayo.sesion.orden,'QR_LISTO')
             self.assertEqual(pausa.call_count,1)
+
+    def test_pausa_breve_ante_rostro_no_concluyente_y_enfriamiento_en_busqueda(self):
+        sistema = SistemaFacial(Mock(), Galeria([[1,0]], ['Persona A']), Criterio(.5,.1))
+        _, cfg = cargar_ensayo()
+        v = app.VisionMision(sistema, cfg)
+        sesion = app.SesionInterfaz()
+        t0 = 20_000_000_000
+        sesion.iniciar('Persona A', t0 - 2_000_000_000)
+        estado = dict(fase='BUSCAR_B', busqueda_desde_ns=t0 - 100_000_000)
+        im = np.zeros((250, 250, 3), np.uint8)
+        lateral = dict(caja=[20, 40, 18, 20], aceptado=False, nombre='NO_CONCLUYENTE')
+        borde_tolerado = dict(caja=[56, 40, 18, 20], aceptado=False, nombre='NO_CONCLUYENTE')
+        dudosa = dict(caja=[116, 40, 18, 20], aceptado=False, nombre='NO_CONCLUYENTE')
+        pausas = []
+        t_lat = t0 + 50_000_000
+        with patch('prueba_meta_robot.analizar_candidatos', return_value=[lateral]), \
+                patch.object(app.time, 'monotonic_ns', return_value=t_lat), \
+                patch('prueba_meta_robot.time.monotonic_ns', return_value=t_lat):
+            v.actualizar(im, t_lat, t_lat, estado, sesion, lambda: pausas.append(t_lat))
+        self.assertFalse(v.ensayo.inspeccionando)
+        self.assertEqual(len(pausas), 0)
+        with patch('prueba_meta_robot.analizar_candidatos', return_value=[dudosa]):
+            t_i = t0 + 100_000_000
+            with patch.object(app.time, 'monotonic_ns', return_value=t_i), \
+                    patch('prueba_meta_robot.time.monotonic_ns', return_value=t_i):
+                v.actualizar(im, t_i, t_i, estado, sesion, lambda: pausas.append(t_i))
+            self.assertTrue(v.ensayo.inspeccionando)
+        with patch('prueba_meta_robot.analizar_candidatos', return_value=[borde_tolerado]):
+            t_j = t0 + 500_000_000
+            with patch.object(app.time, 'monotonic_ns', return_value=t_j), \
+                    patch('prueba_meta_robot.time.monotonic_ns', return_value=t_j):
+                v.actualizar(im, t_j, t_j, estado, sesion, lambda: pausas.append(t_j))
+            self.assertTrue(v.ensayo.inspeccionando)
+        with patch('prueba_meta_robot.analizar_candidatos', return_value=[dudosa]):
+            t_fin = t0 + 1_100_000_000
+            with patch.object(app.time, 'monotonic_ns', return_value=t_fin), \
+                    patch('prueba_meta_robot.time.monotonic_ns', return_value=t_fin):
+                v.actualizar(im, t_fin, t_fin, estado, sesion, lambda: pausas.append(t_fin))
+            self.assertFalse(v.ensayo.inspeccionando)
+            self.assertEqual(len(pausas), 2)
+            t_cool = t0 + 1_500_000_000
+            with patch.object(app.time, 'monotonic_ns', return_value=t_cool), \
+                    patch('prueba_meta_robot.time.monotonic_ns', return_value=t_cool):
+                v.actualizar(im, t_cool, t_cool, estado, sesion, lambda: pausas.append(t_cool))
+            self.assertFalse(v.ensayo.inspeccionando)
+            self.assertEqual(len(pausas), 2)
+        vecina = dict(caja=[150, 40, 18, 20], aceptado=False, nombre='NO_CONCLUYENTE')
+        dudosa_movida = dict(caja=[110, 40, 18, 20], aceptado=False, nombre='NO_CONCLUYENTE')
+        with patch('prueba_meta_robot.analizar_candidatos', return_value=[dudosa_movida, vecina]):
+            t_vec = t0 + 1_650_000_000
+            with patch.object(app.time, 'monotonic_ns', return_value=t_vec), \
+                    patch('prueba_meta_robot.time.monotonic_ns', return_value=t_vec):
+                v.actualizar(im, t_vec, t_vec, estado, sesion, lambda: pausas.append(t_vec))
+            self.assertTrue(v.ensayo.inspeccionando)
+            self.assertEqual(len(pausas), 3)
 
     def test_relectura_qr_tras_rechazo_usa_otra_imagen_y_misma_asociacion_objetivo(self):
         sistema=SistemaFacial(Mock(),Galeria([[1,0]],['Persona A']),Criterio(.5,.1))

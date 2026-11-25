@@ -124,3 +124,13 @@ class HolguraTests(unittest.TestCase):
         self.assertIsNone(distancia_libre_recta(HolguraGiro(True,.4,'Sin puntos',.1),.25))
         s.ranges[0]=float('-inf')
         self.assertIsNone(distancia_libre_recta(self.analizar(s),.25))
+
+    def test_recorrido_recto_pasillo_permite_paredes_laterales_fuera_de_ancho_fisico(self):
+        from holgura_giro import distancia_libre_recta
+        s=scan(2.5)
+        s.ranges[90]=s.ranges[270]=.21
+        s.ranges[180]=.60
+        h=self.analizar(s)
+        self.assertAlmostEqual(distancia_libre_recta(h,.20,radio_frente=.24),.36)
+        s.ranges[180]=.29
+        self.assertAlmostEqual(distancia_libre_recta(self.analizar(s),.20,radio_frente=.24),.05)

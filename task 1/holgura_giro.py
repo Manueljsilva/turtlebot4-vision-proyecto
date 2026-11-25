@@ -21,21 +21,38 @@ class HolguraGiro:
     puntos_base: tuple[tuple[float, float], ...] = ()
 
 
-def distancia_libre_recta(holgura, radio):
-    """Recorrido de un disco hacia +x hasta el primer punto observado.
+def distancia_libre_recta(holgura, radio, radio_frente=None):
+    """Recorrido de un perfil frontal hasta el primer punto observado en base_link.
 
-    El radio conserva la huella y su margen. El frenado se añade al recorrido,
-    no al ancho lateral del robot. Sin puntos/cobertura no se inventa espacio.
+    Sin `radio_frente`, conserva un disco completo de radio `radio` alrededor del
+    centro. Con `radio_frente`, usa `radio` como semiancho lateral del cuerpo y
+    `radio_frente` como alcance frontal mínimo al avanzar recto entre paredes.
     """
+    if (holgura is None or not holgura.valida or not holgura.puntos_base
+            or not isfinite(radio) or radio <= 0):
+        return None
+    alcance = radio if radio_frente is None else radio_frente
+    if not isfinite(alcance) or alcance <= 0:
+        return None
+    libres = []
+    for x, y in holgura.puntos_base:
+        if radio_frente is None and hypot(x, y) <= radio:
+            return 0.
+        if x >= 0 and abs(y) <= radio:
+            dx = alcance * sqrt(max(0., 1. - (y / radio) ** 2))
+            libres.append(max(0., x - dx))
+    return min(libres) if libres else None
+
+
+def distancia_libre_atras(holgura, radio):
+    """Recorrido libre hacia -x ignorando puntos delante del centro para destrabar esquinas."""
     if (holgura is None or not holgura.valida or not holgura.puntos_base
             or not isfinite(radio) or radio <= 0):
         return None
     libres = []
     for x, y in holgura.puntos_base:
-        if hypot(x, y) <= radio:
-            return 0.
-        if x >= 0 and abs(y) <= radio:
-            libres.append(max(0., x-sqrt(max(0., radio*radio-y*y))))
+        if x <= 0.05 and abs(y) <= radio:
+            libres.append(max(0., -x-sqrt(max(0., radio*radio-y*y))))
     return min(libres) if libres else None
 
 

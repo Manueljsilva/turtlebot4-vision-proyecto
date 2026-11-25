@@ -18,9 +18,11 @@ def misma_caja(a, b):
 
 
 class ReposoOdometria:
-    """Reposo confirmado por >=3 paquetes nuevos, cubriendo >=0.7 s sin cortes."""
+    """Reposo confirmado por >=min_muestras paquetes nuevos, cubriendo >=duracion_ns sin cortes."""
 
-    def __init__(self):
+    def __init__(self, min_muestras=3, duracion_ns=700_000_000):
+        self.min_muestras = min_muestras
+        self.duracion_ns = duracion_ns
         self.referencia = None
         self.primera_ns = self.ultima_ns = None
         self.muestras = 0
@@ -31,7 +33,7 @@ class ReposoOdometria:
             self.referencia, self.primera_ns, self.ultima_ns, self.muestras = None, None, None, 0
             return False
         if marca == self.ultima_ns:
-            return self.muestras >= 3 and marca-self.primera_ns >= 700_000_000
+            return self.muestras >= self.min_muestras and marca-self.primera_ns >= self.duracion_ns
         reiniciar = (self.referencia is None or marca < self.ultima_ns
                      or marca-self.ultima_ns > EDAD_POSE_NS)
         if not reiniciar:
@@ -44,7 +46,7 @@ class ReposoOdometria:
         else:
             self.muestras += 1
         self.ultima_ns = marca
-        return self.muestras >= 3 and marca-self.primera_ns >= 700_000_000
+        return self.muestras >= self.min_muestras and marca-self.primera_ns >= self.duracion_ns
 
 
 class SesionPruebaB:
@@ -273,4 +275,4 @@ class ControlBarrido:
         if (lidar is None or not lidar.observacion_valida or lidar.proximidad_no_cuantificable
                 or min(lidar.dist_frente, lidar.dist_izquierda, lidar.dist_derecha) <= cfg.distancia_parada_m):
             return cero('LiDAR/TF insuficientes o espacio reducido: detenido')
-        return 0., min(.25, cfg.velocidad_giro), 'Barrido sobre el sitio; sin avance'
+        return 0., min(.14, cfg.velocidad_giro), 'Barrido sobre el sitio; sin avance'
