@@ -1,0 +1,11 @@
+{
+  "velocidad_avance": 0.10,
+  "velocidad_giro": 0.40,
+  "distancia_parada_m": 0.28,
+  "distancia_precaucion_m": 0.38,
+  "distancia_lateral_m": 0.20,
+  "angulo_cono_frontal_deg": 22.0,
+  "edad_maxima_s": 0.6,
+  "cobertura_minima": 0.30,
+  "fraccion_errores_maxima": 0.10
+}

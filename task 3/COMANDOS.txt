@@ -1,0 +1,16 @@
+TASK 3 — MISIÓN COMPLETA HÍBRIDA
+Desde la raíz, sesión del robot y Docker preparados según COMANDOS_LAB.txt.
+Confirmar IP/dominio; estos valores son ejemplos de la sesión previa.
+
+bash "task 3/ejecutar_hibrido_robot.sh" \
+  --ip 10.87.179.100 --dominio 5 --mover
+
+Webcam distinta: añadir --camara 1
+Precargar nombre: añadir --nombre "Nombre del dataset"
+Omitir --mover evita crear publicador de velocidad.
+Buscar inicia; Cambiar a gestos/autónomo alterna conservando misión y QR.
+Reiniciar detiene/confirma reposo y permite otro intento sin salir.
+Ver README.md y PRUEBA_MISION_GUIADA.md.
+
+Comprobación de desarrollo, sin robot ni webcam:
+PYTHONPATH="task 3" .venv/bin/python -m unittest discover -s "task 3/tests" -t "task 3" -q

@@ -1,0 +1,17 @@
+{
+  "separacion_meta_m": 0.6,
+  "ausencia_meta_s": 1.5,
+  "radio_llegada_a_m": 0.6,
+  "frente_meta_m": 0.4,
+  "tiempo_maximo_mision_s": 900.0,
+  "tiempo_orientacion_s": 45.0,
+  "tiempo_aproximacion_s": 30.0,
+  "velocidad_aproximacion_m_s": 0.05,
+  "margen_salida_evasion_m": 0.04,
+  "radio_giro_m": 0.22,
+  "margen_giro_m": 0.02,
+  "radio_pasillo_m": 0.20,
+  "margen_aproximacion_m": 0.02,
+  "tolerancia_disparo_m": 0.005,
+  "velocidad_barrido_rad_s": 0.14
+}

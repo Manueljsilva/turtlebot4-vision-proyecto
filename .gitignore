@@ -31,3 +31,6 @@ referencias/turtlebot67/
 *.fdb_latexmk
 *.bbl
 *.blg
+
+# Copia local con posibles salidas personales; Task 3 reutiliza galería de Task 1.
+/task 3/01_reconocimiento_rostros.ipynb
