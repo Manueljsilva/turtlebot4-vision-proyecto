@@ -1,7 +1,22 @@
 # Estado del proyecto
 
-Actualizado: **24 de noviembre de 2026** (informe; control vigente desde el 21/11). Misión integrada: giro por salida libre y paso recto protegido entre laterales cercanos. Margen circular reducido por autorización a **2 cm** (radio estimado 22 cm; límite 24 cm). Avance normal **0.10 m/s**, aproximaciones/salida adaptable <=0.05. **318 tests Task 1**, sin suite Task 2. Recorrido físico completo/retorno, geometría y velocidad final pendientes.
+Actualizado: **25 de noviembre de 2026**. Integrada la rama del compañero `competicion-pasillos-y-vision` (`8d8f2d5`) con las correcciones autorizadas de cámara/muro, giro bloqueado y continuidad odométrica. **346 pruebas automáticas Task 1 pasan**, sin ejecutar Task 2 ni mover hardware. Próxima validación: misión completa A → azul/evasión → B → objetivo/QR → rojo/ruta de apoyo → A/palabra.
 
+## Integración de pasillos y visión (25/11, vigente)
+
+El usuario autoriza conservar el semiancho de paso recto de **20 cm**, que afirma comprobado; radio de giro 22 cm + margen2 cm=24 cm. Perfil incorporado del compañero: avance0.10 m/s, angular0.40 rad/s, precaución0.38 m, parada0.28 m, lateral0.20 m y cono frontal22°. Estos valores sustituyen el perfil anterior; velocidad final máxima y frenado siguen pendientes. Se conserva el margen longitudinal dinámico en todo avance, también en la rama normal de evasión, que ahora evalúa el perfil trasladado en vez de autorizar solo por estar fuera del contorno actual.
+
+**Cámara:** en IDA/VUELTA se puede seguir por LiDAR sin vídeo reciente. Ante frontal <=**0.42 m** (max(meta0.40,precaución0.38+salida0.04)), detener hasta una imagen nueva procesada posterior a esa espera. No se sale de la espera por repetir un fotograma ni porque el muro deje de aparecer en un scan; observar nueva flecha/meta o pared desnuda decide la continuación. No aceptar metas sin imagen (incluido camara_ns=None), ni inventar ausencia/votos con imágenes antiguas. Demás fases conservan parada por vídeo>1s. Pose/LiDAR>0.6s, TF/cobertura desconocidos y actividad>0.5s siguen deteniendo.
+
+**Giro y escape:** se eliminan las dos salidas de la rama que permitían girar con mínimo al centro bajo0.24 m (inversión tras esperar y corrección suave desde0.185). El publicador ROS aplica además una barrera angular final. Si no cabe girar, puede retroceder a0.06 m/s solo con trayectoria trasera conocida y margen >=max(0.05,0.02+0.06×(edad scan+0.1)). Segmentos <=0.12 m/2s, reevaluados en cada ciclo; terminar antes si se libera el giro o se pierde recorrido. Frenar y confirmar reposo antes de otra maniobra; mantener el lado de flecha si se necesita escapar durante su giro. Esto no mide frenado físico.
+
+**Odometría/retorno:** cortes coherentes recuperan tras >=3 poses nuevas/0.7s quieto. Salto>0.25m/>0.5rad, tiempo retrocedido, cambio de marco, giro contrario o corte>2s durante rotación enclavan FALLO y conservan QR. No reanclar A/ruta automáticamente. La rama registra puntos de ida como apoyo al retorno, siempre subordinado a flechas rojas; no hay mapa/SLAM ni recorrido exacto garantizado. A aún exige nueva bandera y cercanía/separación/ausencia válidas. Se mantienen las reevaluaciones de la rama por maniobra12s, aproximación30s, barrido vuelta/90s y orientación45s con posible entrega a vuelta odométrica, bajo límite total900s y guardas de sensores/huella.
+
+**Visión:** QR pequeño con ampliación/reintentos y asociación debajo del rostro además de misma foto/lateral; rostros a1x/2x/hasta720px y alineación por landmarks; barrido0.14rad/s y pausa corta ante cara dudosa centrada. No se cambia galería, umbral/margen calibrados ni modelos. Faltan métricas de confusiones y tiempo reales con la consulta multiescala: pasar pruebas sintéticas no garantiza precisión física.
+
+Pruebas: **346 Task 1, todas pasan**, con recursos personales y PNG solo enlazados localmente, no publicados. Regresiones de vídeo ausente real con marcaNone, muro y fotograma posterior, recuperación con flecha/bandera, GUI/TF/scan caducados, inversión/corrección con obstáculo a19cm, segmento trasero y reposo, margen longitudinal al borde del perfil, cambio de marco/salto y conservación de A/QR, paso a21cm manteniendo prohibición de giro, nodo ROS con propuesta angular errónea y secuencias completas simuladas. No suite Task 2. Fuente del compañero se integra con su historia; conservar ediciones locales ajenas y exclusiones. Guía vigente: `task 1/PRUEBA_MISION_GUIADA.md`. **Informe del24/11 queda pendiente de adaptar a esta integración**; no se modifica su fuente local en esta entrega.
+
+Las secciones siguientes conservan antecedentes; los valores de control del25/11 anteriores prevalecen.
 
 ## Informe: contradicciones prioritarias corregidas (24 de noviembre)
 
@@ -11,7 +26,7 @@ Se separa detector original (STOP, dos hilos/alternancia cada tres fotogramas) d
 
 PDF actualizado de **22 páginas**, compilado con pdfLaTeX dos pasadas, sin advertencias/referencias pendientes/desbordamientos en la pasada final y revisado visualmente; auxiliares solo en /tmp. `output/pdf/informe_proyecto_borrador.pdf` es la copia versionada y `informe/main.pdf` su copia de lectura local. Publicar fuente, PDF y seis diagramas necesarios bajo autorización previa del informe; no incluir PNG/QR de `señales`, presentaciones, datos personales ni la eliminación local del Markdown anterior. Quedan para otra revisión ampliación metodológica rostro/QR, protocolo cuantitativo de evaluación, referencias y mediciones físicas; no inventar resultados ni afirmar prueba del último ajuste lateral.
 
-## Paso entre laterales cercanos (21 de noviembre, vigente)
+## Paso entre laterales cercanos (21 de noviembre, antecedente)
 
 El registro facd3a29 tiene 32 estados completos, todos IDA: 26 paradas laterales, cuatro por recuperación odométrica y dos por cámara; ninguna FALLO. Con frente ~0.74–0.78 m, izquierda ~0.258 m y derecha ~0.314 m, la heurística detiene porque un lateral está bajo 0.28 y el opuesto no supera 0.32. No significa necesariamente ambos lados <0.28 ni un fallo del giro de flecha. No se aportan los puntos del escaneo, de modo que esas cifras por sí solas no prueban espacio de avance.
 

@@ -1,6 +1,7 @@
 """Ensayo guiado A-B-A: estados y salida única, sin ROS ni modelos de visión.
 
-La odometría es local. Rojo guía el regreso; no se reproduce una ruta ni hay SLAM.
+La odometría es local. Rojo guía el regreso; la ruta odométrica sirve de respaldo,
+sin mapa ni SLAM y sin sobrevivir a un cambio de referencia de /odom.
 La bandera B se coloca al fondo, frente al sentido de entrada (ensayo acordado).
 """
 
@@ -151,6 +152,8 @@ class ControlMision:
         self._girando_ruta = None
         self._ultimo_giro_ruta_pos = None
         self._paso_corto_hasta_ns = 0
+        self.espera_camara_muro_ns = None
+        self.escape_atras = None
 
     def cambiar(self, fase, ahora, motivo):
         self.fase, self.desde_ns, self.motivo = fase, ahora, motivo
@@ -162,6 +165,7 @@ class ControlMision:
             self.evasion = None
         if fase not in ('IDA', 'VUELTA'):
             self._paso_corto_hasta_ns = 0
+            self.espera_camara_muro_ns = None
         if fase not in ('VUELTA', 'FALLO'):
             self._girando_ruta = None
         if fase not in ('IDA','VUELTA','FALLO'):
@@ -263,14 +267,6 @@ class ControlMision:
             self.actividad_ns = self.camara_ns = None
             self.senal = self.meta = None
 
-    def _limpiar_maniobras_angulares(self):
-        self.evasion = None
-        self.giros.activo = None
-        self.giros.fallo = None
-        self.freno_flecha = None
-        self.salida_flecha = None
-        self._girando_ruta = None
-
     def seguir_pose(self, ahora, pose, marca):
         girando = (self.fase in ('BUSCAR_B', 'ORIENTAR_SALIDA') or self.giros.activo is not None
                    or self.evasion is not None or self._girando_ruta is not None)
@@ -284,15 +280,15 @@ class ControlMision:
                 dyaw = normalizar(pose['yaw'] - self.pose['yaw'])
                 dxy = hypot(pose['x'] - self.pose['x'], pose['y'] - self.pose['y'])
                 if marco_cambiado or dt < 0 or abs(dyaw) > .5 or dxy > .25:
-                    # En competición reanclar sin abortar misión si /odom salta o cambia de marco.
-                    self._limpiar_maniobras_angulares()
-                    self.pose, self.pose_ns = dict(pose), marca
-                    self.recuperando, self.reposo_odom = True, ReposoOdometria(2, 250_000_000)
-                    return True
+                    motivo = ('Cambio de marco de odometria' if marco_cambiado else
+                              f'Salto odometrico: dt={dt/1e9:.2f}s dxy={dxy:.3f} dyaw={dyaw:.3f}')
+                    self.fallar(motivo+'; referencia de A/ruta incierta, reiniciar desde A', ahora)
+                    return False
                 if dt > EDAD_POSE_NS:
                     if girando and dt > 2_000_000_000:
-                        self._limpiar_maniobras_angulares()
-                    self.recuperando, self.reposo_odom = True, ReposoOdometria(2, 250_000_000)
+                        self.fallar('Corte odometrico >2s durante giro: angulo incierto; conservar QR y detener', ahora)
+                        return False
+                    self.recuperando, self.reposo_odom = True, ReposoOdometria()
                 self.yaw_total += dyaw
         self.pose, self.pose_ns = dict(pose), marca
         if self.recuperando and self.reposo_odom.actualizar(pose, marca, ahora):
@@ -424,17 +420,49 @@ class ControlMision:
         return velocidad,0.,etiqueta+': '+accion
 
     def _retroceder_seguro(self, lidar, cfg):
-        """Retroceso lento cuando una esquina/pasillo bloquea avance y giro, solo con sector trasero libre."""
+        """Iniciar un escape de <=0.12 m/2 s; nunca autoriza girar en huella ocupada."""
         if not self.observado(lidar):
             return None
         h = self.holgura
-        if h is None or not h.valida or h.edad_s is None or h.edad_s > cfg.edad_maxima_s:
+        if (self.pose is None or self.pose_ns is None or h is None or not h.valida
+                or h.edad_s is None or not isfinite(h.edad_s) or not 0 <= h.edad_s <= cfg.edad_maxima_s):
             return None
         radio = self.cfg.radio_giro_m + self.cfg.margen_giro_m
-        atras = distancia_libre_atras(h, radio)
-        if atras is not None and atras > .05:
+        atras = distancia_libre_atras(h, self.cfg.radio_pasillo_m, radio_frente=radio)
+        margen = max(.05, self.cfg.margen_aproximacion_m+.06*(h.edad_s+.1))
+        if atras is not None and atras > margen:
+            self.escape_atras = dict(inicio_ns=self.pose_ns, x=self.pose['x'], y=self.pose['y'],
+                                     frenando=False, reposo=ReposoOdometria())
             return -.06, 0., 'Escape lento hacia atras por pasillo o esquina cerrada'
         return None
+
+    def _continuar_escape(self, ahora, pose, pose_ns, lidar, cfg):
+        e = self.escape_atras
+        if e is None:
+            return None
+        h = self.holgura
+        atras = None
+        if (self.observado(lidar) and h is not None and h.valida and h.edad_s is not None
+                and isfinite(h.edad_s) and 0 <= h.edad_s <= cfg.edad_maxima_s):
+            atras = distancia_libre_atras(h, self.cfg.radio_pasillo_m,
+                                         radio_frente=self.cfg.radio_giro_m+self.cfg.margen_giro_m)
+        margen = (max(.05, self.cfg.margen_aproximacion_m+.06*(h.edad_s+.1))
+                  if atras is not None else None)
+        terminar = (ahora-e['inicio_ns'] >= 2_000_000_000
+                    or hypot(pose['x']-e['x'], pose['y']-e['y']) >= .12
+                    or self.fase == 'BUSCAR_B' and self.orden in ('VERIFICAR','QR_LISTO')
+                    or self.libre(lidar,cfg) or atras is None or atras <= margen)
+        if terminar:
+            e['frenando'] = True
+        if e['frenando']:
+            if e['reposo'].actualizar(pose,pose_ns,ahora):
+                self.escape_atras = None
+                if self.freno_flecha is not None:
+                    self.freno_flecha['confirmado'] = False
+                    self.freno_flecha['reposo'] = ReposoOdometria()
+                return 0.,0.,'Escape terminado: reposo confirmado; reevaluar espacio de giro'
+            return 0.,0.,'Escape terminado: frenar y confirmar reposo antes de otra maniobra'
+        return -.06,0.,'Escape lento hacia atras; recorrido trasero protegido'
 
     def salir_de_flecha(self, ahora, pose, pose_ns, lidar, cfg, solo_reposo=False):
         """Reposo y salida protegida; un obstáculo o desvio devuelve el control a evasión sin FALLO."""
@@ -528,10 +556,9 @@ class ControlMision:
         a=self.giros.activo
         avance=a['sentido']*(self.yaw_total-a['yaw_total'])
         if avance < -20*pi/180:
-            self.giros.activo = None
-            self.giros.fallo = None
-            self.freno_flecha = None
-            return None
+            self.giros.fallo = 'Odometria indica giro contrario: detenido; revisar'
+            self.fallar(self.giros.fallo,ahora)
+            return 0.,0.,self.motivo
         if self.salida_libre(lidar,cfg):
             self.giros.activo=None
             return 0.,0.,'Giro por flecha completado: salida libre observada con margen'
@@ -661,10 +688,6 @@ class ControlMision:
             if wz:
                 if self.libre(lidar, cfg):
                     return 0., wz, 'Correccion lateral sobre el sitio'
-                if (self.holgura and self.holgura.valida and self.holgura.puntos_base
-                        and self.holgura.distancia_minima_m is not None
-                        and self.holgura.distancia_minima_m > .185):
-                    return 0., wz, 'Correccion suave para centrar en pasillo estrecho'
                 escape = self._retroceder_seguro(lidar, cfg)
                 if escape is not None:
                     return escape
@@ -672,7 +695,10 @@ class ControlMision:
             if vx > 0:
                 bloqueo = self.bloqueo_avance(lidar, cfg)
                 if not bloqueo:
-                    return vx, 0., 'Avance recto con evasion'
+                    recto = self.aproximar(ahora,lidar,cfg,'Avance recto por pasillo')
+                    if recto[0] > 0:
+                        return recto
+                    bloqueo = recto[2]
                 if self.libre(lidar, cfg):
                     sentido = 1. if lidar.dist_izquierda >= lidar.dist_derecha else -1.
                     self.evasion = dict(sentido=sentido, inicio_ns=ahora, yaw=self.yaw_total, invertido=False)
@@ -733,13 +759,6 @@ class ControlMision:
             e['bloqueado_desde_ns'] = e.get('bloqueado_desde_ns') or ahora
             esperado_ns = 800_000_000 if e.get('invertido') else 1_000_000_000
             if ahora - e['bloqueado_desde_ns'] >= esperado_ns:
-                if not e.get('invertido'):
-                    e['sentido'] = -e['sentido']
-                    e['invertido'] = True
-                    e['yaw'] = self.yaw_total
-                    e['bloqueado_desde_ns'] = None
-                    lado = 'IZQUIERDA' if e['sentido'] > 0 else 'DERECHA'
-                    return 0., e['sentido']*cfg.velocidad_giro*.75, f'Evasion invertida hacia {lado} por bloqueo lateral'
                 escape = self._retroceder_seguro(lidar, cfg)
                 if escape is not None:
                     self.evasion = None
@@ -824,13 +843,14 @@ class ControlMision:
             self.diagnostico_meta = 'Esperando imagen reciente'
             if self.meta_nueva:
                 self.meta_nueva.caducar()
-            if self.fase == 'ESPERAR' or (self.fase == 'BUSCAR_B' and not reciente(self.camara_ns, ahora, 2_000_000_000)):
+            self.meta = self.senal = None
+            if self.fase not in ('IDA','VUELTA'):
                 return cero('Sin camara reciente: detenido')
         if not pose_ok or self.recuperando:
             self.diagnostico_meta = 'Esperando odometria valida/estable'
             if self.meta_nueva:
                 self.meta_nueva.caducar()
-            return cero('Esperando odometria reciente y 0.25s estables tras cortes')
+            return cero('Esperando odometria reciente y 0.7s estables tras cortes')
         if self.fase == 'ESPERAR':
             if self.solicitud_ns is None or pose_ns < self.solicitud_ns:
                 return cero('Esperando odometria posterior a Buscar para registrar A')
@@ -840,6 +860,21 @@ class ControlMision:
             self.meta_nueva = MetaNueva(ahora, self.cfg)
             return cero(self.motivo)
         if self.fase in ('IDA', 'VUELTA'):
+            # Sin vídeo se puede recorrer un pasillo con LiDAR/TF válidos. Al
+            # llegar a la zona de maniobra, frenar hasta una imagen procesada
+            # posterior a esta espera: distinguir flecha/meta de pared desnuda.
+            zona_muro = max(self.cfg.frente_meta_m,
+                            cfg.distancia_precaucion_m+self.cfg.margen_salida_evasion_m)
+            if (not camara_fresca and self.observado(lidar)
+                    and lidar.dist_frente <= zona_muro and self.espera_camara_muro_ns is None):
+                self.espera_camara_muro_ns = ahora
+            if self.espera_camara_muro_ns is not None:
+                if not camara_fresca or self.camara_ns <= self.espera_camara_muro_ns:
+                    return cero('Muro cercano: esperar imagen nueva para flecha/meta')
+                self.espera_camara_muro_ns = None
+            escape = self._continuar_escape(ahora,pose,pose_ns,lidar,cfg)
+            if escape is not None:
+                return escape
             if self.fase == 'IDA' and not self.recuperando:
                 pto = (pose['x'], pose['y'])
                 if not self.ruta_ida or hypot(pto[0] - self.ruta_ida[-1][0], pto[1] - self.ruta_ida[-1][1]) >= .30:
@@ -856,7 +891,8 @@ class ControlMision:
             # aceptar la llegada: el barrido comprueba su propia holgura después.
             admisible = (separado and (self.fase == 'IDA' or cerca_a) and self.observado(lidar)
                          and lidar.dist_frente <= self.cfg.frente_meta_m and self.giros.activo is None)
-            confirmada = self.meta_nueva.actualizar(self.meta, self.camara_ns, admisible)
+            confirmada = (self.meta_nueva.actualizar(self.meta,self.camara_ns,admisible)
+                          if camara_fresca else False)
             if self.meta is None:
                 self.diagnostico_meta = 'Sin bandera detectada en la imagen'
             elif not self.meta_nueva.salida_visual:
@@ -993,9 +1029,6 @@ class ControlMision:
                             escape = self._retroceder_seguro(lidar, cfg)
                             if escape is not None:
                                 return escape
-                            self.giros.activo = None
-                            self.freno_flecha = None
-                            return self.evadir(ahora, lidar, cfg)
                         return cero('Giro por flecha bloqueado: '+bloqueo+'; buscando espacio')
                     f['bloqueado_desde_ns'] = None
                 elif self.fase != 'FALLO':
@@ -1043,6 +1076,9 @@ class ControlMision:
                 self.cambiar('BUSCAR_B', ahora, 'Frenado confirmado; buscar persona y su QR')
             return cero(self.motivo)
         if self.fase == 'BUSCAR_B':
+            escape = self._continuar_escape(ahora,pose,pose_ns,lidar,cfg)
+            if escape is not None:
+                return escape
             qr_fresco = (self.orden == 'QR_LISTO' and self.qr_votos == CONFIRMACIONES_VISUALES
                          and reciente(self.qr_ns, ahora, EDAD_CAMARA_NS)
                          and self.qr_ns > self.busqueda_desde_ns)
@@ -1078,16 +1114,13 @@ class ControlMision:
                 self.cambiar('ORIENTAR_SALIDA', ahora, 'Orientar a entrada B +180 grados')
             return cero(self.motivo)
         if self.fase == 'ORIENTAR_SALIDA':
+            escape = self._continuar_escape(ahora,pose,pose_ns,lidar,cfg)
+            if escape is not None:
+                return escape
             error = self.yaw_salida-self.yaw_total
             if (self.sentido_salida*(self.yaw_total-self.yaw_inicio_salida) < -.35
                     or self.sentido_salida*error < -5*pi/180 or abs(error) > pi+.15):
-                self.giros = self.clase_giros('vuelta', self.cfg_giros_mision)
-                self.ultima_senal_recibida = None
-                self._girando_ruta = None
-                self._ultimo_giro_ruta_pos = None
-                self._punto_ruta_activo(pose)
-                self.cambiar('VUELTA', ahora, 'Salida ajustada; continuar regreso por LiDAR y ruta')
-                self.meta_nueva = MetaNueva(ahora, self.cfg)
+                self.fallar('Giro de salida contrario o incoherente: conservar QR y detener', ahora)
                 return cero(self.motivo)
             if abs(error) <= 5*pi/180:
                 self.cambiar('FRENAR_SALIDA', ahora, 'Salida orientada; confirmar reposo antes de rojo')

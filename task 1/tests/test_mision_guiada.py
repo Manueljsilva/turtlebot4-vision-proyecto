@@ -345,15 +345,15 @@ class MisionTests(unittest.TestCase):
         for grados in (20,40,60,80):
             r=self.paso(yaw=-grados*pi/180,sensor=lidar(.49,1.,1.2))
             self.assertLess(r[1],0.)
-        # Incluso con tirón de cámara Wi-Fi no pierde el sentido ni falla; termina al abrirse > 49 cm.
-        self.assertLess(self.paso(sensor=lidar(.49),marca=0)[1],0.)
+        # Cerca del muro espera una imagen nueva; conserva el lado y termina al abrirse >49 cm.
+        self.assertEqual(self.paso(sensor=lidar(.49),marca=0)[:2],(0.,0.))
         self.assertIsNotNone(self.c.giros.activo)
         r=self.paso(sensor=lidar(.491))
         self.assertEqual(r[:2],(0.,0.))
         self.assertIsNone(self.c.giros.activo)
         self.assertAlmostEqual(self.c.ultimo_giro_completado['avance_deg'],80.)
 
-    def test_giro_libre_conserva_12s_aun_durante_pausa_de_camara(self):
+    def test_muro_sin_camara_no_gira_aunque_caduque_la_maniobra(self):
         for flecha in (True,False):
             with self.subTest(flecha=flecha):
                 self.setUp()
@@ -362,7 +362,8 @@ class MisionTests(unittest.TestCase):
                     self.iniciar();self.paso(sensor=lidar(.4))
                 for _ in range(65):r=self.paso(sensor=lidar(.4),marca=0)
                 self.assertEqual(self.c.fase,'IDA')
-                self.assertNotEqual(r[:2],(0.,0.))
+                self.assertEqual(r[:2],(0.,0.))
+                self.assertIsNotNone(self.c.espera_camara_muro_ns)
 
     def test_recorrido_integrado_flecha_azul_60_b_qr_salida_180_roja_120_meta_a(self):
         self.preparar_flecha_para_giro_libre()
@@ -582,8 +583,8 @@ class MisionTests(unittest.TestCase):
         for _ in range(5):
             r=self.paso(sensor=lidar(.55),holgura=HolguraGiro(True,.24,'Ocupado',.05))
         self.assertEqual(self.c.fase,'IDA')
-        self.assertTrue(self.c.evasion['invertido'])
-        self.assertLess(r[1],0.)
+        self.assertEqual(r[:2],(0.,0.))
+        self.assertEqual(self.c.evasion['sentido'],1.)
         for _ in range(10):
             self.paso(sensor=lidar(.55),holgura=HolguraGiro(True,.24,'Ocupado',.05))
         self.assertEqual(self.c.fase,'IDA')
@@ -992,15 +993,15 @@ class MisionTests(unittest.TestCase):
         self.iniciar()
         self.assertGreater(self.paso(sensor=lidar(.426,.311,.308))[1],0.)
         ocupado=HolguraGiro(True,.24,'Contorno ocupado',0.)
-        # Espera <= 1 s antes de invertir sentido en lugar de bloquearse 12 s ni fallar.
+        # Cambiar de sentido no libera una huella ocupada: sin trasero conocido conserva cero.
         for _ in range(5):
             vx,wz,motivo=self.paso(sensor=lidar(.426,.311,.308),holgura=ocupado)
             self.assertEqual((vx,wz),(0.,0.))
         vx,wz,motivo=self.paso(sensor=lidar(.426,.311,.308),holgura=ocupado)
         self.assertEqual(self.c.fase,'IDA')
         self.assertEqual(vx,0.)
-        self.assertLess(wz,0.)
-        self.assertIn('Evasion invertida',motivo)
+        self.assertEqual(wz,0.)
+        self.assertIn('bloqueada',motivo)
         d=self.c.diagnostico_giro(self.t,lidar(.426,.311,.308),self.cfg)
         self.assertEqual(d['limite_giro_m'],.24)
         self.assertIn('distancia al centro=0.240m',d['bloqueo_giro'])
@@ -1156,9 +1157,8 @@ class MisionTests(unittest.TestCase):
         self.paso(sensor=lidar(.37,.6,.5))
         self.assertIsNotNone(self.c.evasion)
         self.assertEqual(self.paso(dt=2.1,sensor=lidar(.37,.6,.5))[:2],(0.,0.))
-        self.assertEqual(self.c.fase,'IDA')
-        self.assertTrue(self.c.recuperando)
-        self.assertIsNone(self.c.evasion)
+        self.assertEqual(self.c.fase,'FALLO')
+        self.assertIn('Corte odometrico >2s',self.c.motivo)
 
     def test_aproximacion_lenta_no_omite_espacio_o_frescura(self):
         self.iniciar()
@@ -1266,8 +1266,8 @@ class MisionTests(unittest.TestCase):
     def test_evento_fresco_recibido_con_camara_ausente_no_mueve_y_espera_imagen(self):
         self.iniciar()
         ev=dict(id=1,direccion='IZQUIERDA',color='azul',marca_ns=self.t+200_000_000)
-        self.assertEqual(self.paso(senal=ev,marca=0,sensor=lidar(.38))[:2],(.05,0.))
-        self.assertEqual(self.c.giros.pendiente['direccion'],'IZQUIERDA')
+        self.assertEqual(self.paso(senal=ev,marca=0,sensor=lidar(.38))[:2],(0.,0.))
+        self.assertEqual(self.c.senal_por_procesar['direccion'],'IZQUIERDA')
         self.assertEqual(self.paso(sensor=lidar(.38))[:2],(.05,0.))
 
     def test_recepcion_no_guarda_flecha_de_otra_fase_color_o_imagen_previa(self):
@@ -1295,21 +1295,21 @@ class MisionTests(unittest.TestCase):
         self.iniciar()
         self.assertEqual(self.paso(dt=.8)[:2], (0., 0.))
         self.assertTrue(self.c.recuperando)
-        for _ in range(3):
+        for _ in range(5):
             self.paso()
         self.assertFalse(self.c.recuperando)
         self.paso(x=1.)
-        self.assertEqual(self.c.fase, 'IDA')
-        self.assertTrue(self.c.recuperando)
-        for _ in range(3):
-            self.paso()
-        self.assertFalse(self.c.recuperando)
+        self.assertEqual(self.c.fase, 'FALLO')
+        for _ in range(5):
+            self.assertEqual(self.paso()[:2],(0.,0.))
 
     def test_barrido_limites_y_corte_largo_bloquean_sin_retorno(self):
         self.llegar_b()
         self.paso(dt=2.1)
-        self.assertEqual(self.c.fase, 'BUSCAR_B')
+        self.assertEqual(self.c.fase, 'FALLO')
         self.assertFalse(self.c.qr_confirmado)
+        self.setUp()
+        self.llegar_b()
         self.c.inicio_barrido_ns = self.t-90_000_000_000
         self.paso()
         self.assertEqual(self.c.fase, 'BUSCAR_B')
@@ -1331,7 +1331,7 @@ class MisionTests(unittest.TestCase):
         self.assertTrue(self.c.qr_confirmado)
         self.assertEqual(self.c.fase, 'ORIENTAR_SALIDA')
         self.assertEqual(self.paso(yaw=.2)[:2], (0., 0.))
-        self.assertEqual(self.c.fase, 'VUELTA')
+        self.assertEqual(self.c.fase, 'FALLO')
         self.assertTrue(self.c.qr_confirmado)
 
     def test_mensajes_invalidos_y_fin_cierran_permiso(self):
@@ -1360,7 +1360,9 @@ class MisionTests(unittest.TestCase):
                 vx, wz, _ = self.paso(sensor=estado, holgura=holg)
                 # Con trasero despejado retrocede para destrabar; si no hay espacio detrás, frena.
                 self.assertEqual((vx, wz), (-.06, 0.))
-        # Un obstáculo únicamente detrás no bloquea avanzar hacia adelante cuando frente está libre.
+        # Una escena independiente con obstáculo únicamente detrás admite avance frontal.
+        self.setUp()
+        self.iniciar()
         holg_trasera = HolguraGiro(True, .24, 'Trasera', .05, (), 1.8)
         self.assertEqual(self.paso(sensor=lidar(1.8), holgura=holg_trasera)[:2], (.1, 0.))
 
@@ -1424,7 +1426,7 @@ class MisionTests(unittest.TestCase):
                 vx, wz, _ = ctrl.decidir(t1, pose, t1, est, cfg_real, holgura=holg)
                 self.assertEqual((vx, wz), (.1, 0.))
                 self.assertIsNone(ctrl.evasion)
-        # Roce leve en un costado (< 0.20 m) con frente y lado opuesto libres centra suave sin retroceder.
+        # Menos de 20 cm laterales no autoriza girar dentro de la huella circular de 24 cm.
         ctrl = ControlMision(self.cfg_s, cfg_m_real, clase_giros=self.mod.ControlGiro)
         pose = dict(frame_id='odom', child_frame_id='base_link', x=0., y=0., yaw=0.)
         msg = lambda s, o, tt: json.dumps(dict(version=1, secuencia=s, orden=o,
@@ -1438,7 +1440,7 @@ class MisionTests(unittest.TestCase):
         ctrl.recibir(msg(1, 'OBSERVAR', t0 + 200_000_000), t0 + 200_000_000)
         vx, wz, _ = ctrl.decidir(t0 + 200_000_000, pose, t0 + 200_000_000, est, cfg_real, holgura=holg)
         self.assertEqual(vx, 0.)
-        self.assertLess(wz, 0.)
+        self.assertEqual(wz, 0.)
 
     def test_qr_confirmado_sobrevive_corte_odometrico_y_reposo_sin_bloquearse(self):
         self.llegar_b()
@@ -2171,6 +2173,19 @@ class NodoTests(unittest.TestCase):
                 self.assertEqual(estado['wz'],.4 if j in (7,8) else 0.)
                 if j==3:self.assertAlmostEqual(estado['giro']['distancia_centro_m'],.204)
                 if j==9:self.assertIn('detras',estado['giro']['bloqueo_giro'])
+            # Una propuesta angular errónea tampoco atraviesa la barrera final
+            # del publicador si el contorno circular está ocupado.
+            ahora += 300_000_000
+            scan.ranges=[1.8]*360;scan.ranges[180]=.19
+            from holgura_giro import analizar_holgura
+            c.holgura=analizar_holgura(scan,(0.,0.,0.),0.,ConfigEvasion())
+            with patch.object(c,'decidir',return_value=(0.,.3,'Propuesta incorrecta')), \
+                    patch.object(ros.time,'monotonic_ns',return_value=ahora), \
+                    patch('sys.stdout',new_callable=io.StringIO) as out:
+                nodo._scan_cb(scan);nodo._ciclo()
+            estado=json.loads(out.getvalue())
+            self.assertEqual((estado['vx'],estado['wz']),(0.,0.))
+            self.assertIn('Giro inhibido',estado['estado'])
             if mover:
                 cmd=nodo.pub_cmd.mensajes[-1].twist
                 self.assertEqual((cmd.linear.x,cmd.angular.z),(0.,0.))

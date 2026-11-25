@@ -55,7 +55,7 @@ while [[ $# -gt 0 ]]; do
             echo 'O bien: ... --solo-meta (solo camara/bandera, sin galeria ni publicador)'
             echo 'O bien: ... --prueba-meta-b [--nombre NOMBRE] [--mover] (cerca de B, solo giro)'
             echo 'O bien: ... --mision-guiada [--nombre NOMBRE] [--mover] (ensayo azul > meta/QR > rojo > A)'
-            echo 'Mision guiada: bandera B al fondo; usa disparo local 48 cm y orientacion de entrada +180 grados.'
+            echo 'Mision guiada: bandera B al fondo; usa disparo 30 cm, giro hasta salida libre y orientacion de entrada +180 grados.'
             echo 'Añadir --avanzar-hasta-meta al ensayo B para evasion previa; despues de la meta frena y solo gira.'
             echo 'Añadir --senales [--tramo ida|vuelta] a la prueba combinada para giros por señales.'
             echo 'Añadir --ensayo-giro-companero a --evasion-reconocimiento --senales para probar espera de pared (ajuste local 48 cm/6 s).'
@@ -65,7 +65,7 @@ while [[ $# -gt 0 ]]; do
             echo 'El reconocimiento usa la cámara comprimida y visión en la laptop, siempre sin movimiento.'
             echo 'La prueba combinada registra A con Buscar, evade y se detiene al reconocer; aún no regresa a A.'
             echo 'Ensayo B: meta > barrido max. 360 grados > persona/QR > parada; no navega ni regresa.'
-            echo 'La misión completa y el retorno siguen pendientes.'
+            echo 'Mision guiada implementada; recorrido fisico completo y retorno aun pendientes de validar.'
             exit 0 ;;
         *) echo "Opción no disponible: $1. Consultar --help." >&2; exit 2 ;;
     esac

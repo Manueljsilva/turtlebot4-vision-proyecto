@@ -63,6 +63,10 @@ class MisionNode(EvasionLidarNode):
         holgura = analizar_holgura(scan,tf_plano,edad,self.cfg)
         vx, wz, motivo = self.control.decidir(ahora, self.pose, self.pose_ns, lidar, self.cfg,
                                               self.entrada.fin.is_set() or self._terminar,holgura=holgura)
+        # Última barrera común: ninguna recuperación puede girar dentro de la
+        # huella ocupada aunque un controlador proponga una inversión de lado.
+        if wz and self.control.bloqueo_giro(lidar,self.cfg):
+            vx,wz,motivo = 0.,0.,'Giro inhibido por holgura: '+self.control.bloqueo_giro(lidar,self.cfg)
         EvasionLidarNode.publicar_velocidad(self, vx, wz)
         if ahora-self.estado_ns >= 200_000_000:
             c = self.control
@@ -80,6 +84,9 @@ class MisionNode(EvasionLidarNode):
                 motivo_meta=c.diagnostico_meta,
                 orden_control=c.orden, inicio_solicitado=c.solicitud_ns is not None,
                 edad_camara_s=None if c.camara_ns is None else (ahora-c.camara_ns)/1e9,
+                espera_camara_muro=c.espera_camara_muro_ns is not None,
+                escape_atras=c.escape_atras is not None,
+                ruta_regreso_puntos=len(c.ruta_regreso), ruta_regreso_indice=c.indice_ruta,
                 meta_visible=c.meta is not None and c.camara_ns is not None and 0 <= ahora-c.camara_ns <= 1_000_000_000,
                 salida_visual=c.meta_nueva.salida_visual if c.meta_nueva else False,
                 frente_m=lidar.dist_frente if lidar and lidar.observacion_valida else None,

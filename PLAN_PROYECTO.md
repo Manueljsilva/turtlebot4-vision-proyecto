@@ -1,38 +1,14 @@
 # Plan del proyecto con TurtleBot 4 Lite
 
-Actualizado el 24 de noviembre de 2026 (informe; control del 21/11). Fuente base: las cinco páginas de [Computer_vision_proyectos.pdf](Computer_vision_proyectos.pdf), revisadas completas. Las indicaciones del usuario del 13 y 17 de noviembre **prevalecen para Task 1**. Se distinguen los requisitos confirmados, las decisiones propuestas y los componentes realmente implementados en [ESTADO_PROYECTO.md](ESTADO_PROYECTO.md).
+Actualizado el **25 de noviembre de 2026**. Fuente base: [Computer_vision_proyectos.pdf](Computer_vision_proyectos.pdf); indicaciones nuevas del usuario prevalecen para Task 1. Estado y evidencia en [ESTADO_PROYECTO.md](ESTADO_PROYECTO.md).
 
-**Prioridad documental (24/11):** corregir contradicciones de comportamiento y validación del informe, recompilar y señalar secciones/páginas/líneas. Conservar el desarrollo del usuario; no cambiar código del robot ni ejecutar suites Task 2. La integración existe, pero el recorrido físico completo y último ajuste lateral siguen pendientes. Después: completar detalles rostro/QR, mediciones y referencias, sin inventar resultados.
+**Prioridad actual: validar la misión completa con integración de pasillos/visión del compañero.** Incorporar `competicion-pasillos-y-vision` (`8d8f2d5`) con correcciones autorizadas: navegar por LiDAR sin vídeo en IDA/VUELTA, esperar imagen nueva ante muro a0.42m; no girar con huella ocupada, escape trasero protegido y corto; detener ante discontinuidades odométricas que invalidan A/ruta. Conservar semiancho0.20m comprobado según el usuario, giro0.24m, avance0.10m/s, perfil precaución0.38/parada0.28/lateral0.20/cono22°. Flecha0.305m, meta0.40m y giro hasta salida libre (>0.42m más geometría), sin90°/40cm obligatorios.
 
-**Próxima validación física (control del 21/11): misión completa con paso protegido entre laterales y giros hasta salida libre.**
-Margen circular autorizado de 2 cm con radio estimado 22 cm: límite 24 cm.
-Con frontal >0.45 m y sin maniobra activa, comprobar trayectoria recta antes de
-parar/corregir solo por laterales próximos. Si cabe, usar **0.10 m/s**, la velocidad
-normal actual; conservar margen longitudinal dinámico, sensores y paradas reales.
-Aproximaciones a señal/meta y salida adaptable siguen <=0.05 m/s. **318 tests Task 1**.
-El usuario desea máxima velocidad en competición; aumento/frenado y recepción
-requieren validación posterior, no se activan como parte de este ajuste.
+La rama añade respaldo de ruta odométrica en VUELTA, subordinado a rojo, sin mapa/SLAM. Mejoras de QR, rostro multiescala, pausas de inspección y barrido0.14rad/s se conservan. Cortes coherentes recuperan con3 poses/0.7s; saltos/marcos/giro contrario quedan en FALLO con QR conservado. Recuperaciones por plazo de maniobras de la rama se mantienen sin eludir guardas de espacio/sensores. **346 pruebas Task 1 pasan**; no ejecutar suite Task 2. No afirmar recorrido físico, precisión facial multiescala ni frenado validados. Velocidad máxima final pendiente de medición, no activada.
 
-El usuario confirma quitar el giro fijo de 90° de las flechas y el tope angular
-de evasión. La flecha memoriza el lado, aproxima al umbral y gira sobre el sitio
-hasta frontal >0.49 m y trayectoria protegida; evasión usa el mismo criterio.
-El ángulo real puede ser menor o mayor que 90°. Conservar reposo, huella/sensores,
-máximo 12 s incluidos frenado/pausas y fallo por odometría incoherente/giro contrario.
-Guardar el rumbo real al terminar; no corregir hacia el antiguo objetivo de 90°.
-El retorno deliberado entrada B+180° y las fases meta/rostro/QR no cambian.
-Salida adaptable sin 40 cm y una ejecución por ID con rearme visual continúan.
-**318 tests Task 1**; no ejecutar suite Task 2 durante estos cambios, según el
-usuario. No proponer ensayos físicos aislados como siguiente paso: solo recorrido
-completo. El usuario mantiene diagnóstico/propuesta y aprobación antes de nuevos
-cambios; este ajuste ya está expresamente autorizado.
+Cerrar/relanzar una vez y realizar solo A → azul/evasión → meta B → objetivo/QR propio → orientación/regreso rojo con ruta de apoyo → meta A/palabra. Reiniciar permite repetir persona; no recarga código. Publicar avance en main según autorización, conservando datos/modelos/PNG QR y ediciones locales ajenas fuera del commit.
 
-El último log sin flechas muestra FALLO de evasión al alcanzar 90.5°, frente 0.402 m
-y contorno libre ~0.347 m. La prueba local reproduce y corrige ese límite angular,
-sin prometer que el circuito físico termine ni quitar el timeout de 12 s.
-Meta B y barrido habían sido confirmados; reconocimiento físico/QR propio/retorno
-requieren comprobarse en el recorrido completo. Conservar cámara/galería, originales
-del compañero, ensayos históricos y Task 2; publicar código/guías a main con sus
-exclusiones, sin nuevas fotos, modelos o datos personales.
+Después: adaptar informe del24/11 al nuevo control, completar metodología y mediciones/referencias sin inventar resultados. No tocar su fuente local en esta entrega. Los apartados siguientes son históricos; prevalece el estado del25/11 de arriba.
 
 **Entrega anterior: repetir flecha, salida recta y llegada a meta.**
 El usuario confirmó 90° seguidos de otro giro. Tras flecha se añade reposo y salida

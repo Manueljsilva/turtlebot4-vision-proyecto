@@ -403,7 +403,7 @@ def main(argv=None):
         ultima_flecha = None
         ultimo_log = 0
         print('ENSAYO INTEGRADO: azul > meta B > rostro/QR > orientacion entrada+180 > rojo > meta A. '
-              'No reproduce ruta ni usa mapa. Sin --mover no publica. Cerrar otros controles.', flush=True)
+              'Rojo con respaldo de ruta odometrica; sin mapa ni SLAM. Sin --mover no publica. Cerrar otros controles.', flush=True)
         print(f'[PERFIL MISION] Flecha: frente LiDAR <= {cfg_s.esperar_pared_m:.2f} m; '
               f'tolerancia {cfg_m.tolerancia_disparo_m:.3f} m; frenar/reposo antes de girar; '
               f'memoria hasta giro (max {cfg_m.tiempo_aproximacion_s:.0f} s, sin renovar); '
@@ -412,7 +412,9 @@ def main(argv=None):
               f'giro sobre el sitio: radio {cfg_m.radio_giro_m:.2f}m + margen {cfg_m.margen_giro_m:.2f}m '
               '(base_link, TF completo y contorno 360 grados). '
               f'Flecha/evasion hasta salida libre, sin objetivo fijo de 90 grados; '
-              f'max {cfg_s.tiempo_maximo_giro_s:.0f} s por maniobra.', flush=True)
+              f'reevaluar maniobra a los {cfg_s.tiempo_maximo_giro_s:.0f} s. '
+              f'Paso recto: semiancho {cfg_m.radio_pasillo_m:.2f} m. '
+              'Sin video: LiDAR en pasillo; ante muro esperar imagen nueva.', flush=True)
         while True:
             puente.comprobar()
             if video.proceso.poll() is not None:
