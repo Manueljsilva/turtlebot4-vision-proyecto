@@ -129,7 +129,12 @@ class IntegracionPasillosTests(unittest.TestCase):
         h = HolguraGiro(True,.2006,'Diagonal al borde del perfil',.05,
                        puntos_base=((1.,0.),(-1.,0.),(.025,.199),(0.,-.6)))
         r = self.s.paso(sensor=base.lidar(1.,.2006,.6),holgura=h)
-        self.assertEqual(r[:2],(0.,0.))
+        self.assertLessEqual(r[0],0.)
+        self.assertEqual(r[1],0.)
+        cerrado = replace(h,puntos_base=((1.,0.),(-.25,0.),(.025,.199),(0.,-.6)))
+        self.s.c.escape_atras = None
+        self.s.c._escapes_sin_avance = 0
+        self.assertEqual(self.s.paso(sensor=base.lidar(1.,.2006,.6),holgura=cerrado)[:2],(0.,0.))
 
     def test_corte_breve_coherente_recupera_reposo_sin_perder_A_ni_ruta(self):
         a = dict(self.s.c.a)
@@ -142,10 +147,37 @@ class IntegracionPasillosTests(unittest.TestCase):
         self.assertEqual(self.s.c.a,a)
         self.assertEqual(self.s.c.ruta_ida,ruta)
 
-    def test_corte_largo_durante_ruta_de_regreso_enclava_y_conserva_QR(self):
+    def test_corte_largo_durante_ruta_de_regreso_recupera_vuelta_y_conserva_QR(self):
         self.s.c.fase='VUELTA';self.s.c.qr_confirmado=True
         self.s.c.b=dict(self.s.pose,x=2.)
         self.s.c._girando_ruta=dict(inicio_ns=self.s.t,sentido=1.)
         self.assertEqual(self.s.paso(dt=2.1)[:2],(0.,0.))
-        self.assertEqual(self.s.c.fase,'FALLO')
+        self.assertEqual(self.s.c.fase,'VUELTA')
+        self.assertTrue(self.s.c.recuperando)
+        self.assertIsNone(self.s.c._girando_ruta)
         self.assertTrue(self.s.c.qr_confirmado)
+
+    def test_muro_sin_video_espera_camara_breve_luego_evade_y_rearma_al_despejar(self):
+        for _ in range(8):
+            r = self.sin_video(sensor=base.lidar(.35))
+            self.assertEqual(r[:2], (0., 0.))
+        self.assertIsNotNone(self.s.c.espera_camara_muro_ns)
+        for _ in range(4):
+            r = self.sin_video(sensor=base.lidar(.35))
+        self.assertIsNone(self.s.c.espera_camara_muro_ns)
+        self.assertEqual(r[0], 0.)
+        self.assertNotEqual(r[1], 0.)
+        self.assertEqual(self.sin_video(sensor=base.lidar(1.2))[:2], (0., 0.))
+        self.assertEqual(self.sin_video(sensor=base.lidar(1.2))[:2], (.1, 0.))
+        self.assertEqual(self.sin_video(sensor=base.lidar(.35))[:2], (0., 0.))
+        self.assertIsNotNone(self.s.c.espera_camara_muro_ns)
+
+    def test_roce_lateral_en_pasillo_escapa_atras_y_luego_cruza_despacio(self):
+        h = HolguraGiro(True,.195,'Roce izq',0.,
+                        puntos_base=((1.,0.),(-1.,0.),(0.,.195),(-.10,.195),(0.,-.45)))
+        r = self.sin_video(sensor=base.lidar(1.,.195,.45), holgura=h)
+        self.assertEqual(r[:2], (-.06, 0.))
+        for _ in range(16):
+            r = self.sin_video(sensor=base.lidar(1.,.195,.45), holgura=h)
+            self.assertEqual(r[1], 0.)
+        self.assertEqual(r[:2], (.05, 0.))

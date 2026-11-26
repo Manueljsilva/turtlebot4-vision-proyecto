@@ -141,12 +141,13 @@ class HibridoTests(unittest.TestCase):
             actividad_ns=self.t,camara_ns=None)),self.t)
         self.assertEqual(self.c.gesto,'DETENER');self.assertEqual(self.c.modo,'GESTOS')
 
-    def test_corte_largo_durante_giro_manual_enclava_sin_reanclar(self):
+    def test_corte_largo_durante_giro_manual_recupera_sin_reanclar(self):
         self.iniciar();self.cambiar('GESTOS')
         a=dict(self.c.a)
         self.paso(gesto='DERECHA')
         self.paso(dt=2.1)
-        self.assertEqual(self.c.fase,'FALLO');self.assertEqual(self.c.a,a)
+        self.assertEqual(self.c.fase,'IDA');self.assertEqual(self.c.a,a)
+        self.assertTrue(self.c.recuperando);self.assertFalse(self.c.giro_manual)
 
     def test_mision_completa_gestos_meta_rostro_qr_regreso_a(self):
         self.iniciar();self.cambiar('GESTOS')

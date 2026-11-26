@@ -1,7 +1,11 @@
 """Arbitraje autónomo/gestos de Task 3, sin ROS ni percepción de manos."""
-import fcntl
 import json
 from math import pi
+
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
 
 from control_busqueda import reciente
 from control_meta import ReposoOdometria
@@ -15,6 +19,8 @@ CAMPOS = {'modo', 'modo_ns', 'gesto', 'gesto_ns'}
 
 def adquirir_bloqueos(rutas=('/tmp/proyecto2-evasion-control.lock', '/tmp/proyecto2-puente-gestos.lock')):
     """Ambos controles existentes quedan excluidos; liberar todo si uno falla."""
+    if fcntl is None:
+        raise OSError('Bloqueo POSIX no disponible en este sistema')
     archivos = []
     try:
         for ruta in rutas:
@@ -127,9 +133,16 @@ class ControlHibrido(ControlMision):
         return 0., 0., 'Modo '+self.modo+' preparado; esperar una orden nueva'
 
     def seguir_pose(self, ahora, pose, marca):
-        # Mantener la protección de incertidumbre angular también en navegación manual.
-        if self.giro_manual and self.pose_ns is not None and marca is not None and marca-self.pose_ns > 2_000_000_000:
-            self.fallar('Corte odometrico durante giro manual; referencia incierta', ahora)
+        # Ante corte largo durante giro manual, limpiar intención y esperar reposo en vez de abortar misión.
+        if (self.giro_manual and self.pose is not None and self.pose_ns is not None
+                and marca is not None and marca - self.pose_ns > 2_000_000_000):
+            if self.fase in ('ORIENTAR_SALIDA', 'FRENAR_SALIDA') and self.qr_confirmado:
+                self._limpiar_maniobras_angulares()
+                self._pasar_a_vuelta_por_ajuste(ahora, pose, 'Corte odometrico en giro manual de salida; continuar a VUELTA')
+            else:
+                self.limpiar_intenciones()
+            self.giro_manual = False
+            self.recuperando, self.reposo_odom = True, ReposoOdometria()
         return super().seguir_pose(ahora, pose, marca)
 
     def movimiento_manual(self, ahora, lidar, cfg, solo_giro=False):

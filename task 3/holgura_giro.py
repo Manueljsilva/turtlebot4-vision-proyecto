@@ -45,17 +45,18 @@ def distancia_libre_recta(holgura, radio, radio_frente=None):
 
 
 def distancia_libre_atras(holgura, radio, radio_frente=None):
-    """Recorrido libre hacia -x ignorando puntos delante del centro para destrabar esquinas."""
+    """Recorrido libre hacia -x ignorando puntos laterales/delanteros fuera del cuerpo físico."""
     if (holgura is None or not holgura.valida or not holgura.puntos_base
             or not isfinite(radio) or radio <= 0):
         return None
     alcance = radio if radio_frente is None else radio_frente
     if not isfinite(alcance) or alcance <= 0:
         return None
+    ancho = min(radio, .185) if radio_frente is not None else radio
     libres = []
     for x, y in holgura.puntos_base:
-        if x <= 0.05 and abs(y) <= radio:
-            libres.append(max(0., -x-alcance*sqrt(max(0., 1.-(y/radio)**2))))
+        if x < -0.02 and abs(y) <= ancho:
+            libres.append(max(0., -x-alcance*sqrt(max(0., 1.-(y/ancho)**2))))
     return min(libres) if libres else None
 
 

@@ -134,3 +134,10 @@ class HolguraTests(unittest.TestCase):
         self.assertAlmostEqual(distancia_libre_recta(h,.20,radio_frente=.24),.36)
         s.ranges[180]=.29
         self.assertAlmostEqual(distancia_libre_recta(self.analizar(s),.20,radio_frente=.24),.05)
+
+    def test_recorrido_atras_omite_roce_lateral_y_frena_obstaculo_trasero(self):
+        from holgura_giro import HolguraGiro, distancia_libre_atras
+        h=HolguraGiro(True,.19,'Roce lateral',0.,puntos_base=((.22,0.),(0.,.195),(-.10,.195),(-1.,0.)))
+        self.assertAlmostEqual(distancia_libre_atras(h,.20,radio_frente=.24),.76)
+        cerrado=HolguraGiro(True,.19,'Trasero cerca',0.,puntos_base=((-0.26,0.),(0.,.4)))
+        self.assertAlmostEqual(distancia_libre_atras(cerrado,.20,radio_frente=.24),.02)
