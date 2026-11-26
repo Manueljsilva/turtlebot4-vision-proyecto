@@ -1,5 +1,9 @@
 # Estado del proyecto
 
+## Velocidad máxima configurada (26/11, última instrucción vigente)
+
+Por petición expresa del usuario se cambian los perfiles activos `task 1/config/evasion_lidar.json` y `task 3/config/evasion_lidar.json` a avance **0.306 m/s** y giro normal **1.90 rad/s**, los límites admitidos por el código y ya utilizados en Task 2. Sustituye las indicaciones anteriores de conservar 0.10/0.40 y de aplazar este aumento. Aproximación, retroceso, barrido facial y orientación de salida conservan sus límites particulares; también se conservan las guardas de sensores y margen longitudinal dinámico, que pueden reducir o detener el movimiento. No se ejecutan pruebas por instrucción del usuario; aumento sin validación física de frenado o estabilidad. Cerrar y relanzar el programa para cargar el perfil nuevo; Reiniciar en la interfaz no recarga configuración.
+
 Actualizado: **26 de noviembre de 2026**. Galería facial ampliada por petición explícita del usuario para Task 1 y Task 3: **99 fotos /18 personas**, con 25 fotos de 5 personas nuevas. Artefactos biométricos actualizados solo localmente; ambos modos cargan los 18 nombres. Verificación facial84 pruebas (42 por tarea) y carga real de modelos/galerías, sin robot. La propuesta de recuperación de misión sin reiniciar desde A queda **pendiente de implementar**, por decisión del usuario.
 
 ## Galería facial compartida ampliada (26/11, vigente)

@@ -1,6 +1,6 @@
 {
-  "velocidad_avance": 0.10,
-  "velocidad_giro": 0.40,
+  "velocidad_avance": 0.306,
+  "velocidad_giro": 1.90,
   "distancia_parada_m": 0.28,
   "distancia_precaucion_m": 0.38,
   "distancia_lateral_m": 0.20,
