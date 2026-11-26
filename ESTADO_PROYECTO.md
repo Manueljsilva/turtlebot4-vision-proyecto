@@ -1,6 +1,22 @@
 # Estado del proyecto
 
-Actualizado: **26 de noviembre de 2026**. El usuario autoriza integrar **todos** los cambios del compañero en `competicion-pasillos-y-vision`, commit **91d3b5513d7a8c451d393c9511c7595f5988193c**, tanto en Task 1 como Task 3 y publicarlos a main. Aplicados los 12 archivos de la rama sin cambios selectivos. **349 pruebas Task 1 + 367 Task 3 = 716**, todas pasan en copia temporal del código público exacto; sin suite Task 2 ni movimiento físico. Guías actualizadas; prueba física completa pendiente.
+Actualizado: **26 de noviembre de 2026**. Galería facial ampliada por petición explícita del usuario para Task 1 y Task 3: **99 fotos /18 personas**, con 25 fotos de 5 personas nuevas. Artefactos biométricos actualizados solo localmente; ambos modos cargan los 18 nombres. Verificación facial84 pruebas (42 por tarea) y carga real de modelos/galerías, sin robot. La propuesta de recuperación de misión sin reiniciar desde A queda **pendiente de implementar**, por decisión del usuario.
+
+## Galería facial compartida ampliada (26/11, vigente)
+
+Las dos carpetas `task 1/rostros` y `task 3/rostros` contienen las mismas99 fotografías, sin duplicados exactos ni etiquetas cambiadas respecto a la versión anterior. Se conservan por SHA256 los roles de las 74 fotos anteriores; las 25 nuevas se reparten sin duplicar entre referencias/calibración/evaluación. Partición63/18/18;61 referencias válidas de las18 personas, dos referencias SIN_ROSTRO excluidas sin forzar detección. Son particiones exploratorias por foto, sin independencia demostrada entre tomas.
+
+YuNet/SFace CPU, pesos y parámetros del extractor intactos. Algunos primeros planos no se detectaban al ocupar el borde: se aplica, solo durante esta preparación offline y ante SIN_ROSTRO, un reintento fijo con margen gris del25% en memoria, independiente de identidad/rol/puntuación. Recupera12 fotos, incluida una anterior. No guardar imágenes derivadas ni modificar originales; el código de cámara no cambia. Registrar ese preprocesamiento en `datos/preprocesamiento_galeria.json` local ignorado para reproducibilidad.
+
+Criterio recalibrado exclusivamente con 18 consultas de calibración:18 aciertos, cero nombres erróneos y cero falsas aceptaciones simuladas en ese conjunto. Umbral coseno 0.4043490291, margen 0.0767207742. Evaluación posterior, sin retocar el criterio: **17/18 aciertos, cero nombres erróneos, un rechazo**; entre 18 negativos simulados por retirada de identidad hay **una falsa aceptación**. Estos negativos no son desconocidos reales independientes. No afirmar precisión garantizada con cámara, impresiones, perfiles ni personas ajenas; conservar también los fallos de evaluación.
+
+`task 1/datos/criterio.json`, `particion_rostros.json`, `galeria.npz`, `auditoria.csv`, resumen de actualización y `resultados/evaluacion.json` actualizados. Se sincroniza la copia derivada local de Task 3 para sus modos heredados; la misión híbrida usa directamente la galería canónica de Task 1. Hay copias anteriores por tarea en `datos/historial/antes-ampliacion-20261126-*`; el resumen local guarda sus rutas. No descargar/reentrenar pesos ni regenerar el notebook del usuario. Los 18 nombres se validaron con el selector de ambas tareas, sin ambigüedades; vectores/criterio/manifiesto cargan con sus hashes.
+
+Comprobación:42 pruebas de reconocimiento, carga facial e interfaz por tarea,84 en total, todas pasan; sin suite Task 2 ni repetir navegación. Modelo/galería real cargados desde Task 1, copia Task 3 y ruta canónica de la misión híbrida; roles previos conservados y fotos originales intactas. Código de movimiento, percepción, gestos y notebooks conservados. Cerrar y volver a ejecutar Task 1 o Task 3 para cargar la galería; el botón Reiniciar no la recarga en caliente. No hace falta reiniciar el robot o Docker por esta ampliación. La prueba física sigue siendo misión completa; las recuperaciones propuestas permanecen pendientes.
+
+**Publicación:** solo constancia técnica y guías; fotos, nombres/filas individuales, descriptores, galería, criterio local, auditoría, partición, evaluaciones y copias históricas quedan fuera de Git. La publicación de guías no distribuye los datos personales nuevos a otra computadora.
+
+Las secciones siguientes conservan los antecedentes de control y de la galería anterior; para la colección facial prevalece esta ampliación.
 
 ## Integración completa del compañero (26/11, vigente)
 

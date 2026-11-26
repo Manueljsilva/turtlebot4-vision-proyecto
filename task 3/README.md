@@ -26,6 +26,8 @@ Conserva el perfil de Task 1: avance 0.10 m/s, giro de navegación 0.40 rad/s y 
 
 Usa la `.venv` global, el modelo local de manos en `task 2/modelos/hand_landmarker.task` y **la galería/criterio/modelos canónicos de `task 1`**. No entrena ni descarga al iniciar. Mantener datos, fotos, modelos, sesiones y el notebook copiado fuera de Git. No guardar imágenes de ninguna cámara. Task 1 y Task 2 permanecen independientes e intactos.
 
+**Galería ampliada el 26/11:** Task 1 y Task 3 disponen de 18 personas (99 fotos), con cinco personas nuevas. La misión híbrida sigue leyendo la galería canónica de Task 1; la copia local de Task 3 también quedó sincronizada. Cerrar y volver a ejecutar para cargar los nuevos nombres: Reiniciar no actualiza los descriptores en caliente. No hace falta reiniciar el robot/Docker ni entrenar pesos. Evaluación local reservada17/18, con un rechazo y una falsa aceptación entre 18 negativos simulados; no garantiza reconocimiento físico. Ver [detalle de la galería](<../task 1/README.md>). Fotos y artefactos biométricos siguen fuera de Git.
+
 Integración completa de 91d3b55 autorizada el 26/11: tras escape permite paso de emergencia a≤0.05m/s con semiancho0.185m y ajusta el perfil trasero/alineación; el paso normal0.20m y giro circular0.24m permanecen. Cortes coherentes>2s durante giro manual/automático recuperan con reposo; saltos/marcos/tiempo inválidos siguen fallando. No supone que 18.5cm ni el retorno estén físicamente validados.
 
 **367 pruebas locales Task 3 pasan** con sensores, manos y ROS simulados; falta comprobar esta integración en el robot real. Seguir una flecha o la ruta odométrica no garantiza resolver cualquier circuito ni equivale a SLAM.
