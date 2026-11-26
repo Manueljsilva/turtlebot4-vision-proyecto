@@ -1,5 +1,8 @@
 # Task 1: búsqueda facial, evasión y giros por señales
 
+**Vigente 26/11:** integrada íntegramente la revisión del compañero 91d3b55.349 tests locales Task 1 pasan; no se ejecutó Task 2 ni se movió hardware. Tras escape admite paso estrecho a≤0.05m/s con semiancho0.185m; ajusta retroceso y alineación. Ante muro sin cámara espera hasta 2 s y luego permite LiDAR; cortes odométricos coherentes durante giro recuperan con reposo, y ciertos problemas de salida B entregan a VUELTA por ruta. Conserva velocidades normales, círculo de giro0.24m, metas/rostro/QR y detección de saltos/marcos inválidos. Guía actual: [PRUEBA_MISION_GUIADA.md](PRUEBA_MISION_GUIADA.md). Probar solo misión completa ; 18.5cm/retorno/frenado físicos pendientes. Los apartados siguientes son antecedentes y no sustituyen esta revisión.
+
+
 **Prueba actual (21/11):** el usuario confirmó lectura al aumentar el tamaño del
 QR. Ejecutar `--mision-guiada --mover` desde A para probar azul/evasión → meta B →
 rostro objetivo/QR propio → rojo/evasión → meta A. A también lleva bandera,

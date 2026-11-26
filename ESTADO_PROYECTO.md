@@ -1,6 +1,22 @@
 # Estado del proyecto
 
-Actualizado: **25 de noviembre de 2026**. Nueva **Task 3 híbrida**: alternar autonomía/gestos en una misma misión A–B–A conservando nombre objetivo, A/B y palabra QR. Código y comprobaciones locales terminados; falta ensayo físico integrado. Task 1 y Task 2 conservados sin modificaciones en este avance.
+Actualizado: **26 de noviembre de 2026**. El usuario autoriza integrar **todos** los cambios del compañero en `competicion-pasillos-y-vision`, commit **91d3b5513d7a8c451d393c9511c7595f5988193c**, tanto en Task 1 como Task 3 y publicarlos a main. Aplicados los 12 archivos de la rama sin cambios selectivos. **349 pruebas Task 1 + 367 Task 3 = 716**, todas pasan en copia temporal del código público exacto; sin suite Task 2 ni movimiento físico. Guías actualizadas; prueba física completa pendiente.
+
+## Integración completa del compañero (26/11, vigente)
+
+Esta autorización sustituye la recomendación previa de integrar selectivamente y las reglas anteriores incompatibles. No se modifican Task 2, modelos, galería ni calibración. Preservar todas las ediciones locales ajenas, incluido el ajuste de candidatos faciales de Task 1, las guías/cuadernos y el informe; no publicarlos en esta entrega. Conservar la historia de la rama al publicar y verificar cabeza/árbol, sin force push.
+
+**Pasillo:** mantiene semiancho normal0.20m y giro circular0.24m. Tras al menos un escape sin avance, admite un paso de emergencia a≤0.05m/s con perfil de semiancho **0.185m**, frente sobre precaución y trayectoria/margen longitudinal comprobados. El retroceso con perfil frontal usa ancho min(radio,0.185) e ignora puntos x≥-0.02m; conserva margen trasero≥0.05m, velocidad-0.06 y segmentos≤0.12m/2s. Alineación sobre el sitio a media velocidad angular cuando hay holgura, asimetría lateral≥0.006m y recorrido≤0.50m bajo las condiciones de la rama. No presentar 18.5cm como medida física comprobada; su incorporación está expresamente autorizada y falta validación en hardware.
+
+**Cámara:** al frontal≤0.42m sin imagen reciente, frena y espera una imagen posterior a la parada **hasta 2 s**. Si no llega, omite esa espera y continúa por LiDAR; rearma al recuperar vídeo fresco o despejar frontal>0.47m. Puede dejar de observar una flecha/meta durante esa pérdida: no garantiza interpretarlas sin vídeo. Fuera de IDA/VUELTA sigue deteniendo por cámara caducada. La imagen antigua nunca confirma meta, rostro ni QR.
+
+**Continuidad:** un corte odométrico coherente>2s durante giro ahora limpia maniobras y espera≥3 poses nuevas/0.7s antes de recuperar, incluidos giros manuales de Task 3; no siempre enclava FALLO. Cambio de marco, tiempo retrocedido y salto observado>0.25m/>0.5rad conservan FALLO, sin reanclar A/ruta. Un giro por flecha contrario descarta la maniobra activa en vez de fallar. Tras QR, una orientación de salida contraria/incoherente, o ciertos cortes durante esa salida, pueden pasar a VUELTA por LiDAR/ruta sin completar la orientación prevista; la transición reinicia las guardas de meta nueva. QR permanece guardado, y A sigue exigiendo bandera/cercanía/separación/ausencia/reposo. No se afirma salida física alineada ni retorno exacto garantizado.
+
+**Task 3:** conserva botón autónomo/gestos, nombre, A/B/QR, entrega de control con reposo, frescura de manos y único publicador; añade recuperación coherente del giro manual y carga de módulos sin fcntl en plataformas ajenas a POSIX, pero rechaza activar los locks si no están disponibles. Velocidades normales intactas0.10/0.40; manual en B≤0.25, gestos0.4s/caducidad0.5s. No cambia percepción de señales/rostros/QR ni crea publicadores adicionales.
+
+Verificación: suites completas en copia temporal de 91d3b55 con recursos privados solo enlazados localmente; 349 Task 1 y 367 Task 3 pasan. Sintaxis de los 12 Python y diff sin errores. Tests de espera2s/rearme, emergencia/retroceso, alineación/huella, odometría, búsqueda/QR/retorno y alternancia conservados/actualizados según la rama. Pasar pruebas simuladas no certifica dimensiones, frenado ni navegación física. Siguiente paso: cerrar/relanzar y probar la misión completa, Task 1 o Task 3, según preferencia del usuario; no ensayos físicos aislados. Documentos vigentes: `task 1/PRUEBA_MISION_GUIADA.md` y `task 3/README.md`. El informe se actualizará aparte; no modificar su fuente local en esta entrega.
+
+Las secciones siguientes son antecedentes; ante diferencias prevalecen los comportamientos autorizados del 26/11 descritos arriba.
 
 ## Task 3 híbrida (25/11, vigente)
 

@@ -2,6 +2,8 @@
 
 Proyecto de cuatro integrantes, con [enunciado base](Computer_vision_proyectos.pdf) y alcance actualizado por el usuario el 13 y 17 de noviembre de 2026.
 
+**Vigente 26/11: integración completa de [91d3b55](https://github.com/Manueljsilva/turtlebot4-vision-proyecto/commit/91d3b5513d7a8c451d393c9511c7595f5988193c) en Task 1 y Task 3, autorizada por el usuario.** Incorpora paso de emergencia a0.05m/s con semiancho 18.5cm tras escape, retroceso/alineación ajustados, espera ante muro sin cámara de hasta 2 s y recuperación de ciertos cortes/giros sin FALLO.349 tests Task 1 y 367 Task 3 pasan; Task 2 intacta, prueba física completa pendiente. Véanse [guía Task 1](<task 1/PRUEBA_MISION_GUIADA.md>) y [Task 3 híbrida](<task 3/README.md>). Esta actualización prevalece sobre los resúmenes históricos de abajo; no acredita dimensiones, frenado ni retorno reales.
+
 **Task 3 híbrida (25/11):** [guía y comando](<task 3/README.md>) para alternar autonomía/gestos durante A→B→rostro/QR→A, con un botón en la misma interfaz. Conserva objetivo y palabra al cambiar, confirma reposo para entregar control y mantiene guardas LiDAR. Implementada con 364 pruebas locales; ensayo físico pendiente. Task 1/2 permanecen independientes.
 
 **Laterales cercanos (21/11):** solo misión guiada comprueba el recorrido recto antes de parar o corregir por proximidad lateral. Con frente >0.45 m y huella/trayectoria libres, continúa a **0.10 m/s**, la velocidad normal de pruebas. Margen circular **2 cm** + radio estimado **22 cm** = límite **24 cm**. Mantiene margen longitudinal dinámico y paradas por obstáculos/datos caducados. Aproximaciones a flecha/meta y salida adaptable siguen <=0.05 m/s. El aumento para competición queda pendiente de validación física.
